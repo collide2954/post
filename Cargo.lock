@@ -2876,11 +2876,14 @@ name = "post-client"
 version = "0.1.2"
 dependencies = [
  "futures-util",
+ "post-crypto",
  "post-proto",
  "post-server",
  "post-testing",
+ "serde",
  "tokio",
  "tokio-tungstenite 0.30.0",
+ "toml",
 ]
 
 [[package]]

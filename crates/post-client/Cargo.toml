@@ -12,9 +12,12 @@ workspace = true
 
 [dependencies]
 futures-util.workspace = true
+post-crypto.workspace = true
 post-proto.workspace = true
+serde.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 post-server.workspace = true
