@@ -100,6 +100,15 @@ A user can make a good decision only if the user knows the facts.
 - We prefer technology that is simple and well known: SQLite, JSON, WebSocket, TLS, and QUIC.
 - We use few dependencies, and we examine each one.
 
+### 11. Version 1.0 is complete
+
+An application becomes too complex when new functions come without end. Post has an end.
+
+- Version 1.0 contains all the functions of Post.
+- Each function is in version 1.0, or it is not in Post. There is no list for a later time.
+- After version 1.0, we correct errors, keep Post secure, and keep it compatible with new systems.
+- After version 1.0, we add a function only if it is strongly necessary.
+
 ## How we examine a new function
 
 Before we add a function, we ask these questions:
@@ -112,6 +121,8 @@ Before we add a function, we ask these questions:
 6. Can we build, test, and maintain it at the quality of the other parts?
 
 If an answer is "no", we change the design, or we do not add the function.
+
+After version 1.0, a new function must also be strongly necessary (principle 11).
 
 Two examples:
 
@@ -137,13 +148,20 @@ Post also does not have the functions in the left column. A simpler concept does
 | Custom roles | Fixed roles |
 | A web panel for administration | Administration in the application |
 | Passwords, email addresses, and telephone numbers | An identity from keys |
+| Pinned messages | A channel topic that can contain a message link |
+| Avatars and display names | A handle with a stable color |
+| Automatic moderation | Moderators, reports, and rate limits |
 
-These functions are not planned. We examine them again only if many users ask for them:
+These functions are also not in Post:
 
-- Threads, polls, custom server emoji, and recorded voice messages.
-- Video and screen share.
-- A mobile application. The protocol stays ready for one.
+- Threads, polls, custom server emoji, and spoiler text.
+- Recorded voice messages, video, screen share, and a record function for voice.
+- Spell check.
+- A web client and a mobile application. The open protocol lets other people build them.
+- An IRC gateway.
 - Federation between servers.
+
+After version 1.0, principle 11 applies to each of these functions.
 
 ## How to change this document
 

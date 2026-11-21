@@ -356,16 +356,33 @@ Post has no read receipts.
 
 **Reason.** These functions add noise or make Post a platform. They do not help a conversation.
 
-### D-035 Ideas that are not planned
+### D-035 Functions that are not in Post
 
-**Decision.** These functions are not on the roadmap: threads, polls, custom server emoji, and recorded voice messages. We examine them again only if many users ask for them. Each one must then agree with the design philosophy.
+**Decision.** These functions are not in Post:
 
-The project also does not plan a mobile application. The protocol must not depend on a desktop computer. The public specification lets other people build a mobile client.
+- Threads, polls, custom server emoji, and spoiler text.
+- Recorded voice messages.
+- Spell check.
+- A web client. Chat in a browser is not possible, and the public web view (D-032) is read-only.
+- A mobile application. The protocol must not depend on a desktop computer, and the public specification lets other people build a mobile client.
+- Federation between servers.
 
-**Reason.** Each function adds weight. Flat conversation is a primary idea of Post, thus threads are the least probable.
+Other records give more functions that are not in Post: D-007 (pinned messages), D-016 (forward function), D-025 (avatars and display names), D-033 (IRC gateway), D-040 (video and screen share), and D-044 (record function for voice).
+
+**Reason.** Each function adds weight, and each one fails a question of the design philosophy. Version 1.0 is complete (D-122), thus these functions do not come later.
 
 ### D-036 Description of Post
 
 **Decision.** The short description of Post is: "Post is a modern chat app in the spirit of IRC: simple, open, self-hosted, with optional end-to-end encryption."
 
 **Reason.** The sentence gives the origin of Post and its four primary properties.
+
+### D-122 Version 1.0 is complete
+
+**Decision.** Version 1.0 contains all the functions of Post. Each function is in version 1.0, or it is not in Post. After version 1.0, we correct errors, keep Post secure, and keep it compatible with new systems. We add a function after version 1.0 only if it is strongly necessary. A decision record must then give the necessity.
+
+**Reason.** An application becomes too complex when new functions come without end. A product that is complete stays simple.
+
+**Not selected.**
+
+- A list of functions for a time after version 1.0.

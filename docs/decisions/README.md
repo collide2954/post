@@ -75,8 +75,9 @@ A new record gets the next free number. Do not use a number again.
 - D-032 Public web view
 - D-033 No IRC gateway
 - D-034 Things that Post will not have
-- D-035 Ideas that are not planned
+- D-035 Functions that are not in Post
 - D-036 Description of Post
+- D-122 Version 1.0 is complete
 
 ### Voice
 
