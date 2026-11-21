@@ -14,7 +14,7 @@ pub fn decode<const N: usize>(text: &str) -> Option<[u8; N]> {
     let mut bytes = [0; N];
     let (pairs, _) = digits.as_chunks::<2>();
     for (byte, [high, low]) in bytes.iter_mut().zip(pairs) {
-        *byte = digit(*high)? << 4 | digit(*low)?;
+        *byte = digit(*high)? * 16 + digit(*low)?;
     }
     Some(bytes)
 }

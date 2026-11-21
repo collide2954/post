@@ -1,0 +1,2 @@
+# A test cannot see that the memory of a secret is clear.
+exclude_re = ["<impl Drop for Seed>::drop"]
