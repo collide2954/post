@@ -2,6 +2,13 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.2 - 2026-11-21
+
+- Add the website of the project (D-175).
+- Add the first form of the postmark icon (D-095).
+- Add the cryptography crate with the seed, the keys, and the proofs for the sign-in (D-163).
+- Add the storage and the configuration file of the server. The server program does not use them yet.
+
 ## 0.1.1 - 2026-11-21
 
 - Add 12 decision records for version 0.2 (D-163 to D-174).
