@@ -63,7 +63,7 @@ These records tell you how we build Post. Read the [guide](README.md) first.
 | 0.12 | Voice: transport, relay, and sound path |
 | 0.13 | Voice: interface, moderation, and sealed voice |
 | 0.14 | Link previews, webhooks, custom themes |
-| 0.15 | Public web view, IRC gateway |
+| 0.15 | Public web view |
 | 0.16 | Automatic certificates, proxy, packages, server directory |
 | 1.0 | Final corrections, code signature, release |
 

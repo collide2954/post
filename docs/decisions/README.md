@@ -12,6 +12,7 @@ Each record has an identifier (for example D-012) and a title. A record has thes
 - **Reason** tells you why.
 - **Not selected** gives the other options. Some records do not have this part.
 - **Open point** gives a fact that we must examine. Some records do not have this part.
+- **History** tells you about an earlier form of the decision. Some records do not have this part.
 
 All records have the date 2026-11-20, unless a record gives a different date.
 
@@ -72,7 +73,7 @@ A new record gets the next free number. Do not use a number again.
 - D-030 Webhooks
 - D-031 Link previews
 - D-032 Public web view
-- D-033 IRC gateway
+- D-033 No IRC gateway
 - D-034 Things that Post will not have
 - D-035 Ideas that are not planned
 - D-036 Description of Post

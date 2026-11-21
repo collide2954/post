@@ -35,7 +35,7 @@ These records tell you what Post does for a user. Read the [guide](README.md) fi
 - Search, desktop notifications, message links, and saved messages.
 - Sealed chats, moderation, and administration in the application.
 - Voice channels.
-- Webhooks, the public web view, and the IRC gateway.
+- Webhooks and the public web view.
 - Split panes, custom themes, the proxy, the application lock, and the protocol console.
 
 **Reason.** The first scope was a small core. A review of function options on 2026-11-20 added the other functions. Each added function has its own record.
@@ -338,16 +338,13 @@ Post has no read receipts.
 - The web view after version 1.0.
 - No web view.
 
-### D-033 IRC gateway
+### D-033 No IRC gateway
 
-**Decision.** The server can also speak the IRC protocol. A person with an IRC client can join normal channels. Sealed chats are not available through the gateway.
+**Decision.** The server does not speak the IRC protocol. A person uses Post with the application, or with a different client that obeys the Post protocol.
 
-**Reason.** An IRC community can move to Post gradually. The gateway respects the origin of Post.
+**Reason.** A gateway is a second protocol to build, protect, and maintain. This does not agree with the principle "Simple first".
 
-**Not selected.**
-
-- The gateway after version 1.0.
-- No gateway.
+**History.** On 2026-11-20, this record first put an IRC gateway into version 1.0. The project removed the gateway on the same day.
 
 ### D-034 Things that Post will not have
 

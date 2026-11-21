@@ -62,7 +62,7 @@ A user can make a good decision only if the user knows the facts.
 - Protocol messages are JSON text that a person can read.
 - Each program that obeys the protocol can connect. A bot is a normal account.
 - The source code has the Apache-2.0 license.
-- A server can also speak IRC, and a channel owner can publish a channel on the web.
+- A channel owner can publish a channel on the web, where each person can read it.
 
 ### 6. Fast and calm
 
