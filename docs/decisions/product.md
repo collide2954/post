@@ -27,18 +27,36 @@ These records tell you what Post does for a user. Read the [guide](README.md) fi
 
 ### D-003 Scope of version 1.0
 
-**Decision.** Version 1.0 contains these functions:
+**Decision.** Version 1.0 contains these functions. This list is the full scope of Post (D-122).
 
-- Channels, direct messages, and message history.
-- Replies, reactions, edit, delete, mentions, and keyword highlights.
-- Files and images with a preview, link previews, and a small text format.
-- Search, desktop notifications, message links, and saved messages.
-- Sealed chats, moderation, and administration in the application.
-- Voice channels.
-- Webhooks and the public web view.
-- Split panes, custom themes, the proxy, the application lock, and the protocol console.
+Text chat:
 
-**Reason.** The first scope was a small core. A review of function options on 2026-11-20 added the other functions. Each added function has its own record.
+- Channels, direct messages, and message history with a retention rule.
+- Replies, reactions, edit, delete, mentions, keyword highlights, and a mentions view.
+- A small text format, code blocks with syntax colors, files, images, and link previews.
+- Search, desktop notifications, message links, saved messages, drafts, and export.
+
+Voice:
+
+- Voice channels, and voice in direct messages.
+
+Security:
+
+- Sealed chats, key verification, the recovery phrase, and the device link.
+- The application passphrase, the application lock, the proxy, and account proof.
+
+Community:
+
+- Roles, moderation tools, reports, and a moderation log.
+- Administration in the application, server settings, and operator tools.
+- Bots with slash commands, webhooks, the public web view, and the server directory.
+
+Application:
+
+- Split panes, application profiles, custom themes, key bindings, and the protocol console.
+- English and Latin American Spanish text.
+
+**Reason.** The first scope was a small core. Two reviews of function options on 2026-11-20 added the other functions. Each function has its own record.
 
 **Not selected.**
 
@@ -47,7 +65,7 @@ These records tell you what Post does for a user. Read the [guide](README.md) fi
 
 ### D-004 History and retention
 
-**Decision.** The server keeps the message history. Each channel has a retention rule: keep all messages, keep them for a set time, or keep no messages. The operator sets the default rule. The set time can be as short as some hours. The application removes its local copies by the same rule.
+**Decision.** The server keeps the message history. Each channel has a retention rule: keep all messages, keep them for a set time, or keep no messages. The operator sets the default rule and the permitted range. A channel owner selects a rule in this range, and a direct message uses the default rule. The set time can be as short as some hours. The application removes its local copies by the same rule.
 
 **Reason.** A user can read earlier messages on each device. Each community selects how long its messages stay.
 
@@ -56,6 +74,8 @@ These records tell you what Post does for a user. Read the [guide](README.md) fi
 - Permanent history only. Short-lived chats are then not possible.
 - A short buffer only.
 - No server history. It is weak for a user with more than one device.
+- A rule that each channel owner selects freely. The operator then cannot limit the storage.
+- One rule for the full server.
 
 ### D-005 No separate timer for messages
 
@@ -79,13 +99,13 @@ A channel can also have one of these modes:
 - Announcement mode: only the owner and the moderators can write. The other members read and react.
 - Archive mode: no person can write. The history stays readable.
 
-A voice channel is a different kind of channel (D-038).
+A voice channel is a different kind of channel (D-038). Announcement mode also applies to a voice channel (D-044).
 
 **Reason.** These kinds and modes are sufficient for most communities. Announcement mode is the present form of the moderated mode of IRC.
 
 ### D-007 Channel topic
 
-**Decision.** Each channel has a topic line below its name. The owner or a moderator sets the topic. Version 1.0 has no pinned messages.
+**Decision.** Each channel has a topic line below its name. The owner or a moderator sets the topic. The topic can contain a message link (D-015). Post has no pinned messages.
 
 **Reason.** The topic is an IRC tradition. It tells a user the purpose of the channel.
 
@@ -126,6 +146,7 @@ A voice channel is a different kind of channel (D-038).
 
 - Style ranges that travel separately from the text. Each client and bot must then calculate positions.
 - Plain text with code blocks only.
+- Spoiler text that stays hidden until a click. It helps only some communities.
 
 ### D-011 Message length
 
@@ -162,9 +183,14 @@ A voice channel is a different kind of channel (D-038).
 
 ### D-014 Mentions and keyword highlights
 
-**Decision.** The text `@handle` mentions a user. A user can also make a list of words. A message that contains one of these words counts as a mention for that user.
+**Decision.** The text `@handle` mentions a user. The text `@all` mentions all members of a channel. Only the channel owner and the moderators can use `@all`. A user can also make a list of words. A message that contains one of these words counts as a mention for that user.
 
-**Reason.** Keyword highlights are an IRC tradition. They use the notification that mentions already have.
+**Reason.** Keyword highlights are an IRC tradition. They use the notification that mentions already have. A limited `@all` lets an important notice get to all members, and it is hard to abuse.
+
+**Not selected.**
+
+- No mention of all members.
+- A mention of all members that each member can use.
 
 ### D-015 Message links
 
@@ -256,11 +282,11 @@ Post has no read receipts.
 - A permanent handle.
 - A change at any time.
 
-### D-025 Profiles
+### D-025 Profile card
 
-**Decision.** An account has one handle on a server. The application gives each handle a stable color. A profile card can have a short "about" line. Version 1.0 has no avatars and no display names.
+**Decision.** An account has one handle on a server. The application gives each handle a stable color. A profile card can have a short "about" line and the time zone of the user. If the time zone is there, the card shows the local time of the user. The card can also show account proofs (D-148). Post has no avatars and no display names.
 
-**Reason.** Post puts text first. A stable color helps a reader to recognize a person. The protocol can add more profile data later.
+**Reason.** Post puts text first. A stable color helps a reader to recognize a person. Without pictures, there is no upload and no moderation of pictures.
 
 **Not selected.**
 
@@ -296,24 +322,31 @@ Post has no read receipts.
 
 ### D-029 Bots and other clients
 
-**Decision.** Each program that obeys the protocol can connect. A bot is a normal account with a visible "bot" mark. The operator can make approval necessary for bot accounts. Version 1.0 has no special bot interface.
+**Decision.** Each program that obeys the protocol can connect. A bot is an account with a visible "bot" mark.
 
-**Reason.** An open protocol lets a bot culture grow, as on IRC.
+- A member makes a bot in the application and selects its handle. The member is the owner of the bot.
+- The profile card of a bot shows its owner. The owner can turn the bot off.
+- A bot signs in with a key file, as each account does (D-062).
+- The operator can make approval necessary for a new bot. The operator can also set a maximum number of bots for each member.
+
+**Reason.** An open protocol lets a bot culture grow, as on IRC. Each bot has a responsible person. One method to sign in is sufficient for all accounts.
 
 **Not selected.**
 
-- Approval for each bot on each server.
+- Bots that only an operator can make.
+- Bots that join as a person does. No person is then clearly responsible.
+- Access tokens for bots. They are a second method to sign in.
 - A server that accepts the official application only.
 
 ### D-030 Webhooks
 
-**Decision.** A channel owner can make a secret address for the channel. An external service sends an HTTPS request to this address. The server puts the text of the request in the channel, from a sender with a "bot" mark.
+**Decision.** A channel owner can make a secret address for the channel. An external service sends an HTTPS request to this address. The server puts the text of the request in the channel, from a sender with a "bot" mark. The request contains simple JSON, for example `{"text": "Build 214 is complete"}`. Many services can already send this form. The text uses the message text format.
 
 **Reason.** A project community gets messages from its tools, and no program has to run all the time.
 
 **Not selected.**
 
-- Webhooks after version 1.0.
+- Parsers for the formats of specific services. Each parser is code that we must maintain.
 - Bot accounts as the only method.
 
 ### D-031 Link previews
@@ -367,7 +400,14 @@ Post has no read receipts.
 - A mobile application. The protocol must not depend on a desktop computer, and the public specification lets other people build a mobile client.
 - Federation between servers.
 
-Other records give more functions that are not in Post: D-007 (pinned messages), D-016 (forward function), D-025 (avatars and display names), D-033 (IRC gateway), D-040 (video and screen share), and D-044 (record function for voice).
+Other records give more functions that are not in Post:
+
+- D-007: pinned messages.
+- D-016: a forward function.
+- D-025: avatars and display names.
+- D-033: an IRC gateway.
+- D-040: video and screen share.
+- D-044: a record function for voice.
 
 **Reason.** Each function adds weight, and each one fails a question of the design philosophy. Version 1.0 is complete (D-122), thus these functions do not come later.
 
@@ -386,3 +426,88 @@ Other records give more functions that are not in Post: D-007 (pinned messages),
 **Not selected.**
 
 - A list of functions for a time after version 1.0.
+
+### D-123 Media in the timeline
+
+**Decision.** PNG, JPEG, GIF, and WebP images show in the timeline. A click opens an image viewer. A message with more than one image shows the images as a grid. Each other file shows as a card with its name, its size, and a button to save or open it. A setting can show each image as a small card until the user clicks it (D-152).
+
+**Reason.** Most shared media are images. Post contains no audio or video codecs for files, thus there is less code to protect.
+
+**Not selected.**
+
+- Audio and video players in the timeline.
+- File cards only.
+
+### D-124 Timeline comforts
+
+**Decision.** The timeline has these functions:
+
+- A small gray line shows when a person joins or leaves a channel. These lines are on by default, and a setting hides them.
+- A very long message or code block shows only its first lines, with a "show more" control.
+- A user can select a part of a message and reply to only that part.
+- A user can select more than one message and copy them as a text log, with time and handle.
+
+**Reason.** The join and leave lines are an IRC tradition and show the life of a channel. The other functions keep the timeline easy to read and to quote.
+
+**Not selected.**
+
+- No join and leave lines.
+- Join and leave lines that are off by default.
+
+### D-125 Mentions view
+
+**Decision.** One view lists the recent mentions and keyword highlights of the user from all servers. A click goes to the message.
+
+**Reason.** After time away, the user sees in one place where people spoke to the user. The view shows data that Post already has.
+
+### D-126 Drafts
+
+**Decision.** Text that a user wrote but did not send is a draft. The server keeps the drafts of the user, thus each device of the user shows them. The draft of a sealed chat stays on the device where the user wrote it.
+
+**Reason.** A user can start a message on one computer and complete it on a different one. The server must not get the text of a sealed chat.
+
+**Not selected.**
+
+- Drafts that always stay on one device.
+
+### D-127 Find a person
+
+**Decision.** A user finds a person in the member list of a shared channel, or the user types the exact handle. Members get no list of all accounts on a server.
+
+**Reason.** A member cannot collect the names of all accounts. This makes spam and unwanted contact more difficult.
+
+**Not selected.**
+
+- A list of all members that the operator can turn off.
+
+### D-128 Bot commands
+
+**Decision.** A bot can register slash commands with the server. The application shows these commands in the `/` menu, with a description from the bot. A later round of design questions sets the details.
+
+**Reason.** A user finds the commands of a bot easily.
+
+**Not selected.**
+
+- Commands as plain text by convention, for example `!help`, without registration.
+
+### D-129 Limits for bots
+
+**Decision.** A bot cannot do these things:
+
+- Have the moderator role.
+- Go into a voice channel.
+- Be a member of a sealed chat.
+- Start a direct message with a member. A bot can answer in a direct message that a member started.
+
+**Reason.** A bot is a helper in normal text channels. Moderation, voice, and sealed content stay with persons.
+
+### D-130 Help for bot authors
+
+**Decision.** The client crate of Post (`post-client`) is a Rust library that a bot author can use. The repository contains two or three small example bots. An author who uses a different language works from the specification and the JSON Schemas.
+
+**Reason.** The crate exists in all cases, thus the cost is small.
+
+**Not selected.**
+
+- The specification as the only help.
+- Official libraries for more languages.
