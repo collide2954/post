@@ -13,6 +13,8 @@ mod time;
 pub use address::{Address, AddressError, Host};
 pub use bytes::{BytesError, Key, Nonce, Signature};
 pub use code::{Code, CodeError};
+#[cfg(verus_keep_ghost)]
+pub use code::{is_code, is_code_character};
 pub use codec::{DecodeError, MAX_LINE_BYTES};
 pub use message::{
     ClientMessage, DEFAULT_PORT, ErrorCode, LOBBY, PROTOCOL_VERSION, Role, ServerMessage,

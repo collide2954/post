@@ -32,6 +32,7 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 | The word for a part of the protocol | `crates/post-proto/src/part.rs` | The rule is 2 to 20 characters, each a lower-case letter or a hyphen, with no hyphen at the start or the end. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
 | The messages that the sign-in proofs sign | `crates/post-crypto/src/transcript.rs` | The writer makes exactly the bytes that the specification gives. A message gives its parts: two messages of the same type are equal only if all their parts are equal. A message of the server proof is never equal to a message of the account proof. |
 | The hexadecimal code of the seed | `crates/post-crypto/src/hex.rs` | The writer makes exactly the two characters that the specification gives for each byte. The reader accepts a text only if it is the text of some bytes, and it gives these bytes. Two different sequences of bytes never give the same text. |
+| The generator of invitation codes | `crates/post-crypto/src/random.rs` | The generator gives only codes that obey the rule, thus it cannot stop with an error. A code has the characters of the first 12 fair bytes, in sequence. Each of the 62 characters comes from exactly 4 of the 248 fair byte values. |
 
 ## Holes
 
@@ -54,6 +55,8 @@ Verus cannot work on these parts, or the parts are not our code:
 - Files, the clock, and other input and output.
 - The connection code. Small functions connect the proved code to the libraries, for example the `Display` function and the serde functions of a type. They have tests, but no proof.
 - The cryptographic algorithms. They come from libraries (D-168).
+- The random numbers. They come from the operating system.
+- The end of the code generator. The generator stops when the random source gives 12 fair bytes. No proof shows that the source gives them.
 - The security of the sign-in against an attacker in the network. Verus does not analyze cryptographic protocols. The [threat model](threat-model.md) gives the argument in words.
 
 ## What a proof depends on

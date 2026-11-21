@@ -103,10 +103,6 @@ fn has_the_form(bytes: &[u8]) -> (form: bool)
 
 } // verus!
 
-impl Code {
-    pub const ALPHABET: &[u8; 62] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-}
 impl fmt::Display for Code {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
@@ -188,16 +184,6 @@ mod tests {
         ] {
             assert_eq!(Code::parse(invalid), Err(CodeError), "{invalid:?}");
         }
-    }
-
-    #[test]
-    fn has_an_alphabet_of_all_the_characters_that_it_accepts() {
-        assert_eq!(Code::ALPHABET.len(), 62);
-        let mut sorted = Code::ALPHABET.to_vec();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(sorted.len(), 62);
-        assert!(sorted.iter().all(u8::is_ascii_alphanumeric));
     }
 
     #[test]
