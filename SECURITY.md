@@ -4,7 +4,7 @@
 
 Post is at the start of its development. Version 0.1 has no accounts and no encryption, and it connects only to a server on the same computer. Do not use it for real conversations.
 
-No independent audit of Post exists.
+No independent audit of Post exists. The [threat model](docs/threat-model.md) tells what Post protects and what it does not protect.
 
 ## How to report a security problem
 

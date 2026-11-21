@@ -162,6 +162,7 @@ Benchmarks run in the automatic checks, and we record the results. A clear decre
 - README, CONTRIBUTING, SECURITY, and the code of conduct.
 - The protocol specification in `docs/protocol/`.
 - An architecture description in `docs/architecture.md`.
+- A threat model in `docs/threat-model.md` (D-075).
 - The design philosophy and the decision records.
 
 All documents obey ASD-STE100 Simplified Technical English. A change to the code and the related change to a document go into the same commit.

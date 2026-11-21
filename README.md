@@ -49,6 +49,7 @@ The server listens on port 7678. To use a different port, give the number: `carg
 | [Decision records](docs/decisions/README.md) | Each design decision and its reason |
 | [Protocol specification](docs/protocol/README.md) | The messages between a client and a server |
 | [Architecture](docs/architecture.md) | The parts of the code |
+| [Threat model](docs/threat-model.md) | What Post protects, and what it does not protect |
 | [Changelog](CHANGELOG.md) | The changes in each version |
 
 ## Repository layout
