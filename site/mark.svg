@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 64" aria-hidden="true">
+  <mask id="mark-ring">
+    <rect width="96" height="64" fill="#fff"/>
+    <circle cx="32" cy="32" r="30.5" fill="#000"/>
+  </mask>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" transform="rotate(-8 48 32)">
+    <circle cx="32" cy="32" r="26" stroke-width="3.5"/>
+    <circle cx="32" cy="32" r="19.5" stroke-width="1.5"/>
+    <g stroke-width="2.5" mask="url(#mark-ring)">
+      <path d="M40 17q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
+      <path d="M40 27q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
+      <path d="M40 37q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
+      <path d="M40 47q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
+    </g>
+  </g>
+</svg>
