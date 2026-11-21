@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::codec::{self, DecodeError};
@@ -6,7 +7,7 @@ use crate::{Name, Timestamp};
 pub const PROTOCOL_VERSION: u32 = 0;
 
 /// A message from a client to the server.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum ClientMessage {
     /// Starts a session. This must be the first message on a connection.
@@ -32,7 +33,7 @@ pub enum ClientMessage {
 }
 
 /// A message from the server to a client.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum ServerMessage {
     /// Accepts a `hello` message. The session now has a name.
@@ -90,7 +91,7 @@ pub enum ServerMessage {
 }
 
 /// The cause of an error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ErrorCode {
     /// The line is not a valid protocol message.

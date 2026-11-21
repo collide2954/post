@@ -1,7 +1,9 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -169,6 +171,21 @@ impl fmt::Display for TimestampError {
 }
 
 impl std::error::Error for TimestampError {}
+
+impl JsonSchema for Timestamp {
+    fn schema_name() -> Cow<'static, str> {
+        "Timestamp".into()
+    }
+
+    fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "A time in UTC with milliseconds, for example 2026-11-21T14:02:07.120Z.",
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        })
+    }
+}
 
 impl Serialize for Timestamp {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

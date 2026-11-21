@@ -1,0 +1,21 @@
+# Two users exchange text in the channel "lobby".
+# The lines show the connection of the user "ana".
+# "C:" is a line from the client. "S:" is a line from the server.
+
+# Ana starts a session and comes into the channel.
+C: {"type":"hello","protocol":0,"name":"ana"}
+S: {"type":"welcome","protocol":0,"name":"ana"}
+S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
+
+# Ben comes into the channel.
+S: {"type":"join","channel":"lobby","name":"ben","time":"2026-11-21T14:02:05.000Z"}
+
+# Ana sends a text. Her copy of the message has the number from her request.
+C: {"type":"send","ref":1,"channel":"lobby","text":"Hello"}
+S: {"type":"message","ref":1,"channel":"lobby","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}
+
+# Ben answers.
+S: {"type":"message","channel":"lobby","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi. Does it work?"}
+
+# Ben closes his connection.
+S: {"type":"leave","channel":"lobby","name":"ben","time":"2026-11-21T14:03:00.000Z"}

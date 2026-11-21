@@ -1,5 +1,7 @@
+use std::borrow::Cow;
 use std::fmt;
 
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -66,6 +68,20 @@ impl fmt::Display for NameError {
 }
 
 impl std::error::Error for NameError {}
+
+impl JsonSchema for Name {
+    fn schema_name() -> Cow<'static, str> {
+        "Name".into()
+    }
+
+    fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "The name of a user: 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore.",
+            "type": "string",
+            "pattern": "^[a-z0-9_-]{2,20}$"
+        })
+    }
+}
 
 impl Serialize for Name {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

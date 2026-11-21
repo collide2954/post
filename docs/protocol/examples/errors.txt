@@ -1,0 +1,41 @@
+# The server refuses messages. Each error code shows one time.
+# "C:" is a line from the client. "S:" is a line from the server.
+
+# The line is not a valid message.
+C: {"type":"send","channel":"lobby","text":"Hello"}
+S: {"type":"error","code":"hello-required","text":"The first message must be a hello message."}
+
+# The server knows only protocol version 0.
+C: {"type":"hello","ref":1,"protocol":7,"name":"ana"}
+S: {"type":"error","ref":1,"code":"unsupported-protocol","text":"The server does not support this protocol version."}
+
+# A name cannot contain a capital letter or a space.
+C: {"type":"hello","ref":2,"protocol":0,"name":"Ana Maria"}
+S: {"type":"error","ref":2,"code":"invalid-name","text":"A name has 2 to 20 characters: a to z, 0 to 9, hyphen, and underscore."}
+
+# A different connected user has the name "ben".
+C: {"type":"hello","ref":3,"protocol":0,"name":"ben"}
+S: {"type":"error","ref":3,"code":"name-taken","text":"A different user has this name."}
+
+# The session starts.
+C: {"type":"hello","ref":4,"protocol":0,"name":"ana"}
+S: {"type":"welcome","ref":4,"protocol":0,"name":"ana"}
+S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
+
+# A session can have only one hello message.
+C: {"type":"hello","ref":5,"protocol":0,"name":"ana2"}
+S: {"type":"error","ref":5,"code":"duplicate-hello","text":"The session already has a name."}
+
+# Version 0.1 has only the channel "lobby".
+C: {"type":"send","ref":6,"channel":"garden","text":"Hello"}
+S: {"type":"error","ref":6,"code":"no-such-channel","text":"The channel does not exist."}
+
+# A text must have a visible character.
+C: {"type":"send","ref":7,"channel":"lobby","text":"   "}
+S: {"type":"error","ref":7,"code":"empty-text","text":"A message must contain text."}
+
+# A text with more than 4000 characters gets this answer.
+S: {"type":"error","ref":8,"code":"text-too-long","text":"A message can have a maximum of 4000 characters."}
+
+# A line that is not a message gets this answer. The server cannot read a number from the line.
+S: {"type":"error","code":"bad-message","text":"The message is not a valid protocol message."}

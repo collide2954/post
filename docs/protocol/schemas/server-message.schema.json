@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerMessage",
+  "description": "A message from the server to a client.",
+  "oneOf": [
+    {
+      "description": "Accepts a `hello` message. The session now has a name.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name of the user in this session.",
+          "$ref": "#/$defs/Name"
+        },
+        "protocol": {
+          "description": "The protocol version of the session.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ref": {
+          "description": "The number from the `hello` message, if it had one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "welcome"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "protocol",
+        "name"
+      ]
+    },
+    {
+      "description": "Tells that a user came into a channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the user.",
+          "$ref": "#/$defs/Name"
+        },
+        "time": {
+          "description": "The time when the user came in.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "join"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "time"
+      ]
+    },
+    {
+      "description": "Tells that a user went out of a channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the user.",
+          "$ref": "#/$defs/Name"
+        },
+        "time": {
+          "description": "The time when the user went out.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "leave"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "time"
+      ]
+    },
+    {
+      "description": "Carries a text that a user sent to a channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The name of the sender.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the `send` message. Only the sender gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "text": {
+          "description": "The text of the message.",
+          "type": "string"
+        },
+        "time": {
+          "description": "The time when the server got the message.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "message"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "from",
+        "time",
+        "text"
+      ]
+    },
+    {
+      "description": "Refuses a message from the client.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "The cause of the error, for a program.",
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "ref": {
+          "description": "The number from the refused message, if it had one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "text": {
+          "description": "The cause of the error in English, for a person.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "error"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "code",
+        "text"
+      ]
+    }
+  ],
+  "$defs": {
+    "ErrorCode": {
+      "description": "The cause of an error.",
+      "oneOf": [
+        {
+          "description": "The line is not a valid protocol message.",
+          "type": "string",
+          "const": "bad-message"
+        },
+        {
+          "description": "The server does not support the protocol version of the client.",
+          "type": "string",
+          "const": "unsupported-protocol"
+        },
+        {
+          "description": "The client sent a different message before the `hello` message.",
+          "type": "string",
+          "const": "hello-required"
+        },
+        {
+          "description": "The client sent a second `hello` message after a `welcome` message.",
+          "type": "string",
+          "const": "duplicate-hello"
+        },
+        {
+          "description": "The name does not obey the rules for a name.",
+          "type": "string",
+          "const": "invalid-name"
+        },
+        {
+          "description": "A different connected user has the name.",
+          "type": "string",
+          "const": "name-taken"
+        },
+        {
+          "description": "The channel does not exist.",
+          "type": "string",
+          "const": "no-such-channel"
+        },
+        {
+          "description": "The text has no visible character.",
+          "type": "string",
+          "const": "empty-text"
+        },
+        {
+          "description": "The text has too many characters.",
+          "type": "string",
+          "const": "text-too-long"
+        }
+      ]
+    },
+    "Name": {
+      "description": "The name of a user: 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore.",
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{2,20}$"
+    },
+    "Timestamp": {
+      "description": "A time in UTC with milliseconds, for example 2026-11-21T14:02:07.120Z.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    }
+  }
+}

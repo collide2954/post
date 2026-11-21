@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientMessage",
+  "description": "A message from a client to the server.",
+  "oneOf": [
+    {
+      "description": "Starts a session. This must be the first message on a connection.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name that the user wants.",
+          "type": "string"
+        },
+        "protocol": {
+          "description": "The protocol version of the client.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "hello"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "protocol",
+        "name"
+      ]
+    },
+    {
+      "description": "Sends a text to a channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "text": {
+          "description": "The text of the message.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "send"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "text"
+      ]
+    }
+  ]
+}
