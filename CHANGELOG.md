@@ -2,6 +2,12 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.1 - 2026-11-21
+
+- Add 12 decision records for version 0.2 (D-163 to D-174).
+- Add the threat model.
+- Give a version to the handle change, the settings screen, and the appearance settings (D-100).
+
 ## 0.1.0 - 2026-11-21
 
 Version 0.1 is the first slice (D-099). Two or more users on one computer exchange text in the channel `#lobby`.

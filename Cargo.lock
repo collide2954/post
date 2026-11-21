@@ -2731,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "post-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fluent-bundle",
  "futures-util",
@@ -2748,7 +2748,7 @@ dependencies = [
 
 [[package]]
 name = "post-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures-util",
  "post-proto",
@@ -2759,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "post-proto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "schemars",
  "serde",
@@ -2768,7 +2768,7 @@ dependencies = [
 
 [[package]]
 name = "post-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "futures-util",
