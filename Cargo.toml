@@ -13,6 +13,7 @@ publish = false
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 fluent-bundle = "0.16.0"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+iced = { version = "0.14.0", default-features = false, features = ["advanced-shaping", "crisp", "linux-theme-detection", "tiny-skia", "tokio", "wayland", "web-colors", "wgpu", "x11"] }
 jiff = "1.0.1"
 post-client = { path = "crates/post-client" }
 post-proto = { path = "crates/post-proto" }
@@ -20,6 +21,7 @@ post-server = { path = "crates/post-server" }
 schemars = "1.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.154"
+sys-locale = "0.3.2"
 tokio = { version = "1.54.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake"] }
 unic-langid = "0.9.6"

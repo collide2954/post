@@ -27,13 +27,25 @@ pub fn shows_name(entries: &[Entry], index: usize) -> bool {
     !matches!(previous, Some(Entry::Message { from: earlier, .. }) if earlier == from)
 }
 
+#[must_use]
+pub fn name_column(entries: &[Entry]) -> usize {
+    entries
+        .iter()
+        .filter_map(|entry| match entry {
+            Entry::Message { from, .. } => Some(from.as_str().len()),
+            Entry::Joined { .. } | Entry::Left { .. } => None,
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use jiff::tz::{Offset, TimeZone};
     use post_client::Entry;
     use post_proto::{Name, Timestamp};
 
-    use super::{clock, shows_name};
+    use super::{clock, name_column, shows_name};
 
     fn time(text: &str) -> Timestamp {
         Timestamp::parse(text).expect(text)
@@ -112,6 +124,22 @@ mod tests {
             .collect();
 
         assert_eq!(shown, [true, false, true, false, true, false, true, false]);
+    }
+
+    #[test]
+    fn measures_the_longest_name_of_a_sender() {
+        assert_eq!(name_column(&[]), 0);
+        assert_eq!(
+            name_column(&[Entry::Joined {
+                time: time("2026-11-21T14:03:00.000Z"),
+                name: name("a-very-long-name"),
+            }]),
+            0
+        );
+        assert_eq!(
+            name_column(&[message("ana"), message("benjamin"), message("cy")]),
+            8
+        );
     }
 
     #[test]
