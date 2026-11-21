@@ -2,6 +2,13 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.0.5 - 2026-11-21
+
+- Make the repository a Cargo workspace with a pinned toolchain, a commit hook, and automatic checks.
+- Add the protocol crate with its specification, JSON Schemas, and example conversations.
+- Add the server program for one channel on the local computer.
+- Add the client logic: the address rule, the session, and the connection.
+
 ## 0.0.4 - 2026-11-21
 
 - Add 8 decision records for version 0.1 (D-155 to D-162).
