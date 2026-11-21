@@ -1,0 +1,23 @@
+# A person uses an invite link to make an account. Then the session starts.
+# "C:" is a line from the client. "S:" is a line from the server.
+#
+# The values of this example are real. A different program calculates the same keys and signatures.
+# - The address of the server is chat.example.org:443.
+# - The secret key of the server is the first test key of RFC 8032.
+# - The seed of the person is the 32 bytes from 00 to 1f.
+
+C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","supports":[]}
+S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI","proof":"ZeA2ResstAfHtxRGEs6knEtI14hfp-IrwWCnVdDajcWimrtB6_yXo33nRHzuebREmPcb2GQo1XPcZONrCBKXCw","requires":[]}
+
+# The key has no account on this server.
+C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
+S: {"type":"error","ref":2,"code":"unknown-account","text":"This server has no account for this key."}
+
+# The server knows no open invitation with this code.
+C: {"type":"register","ref":3,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw","name":"ana","invitation":"AAAAAAAAAAAA"}
+S: {"type":"error","ref":3,"code":"invalid-invitation","text":"The invitation is not valid."}
+
+# The person selects the name "ana" and gives the code of the invite link.
+C: {"type":"register","ref":4,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw","name":"ana","invitation":"7Hq2kdX9mPq4"}
+S: {"type":"welcome","ref":4,"name":"ana","role":"member"}
+S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:05.000Z"}

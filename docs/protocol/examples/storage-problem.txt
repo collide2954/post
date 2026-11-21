@@ -1,0 +1,7 @@
+# The server has a problem with its storage and cannot find the account.
+
+C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce":"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc","supports":[]}
+S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg","proof":"rL842Tlb_EcUOIxYBVIRI_St7I2pGsNtnyH8wscnpprBFBfaHmE9E3pX-ri-rYSJSx2VMnUdggMKq1POODX6AA","requires":[]}
+
+C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"v8d4t7VYMSVVZlv8aH7A5lG6DIQi-Tyj4iakgMaCshPhNLsn9EV98Wx2xeNTUz7VGOcfEy6Fnz-LOZPIGJApBw"}
+S: {"type":"error","ref":2,"code":"server-error","text":"The server has a problem. Try again later."}

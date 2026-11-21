@@ -2,7 +2,10 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use post_proto::{ClientMessage, ErrorCode, MAX_LINE_BYTES, Name, Role, ServerMessage};
+use post_crypto::{Exchange, Seed};
+use post_proto::{
+    ClientMessage, Code, ErrorCode, Key, MAX_LINE_BYTES, Name, Role, ServerMessage, Signature,
+};
 use post_server::Server;
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
@@ -18,6 +21,7 @@ type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 struct Running {
     port: u16,
     addresses: Vec<SocketAddr>,
+    owner_link: Option<String>,
     stop: oneshot::Sender<()>,
     task: JoinHandle<std::io::Result<()>>,
 }
@@ -25,6 +29,7 @@ struct Running {
 async fn start() -> Running {
     let server = Server::bind(0).await.expect("the server can bind");
     let addresses = server.addresses().to_vec();
+    let owner_link = server.owner_link().map(str::to_owned);
     let (stop, stopped) = oneshot::channel::<()>();
     let task = tokio::spawn(server.run(async {
         let _ = stopped.await;
@@ -32,6 +37,7 @@ async fn start() -> Running {
     Running {
         port: addresses[0].port(),
         addresses,
+        owner_link,
         stop,
         task,
     }
@@ -106,6 +112,74 @@ async fn join_as(port: u16, who: &str) -> Socket {
         matches!(read(&mut socket).await, ServerMessage::Join { name: joined, .. } if joined == name(who))
     );
     socket
+}
+
+async fn prove(socket: &mut Socket, address: &str, seed: &Seed) -> (Key, Signature) {
+    let client = post_crypto::nonce();
+    let hello = ClientMessage::Hello {
+        reference: None,
+        protocol: 0,
+        address: address.to_owned(),
+        nonce: client,
+        supports: Vec::new(),
+    };
+    write(socket, &hello).await;
+    let ServerMessage::Challenge {
+        key, nonce, proof, ..
+    } = read(socket).await
+    else {
+        panic!("the server answers a hello message with a challenge");
+    };
+    let exchange = Exchange {
+        address,
+        client: &client,
+        server: &nonce,
+    };
+    assert!(exchange.server_proof_is_valid(&key, &proof));
+    let account = seed.account_key(&key);
+    (account.public(), account.prove(&key, &exchange))
+}
+
+#[tokio::test]
+async fn the_owner_makes_an_account_and_signs_in_again() {
+    let server = start().await;
+    let owner_link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let (start, code) = owner_link.rsplit_once('/').expect("a link has a code");
+    assert_eq!(start, format!("http://localhost:{}/i", server.port));
+    let seed = Seed::from_bytes([7; 32]);
+
+    let mut first = connect_v4(server.port).await;
+    let address = format!("localhost:{}", server.port);
+    let (key, proof) = prove(&mut first, &address, &seed).await;
+    let register = ClientMessage::Register {
+        reference: None,
+        key,
+        proof,
+        name: "ana".to_owned(),
+        invitation: Code::parse(code).expect("a valid code"),
+    };
+    write(&mut first, &register).await;
+    let welcome = ServerMessage::Welcome {
+        reference: None,
+        name: name("ana"),
+        role: Role::Owner,
+    };
+    assert_eq!(read(&mut first).await, welcome);
+
+    let mut second = connect(server.addresses[0]).await;
+    let address = format!("127.0.0.1:{}", server.port);
+    let (key, proof) = prove(&mut second, &address, &seed).await;
+    let identify = ClientMessage::Identify {
+        reference: None,
+        key,
+        proof,
+        invitation: None,
+    };
+    write(&mut second, &identify).await;
+    assert_eq!(read(&mut second).await, welcome);
 }
 
 #[tokio::test]

@@ -15,7 +15,7 @@ S: {"type":"error","ref":2,"code":"invalid-name","text":"A name has 2 to 20 char
 
 # A different connected user has the name "ben".
 C: {"type":"guest","ref":3,"protocol":0,"name":"ben"}
-S: {"type":"error","ref":3,"code":"name-taken","text":"A different user has this name."}
+S: {"type":"error","ref":3,"code":"name-taken","text":"This name is not available."}
 
 # The session starts.
 C: {"type":"guest","ref":4,"protocol":0,"name":"ana"}
@@ -24,7 +24,7 @@ S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000
 
 # A session can have only one hello message.
 C: {"type":"guest","ref":5,"protocol":0,"name":"ana2"}
-S: {"type":"error","ref":5,"code":"duplicate-hello","text":"The session already has a name."}
+S: {"type":"error","ref":5,"code":"duplicate-hello","text":"The connection already had a hello message."}
 
 # Version 0.1 has only the channel "lobby".
 C: {"type":"send","ref":6,"channel":"garden","text":"Hello"}

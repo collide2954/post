@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the parts of the Post code in version 0.1. The [decision records](decisions/README.md) give the reasons for the design.
+This document describes the parts of the Post code. The project changes it together with the code. The [decision records](decisions/README.md) give the reasons for the design.
 
 ## Crates
 
@@ -10,10 +10,9 @@ The repository is one Cargo workspace (decision record D-097). Each crate depend
 |---|---|---|
 | `post-app` | The application with its window. The program has the name `post`. | `post-client`, `post-proto` |
 | `post-client` | The client logic without an interface | `post-proto` |
-| `post-server` | The server. The program has the name `post-server`. | `post-proto` |
+| `post-server` | The server. The program has the name `post-server`. | `post-crypto`, `post-proto` |
+| `post-crypto` | Keys and proofs of accounts and servers | `post-proto` |
 | `post-proto` | Message types, codec, and protocol rules | No other crate of Post |
-
-The `post-crypto` crate starts in version 0.2, when Post gets its first key.
 
 ## How a message travels
 
@@ -32,6 +31,8 @@ The sender sees the message only when it comes back from the server. Thus all us
 `post-proto` contains the rules that the client and the server share.
 
 - `name` and `text` hold the rules for a name and for the text of a message.
+- `address` holds the form of a server address that the client and the server share.
+- `bytes`, `code`, and `part` hold the text forms of keys, signatures, invitation codes, and the words for parts of the protocol.
 - `time` holds the time type. It writes and reads the one time form of the protocol.
 - `message` holds the message types. The doc comments on these types go into the JSON Schemas.
 - `codec` writes a message as one line and reads a line.
@@ -39,14 +40,26 @@ The sender sees the message only when it comes back from the server. Thus all us
 
 A test compares the schemas and the example conversations in `docs/protocol` with the code. The check fails if they do not agree.
 
+## The cryptography crate
+
+`post-crypto` uses libraries for all cryptography (D-168). It contains no algorithm of its own.
+
+- `seed` holds the secret seed of a profile. It calculates the account key for a server.
+- `keys` holds the server key and the account key. It makes and examines the proofs of the sign-in.
+- `random` makes random values and invitation codes.
+
+A test examines the proofs in the example conversations of the protocol specification.
+
 ## The server crate
 
-- `hub` decides who gets which message. It has no network code and no clock. Each function gets the present time as a value, thus a test controls all inputs.
+- `hub` does the sign-in and decides who gets which message. It has no network code and no clock. Each function gets the present time as a value, and a test can give it fixed random values. Thus a test controls all inputs.
+- `store` keeps the server key, the accounts, the reserved names, and the invitations in SQLite (D-051). The other modules do not use SQL.
+- `config` reads the configuration file of the server. The server program does not use it yet.
 - `sessions` connects the hub to one queue for each connection. If a queue is full, the server closes that connection.
 - `server` holds the network code. It accepts WebSocket connections on the loopback addresses and moves lines between a socket and its queue.
 - `cli` reads the arguments of the program.
 
-The server keeps all state in memory in version 0.1.
+At this time, the server program opens its storage in memory. A later step gives it a data directory.
 
 ## The client crate
 

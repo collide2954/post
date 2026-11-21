@@ -92,7 +92,8 @@ impl Session {
             ServerMessage::Message { .. }
             | ServerMessage::Join { .. }
             | ServerMessage::Leave { .. }
-            | ServerMessage::Welcome { .. } => {}
+            | ServerMessage::Welcome { .. }
+            | ServerMessage::Challenge { .. } => {}
         }
     }
 }

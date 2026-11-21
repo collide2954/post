@@ -1,0 +1,8 @@
+# A server requires a part of the protocol that the client does not support.
+# Protocol version 0 defines no parts at this time. The word "sealed" only shows the procedure.
+
+C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce":"BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU","supports":[]}
+S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"BgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgY","proof":"5hwWzOgUQ4MIn6-78yDakfoaiylUQV0kZw-bWt6_1MMJEbFk3epX3JzGB6NMnPIQIjHmpBOYcKe_9BM7U73hBA","requires":["sealed"]}
+
+C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"WCBKEQPTD835Vfhh5vrxE7KiE3TqejWYeq4_hu11zSm2jnN-RBwMom6SpX7zEaatzzVrAGqHJsTMa6zIgAiDCw"}
+S: {"type":"error","ref":2,"code":"missing-part","text":"The client does not support a part of the protocol that this server requires."}

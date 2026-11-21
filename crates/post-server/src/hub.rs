@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
+use post_crypto::{Exchange, ServerKey};
 use post_proto::{
-    ClientMessage, ErrorCode, LOBBY, Name, PROTOCOL_VERSION, Role, ServerMessage, TextError,
-    Timestamp, check_text,
+    ClientMessage, Code, ErrorCode, Key, LOBBY, Name, Nonce, PROTOCOL_VERSION, Part, Role,
+    ServerMessage, Signature, TextError, Timestamp, check_text,
 };
+
+use crate::store::{Account, AccountId, RegisterError, Store, Stored};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ConnectionId(u64);
@@ -14,48 +17,155 @@ pub struct Outgoing {
     pub message: ServerMessage,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Settings {
+    pub addresses: Vec<String>,
+    pub link: String,
+    pub requires: Vec<Part>,
+}
+
+pub struct Random {
+    pub nonce: Box<dyn FnMut() -> Nonce + Send>,
+    pub code: Box<dyn FnMut() -> Code + Send>,
+}
+
 pub struct Hub {
+    store: Store,
+    key: ServerKey,
+    settings: Settings,
+    random: Random,
     next_id: u64,
-    connections: BTreeMap<ConnectionId, Option<Name>>,
+    connections: BTreeMap<ConnectionId, State>,
+}
+
+#[derive(Debug, Clone)]
+enum State {
+    New,
+    Challenged(Challenge),
+    Present(Member),
+}
+
+#[derive(Debug, Clone)]
+struct Challenge {
+    address: String,
+    client: Nonce,
+    server: Nonce,
+    supports: Vec<Part>,
+}
+
+#[derive(Debug, Clone)]
+struct Member {
+    account: Option<AccountId>,
+    name: Name,
+    role: Role,
+}
+
+struct Credentials {
+    key: Key,
+    proof: Signature,
+}
+
+type Refused = ErrorCode;
+
+impl Default for Random {
+    fn default() -> Self {
+        Self {
+            nonce: Box::new(post_crypto::nonce),
+            code: Box::new(post_crypto::code),
+        }
+    }
 }
 
 impl Hub {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(mut store: Store, settings: Settings, random: Random) -> Stored<Self> {
+        let key = store.server_key()?;
+        Ok(Self {
+            store,
+            key,
+            settings,
+            random,
+            next_id: 0,
+            connections: BTreeMap::new(),
+        })
+    }
+
+    pub fn owner_link(&mut self, now: Timestamp) -> Stored<Option<String>> {
+        let fresh = (self.random.code)();
+        let code = self.store.owner_code(&fresh, now)?;
+        Ok(code.map(|code| format!("{}/i/{code}", self.settings.link)))
     }
 
     pub fn connect(&mut self) -> ConnectionId {
         let id = ConnectionId(self.next_id);
         self.next_id += 1;
-        self.connections.insert(id, None);
+        self.connections.insert(id, State::New);
         id
     }
 
     pub fn receive(&mut self, from: ConnectionId, line: &str, now: Timestamp) -> Vec<Outgoing> {
-        let Some(name) = self.connections.get(&from).cloned() else {
+        let Some(state) = self.connections.get(&from).cloned() else {
             return Vec::new();
         };
-        match ClientMessage::decode(line) {
-            Err(_) => refusal(from, None, ErrorCode::BadMessage),
-            Ok(ClientMessage::Guest {
+        let Ok(message) = ClientMessage::decode(line) else {
+            return refusal(from, None, ErrorCode::BadMessage);
+        };
+        let (reference, result) = match message {
+            ClientMessage::Hello {
                 reference,
                 protocol,
-                name: wanted,
-            }) => match self.admit(name.is_some(), protocol, &wanted) {
-                Ok(name) => self.welcome(from, reference, &name, now),
-                Err(code) => refusal(from, reference, code),
-            },
-            Ok(ClientMessage::Send {
+                address,
+                nonce,
+                supports,
+            } => (
+                reference,
+                self.challenge(from, reference, &state, protocol, address, nonce, supports),
+            ),
+            ClientMessage::Identify {
+                reference,
+                key,
+                proof,
+                invitation,
+            } => (
+                reference,
+                self.identify(
+                    &state,
+                    &Credentials { key, proof },
+                    invitation.as_ref(),
+                    now,
+                )
+                .map(|member| self.enter(from, reference, member, now)),
+            ),
+            ClientMessage::Register {
+                reference,
+                key,
+                proof,
+                name,
+                invitation,
+            } => (
+                reference,
+                self.register(&state, &Credentials { key, proof }, &name, &invitation, now)
+                    .map(|member| self.enter(from, reference, member, now)),
+            ),
+            ClientMessage::Guest {
+                reference,
+                protocol,
+                name,
+            } => (
+                reference,
+                self.admit_guest(&state, protocol, &name)
+                    .map(|member| self.enter(from, reference, member, now)),
+            ),
+            ClientMessage::Send {
                 reference,
                 channel,
                 text,
-            }) => match examine_text(name, &channel, &text) {
-                Ok(name) => self.deliver(from, reference, &name, &text, now),
-                Err(code) => refusal(from, reference, code),
-            },
-        }
+            } => (
+                reference,
+                examine_text(&state, &channel, &text)
+                    .map(|member| self.deliver(from, reference, &member.name, &text, now)),
+            ),
+        };
+        result.unwrap_or_else(|code| refusal(from, reference, code))
     }
 
     #[must_use]
@@ -68,51 +178,181 @@ impl Hub {
     }
 
     pub fn disconnect(&mut self, id: ConnectionId, now: Timestamp) -> Vec<Outgoing> {
-        let Some(Some(name)) = self.connections.remove(&id) else {
+        let Some(State::Present(member)) = self.connections.remove(&id) else {
             return Vec::new();
         };
+        if self.has_a_connection(&member) {
+            return Vec::new();
+        }
         self.to_each_member(|_| ServerMessage::Leave {
             channel: LOBBY.to_owned(),
-            name: name.clone(),
+            name: member.name.clone(),
             time: now,
         })
     }
 
-    fn admit(&self, has_name: bool, protocol: u32, wanted: &str) -> Result<Name, ErrorCode> {
-        if has_name {
+    #[expect(clippy::too_many_arguments, reason = "the fields of one message")]
+    fn challenge(
+        &mut self,
+        from: ConnectionId,
+        reference: Option<u32>,
+        state: &State,
+        protocol: u32,
+        address: String,
+        client: Nonce,
+        supports: Vec<Part>,
+    ) -> Result<Vec<Outgoing>, Refused> {
+        if !matches!(state, State::New) {
+            return Err(ErrorCode::DuplicateHello);
+        }
+        if protocol != PROTOCOL_VERSION {
+            return Err(ErrorCode::UnsupportedProtocol);
+        }
+        if !self.settings.addresses.contains(&address) {
+            return Err(ErrorCode::WrongAddress);
+        }
+        let challenge = Challenge {
+            address,
+            client,
+            server: (self.random.nonce)(),
+            supports,
+        };
+        let message = ServerMessage::Challenge {
+            reference,
+            protocol: PROTOCOL_VERSION,
+            key: self.key.public(),
+            nonce: challenge.server,
+            proof: self.key.prove(&challenge.exchange()),
+            requires: self.settings.requires.clone(),
+        };
+        self.connections.insert(from, State::Challenged(challenge));
+        Ok(vec![Outgoing { to: from, message }])
+    }
+
+    fn identify(
+        &mut self,
+        state: &State,
+        credentials: &Credentials,
+        invitation: Option<&Code>,
+        now: Timestamp,
+    ) -> Result<Member, Refused> {
+        self.examine(state, credentials)?;
+        let account = self
+            .store
+            .account(&credentials.key)
+            .map_err(|_| ErrorCode::ServerError)?
+            .ok_or(ErrorCode::UnknownAccount)?;
+        self.examine_parts(state)?;
+        let is_new_owner = match invitation {
+            Some(code) => self
+                .store
+                .claim(account.id, code, now)
+                .map_err(|_| ErrorCode::ServerError)?,
+            None => false,
+        };
+        Ok(Member::of(account, is_new_owner))
+    }
+
+    fn register(
+        &mut self,
+        state: &State,
+        credentials: &Credentials,
+        name: &str,
+        invitation: &Code,
+        now: Timestamp,
+    ) -> Result<Member, Refused> {
+        self.examine(state, credentials)?;
+        self.examine_parts(state)?;
+        let name = Name::parse(name).map_err(|_| ErrorCode::InvalidName)?;
+        self.store
+            .register(&credentials.key, &name, invitation, now)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map(|account| Member::of(account, false))
+            .map_err(|error| match error {
+                RegisterError::AccountExists => ErrorCode::AccountExists,
+                RegisterError::InvalidInvitation => ErrorCode::InvalidInvitation,
+                RegisterError::NameTaken => ErrorCode::NameTaken,
+            })
+    }
+
+    fn examine(&self, state: &State, credentials: &Credentials) -> Result<(), Refused> {
+        let challenge = match state {
+            State::New => return Err(ErrorCode::HelloRequired),
+            State::Present(_) => return Err(ErrorCode::DuplicateIdentify),
+            State::Challenged(challenge) => challenge,
+        };
+        let is_valid = challenge.exchange().account_proof_is_valid(
+            &credentials.key,
+            &self.key.public(),
+            &credentials.proof,
+        );
+        if is_valid {
+            Ok(())
+        } else {
+            Err(ErrorCode::InvalidProof)
+        }
+    }
+
+    fn examine_parts(&self, state: &State) -> Result<(), Refused> {
+        let supports: &[Part] = match state {
+            State::Challenged(challenge) => &challenge.supports,
+            _ => &[],
+        };
+        if self
+            .settings
+            .requires
+            .iter()
+            .all(|part| supports.contains(part))
+        {
+            Ok(())
+        } else {
+            Err(ErrorCode::MissingPart)
+        }
+    }
+
+    fn admit_guest(&self, state: &State, protocol: u32, wanted: &str) -> Result<Member, Refused> {
+        if !matches!(state, State::New) {
             return Err(ErrorCode::DuplicateHello);
         }
         if protocol != PROTOCOL_VERSION {
             return Err(ErrorCode::UnsupportedProtocol);
         }
         let name = Name::parse(wanted).map_err(|_| ErrorCode::InvalidName)?;
-        if self.members().any(|(_, member)| *member == name) {
+        if self.members().any(|(_, member)| member.name == name) {
             return Err(ErrorCode::NameTaken);
         }
-        Ok(name)
+        Ok(Member {
+            account: None,
+            name,
+            role: Role::Member,
+        })
     }
 
-    fn welcome(
+    fn enter(
         &mut self,
         id: ConnectionId,
         reference: Option<u32>,
-        name: &Name,
+        member: Member,
         now: Timestamp,
     ) -> Vec<Outgoing> {
-        self.connections.insert(id, Some(name.clone()));
+        let is_first_connection = !self.has_a_connection(&member);
         let mut outgoing = vec![Outgoing {
             to: id,
             message: ServerMessage::Welcome {
                 reference,
-                name: name.clone(),
-                role: Role::Member,
+                name: member.name.clone(),
+                role: member.role,
             },
         }];
-        outgoing.extend(self.to_each_member(|_| ServerMessage::Join {
-            channel: LOBBY.to_owned(),
-            name: name.clone(),
-            time: now,
-        }));
+        let name = member.name.clone();
+        self.connections.insert(id, State::Present(member));
+        if is_first_connection {
+            outgoing.extend(self.to_each_member(|_| ServerMessage::Join {
+                channel: LOBBY.to_owned(),
+                name: name.clone(),
+                time: now,
+            }));
+        }
         outgoing
     }
 
@@ -133,10 +373,20 @@ impl Hub {
         })
     }
 
-    fn members(&self) -> impl Iterator<Item = (ConnectionId, &Name)> {
+    fn has_a_connection(&self, member: &Member) -> bool {
+        member.account.is_some()
+            && self
+                .members()
+                .any(|(_, other)| other.account == member.account)
+    }
+
+    fn members(&self) -> impl Iterator<Item = (ConnectionId, &Member)> {
         self.connections
             .iter()
-            .filter_map(|(id, name)| name.as_ref().map(|name| (*id, name)))
+            .filter_map(|(id, state)| match state {
+                State::Present(member) => Some((*id, member)),
+                _ => None,
+            })
     }
 
     fn to_each_member(&self, message: impl Fn(ConnectionId) -> ServerMessage) -> Vec<Outgoing> {
@@ -149,8 +399,36 @@ impl Hub {
     }
 }
 
-fn examine_text(name: Option<Name>, channel: &str, text: &str) -> Result<Name, ErrorCode> {
-    let name = name.ok_or(ErrorCode::HelloRequired)?;
+impl Challenge {
+    fn exchange(&self) -> Exchange<'_> {
+        Exchange {
+            address: &self.address,
+            client: &self.client,
+            server: &self.server,
+        }
+    }
+}
+
+impl Member {
+    fn of(account: Account, is_new_owner: bool) -> Self {
+        Self {
+            account: Some(account.id),
+            name: account.name,
+            role: if is_new_owner {
+                Role::Owner
+            } else {
+                account.role
+            },
+        }
+    }
+}
+
+fn examine_text<'a>(state: &'a State, channel: &str, text: &str) -> Result<&'a Member, Refused> {
+    let member = match state {
+        State::New => return Err(ErrorCode::HelloRequired),
+        State::Challenged(_) => return Err(ErrorCode::IdentifyRequired),
+        State::Present(member) => member,
+    };
     if channel != LOBBY {
         return Err(ErrorCode::NoSuchChannel);
     }
@@ -158,7 +436,7 @@ fn examine_text(name: Option<Name>, channel: &str, text: &str) -> Result<Name, E
         TextError::Empty => ErrorCode::EmptyText,
         TextError::TooLong => ErrorCode::TextTooLong,
     })?;
-    Ok(name)
+    Ok(member)
 }
 
 fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Outgoing> {
@@ -170,9 +448,14 @@ fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Out
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, LOBBY, Name, Role, ServerMessage, Timestamp};
+    use post_crypto::{Exchange, Seed};
+    use post_proto::{
+        ClientMessage, Code, ErrorCode, Key, LOBBY, Name, Nonce, Part, Role, ServerMessage,
+        Signature, Timestamp,
+    };
 
-    use super::{ConnectionId, Hub, Outgoing};
+    use super::{ConnectionId, Hub, Outgoing, Random, Settings};
+    use crate::store::Store;
 
     fn now() -> Timestamp {
         Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid")
@@ -220,8 +503,21 @@ mod tests {
         ServerMessage::error(reference, code)
     }
 
+    fn settings() -> Settings {
+        Settings {
+            addresses: vec!["chat.example.org:443".to_owned()],
+            link: "https://chat.example.org".to_owned(),
+            requires: Vec::new(),
+        }
+    }
+
+    fn new_hub() -> Hub {
+        let store = Store::in_memory().expect("a database in memory");
+        Hub::new(store, settings(), random()).expect("a hub")
+    }
+
     fn hub_with(names: &[&str]) -> (Hub, Vec<ConnectionId>) {
-        let mut hub = Hub::new();
+        let mut hub = new_hub();
         let ids = names
             .iter()
             .map(|name| {
@@ -235,7 +531,7 @@ mod tests {
 
     #[test]
     fn gives_each_connection_a_different_identifier() {
-        let mut hub = Hub::new();
+        let mut hub = new_hub();
         let first = hub.connect();
         let second = hub.connect();
         assert_ne!(first, second);
@@ -243,7 +539,7 @@ mod tests {
 
     #[test]
     fn welcomes_a_user_and_puts_the_user_into_the_lobby() {
-        let mut hub = Hub::new();
+        let mut hub = new_hub();
         let ana = hub.connect();
 
         let outgoing = hub.receive(ana, &guest(1, "ana"), now());
@@ -362,7 +658,7 @@ mod tests {
 
     #[test]
     fn refuses_data_that_is_not_text() {
-        let mut hub = Hub::new();
+        let mut hub = new_hub();
         let ana = hub.connect();
 
         assert_eq!(
@@ -373,7 +669,7 @@ mod tests {
 
     #[test]
     fn refuses_a_text_before_the_hello_message() {
-        let mut hub = Hub::new();
+        let mut hub = new_hub();
         let ana = hub.connect();
 
         assert_eq!(
@@ -405,7 +701,7 @@ mod tests {
 
     #[test]
     fn refuses_a_protocol_version_that_it_does_not_support() {
-        let mut hub = Hub::new();
+        let mut hub = new_hub();
         let ana = hub.connect();
         let line = ClientMessage::Guest {
             reference: Some(1),
@@ -539,5 +835,567 @@ mod tests {
         assert_eq!(hub.receive(ids[0], &guest(1, "ana"), now()), []);
         assert_eq!(hub.refuse(ids[0]), []);
         assert_eq!(hub.disconnect(ids[0], later()), []);
+    }
+
+    const ADDRESS: &str = "chat.example.org:443";
+
+    fn random() -> Random {
+        let mut nonces = 0_u8;
+        let mut codes = 0_u32;
+        Random {
+            nonce: Box::new(move || {
+                nonces += 1;
+                Nonce::from_bytes([nonces; 32])
+            }),
+            code: Box::new(move || {
+                codes += 1;
+                code(codes)
+            }),
+        }
+    }
+
+    fn code(number: u32) -> Code {
+        Code::parse(&format!("code{number:08}")).expect("a valid code")
+    }
+
+    fn seed(person: u8) -> Seed {
+        Seed::from_bytes([person; 32])
+    }
+
+    fn client_nonce() -> Nonce {
+        Nonce::from_bytes([200; 32])
+    }
+
+    fn hello(reference: u32, address: &str, supports: &[&str]) -> String {
+        ClientMessage::Hello {
+            reference: Some(reference),
+            protocol: 0,
+            address: address.to_owned(),
+            nonce: client_nonce(),
+            supports: supports
+                .iter()
+                .map(|word| Part::parse(word).expect(word))
+                .collect(),
+        }
+        .encode()
+    }
+
+    fn challenged(hub: &mut Hub, id: ConnectionId, supports: &[&str]) -> Nonce {
+        match &hub.receive(id, &hello(1, ADDRESS, supports), now())[..] {
+            [
+                Outgoing {
+                    message: ServerMessage::Challenge { nonce, .. },
+                    ..
+                },
+            ] => *nonce,
+            other => panic!("the server sends a challenge, not {other:?}"),
+        }
+    }
+
+    fn credentials(hub: &Hub, person: u8, address: &str, server: &Nonce) -> (Key, Signature) {
+        let account = seed(person).account_key(&hub.key.public());
+        let client = client_nonce();
+        let exchange = Exchange {
+            address,
+            client: &client,
+            server,
+        };
+        (
+            account.public(),
+            account.prove(&hub.key.public(), &exchange),
+        )
+    }
+
+    fn identify(hub: &Hub, person: u8, server: &Nonce, invitation: Option<&Code>) -> String {
+        let (key, proof) = credentials(hub, person, ADDRESS, server);
+        ClientMessage::Identify {
+            reference: Some(2),
+            key,
+            proof,
+            invitation: invitation.cloned(),
+        }
+        .encode()
+    }
+
+    fn register(hub: &Hub, person: u8, server: &Nonce, who: &str, invitation: &Code) -> String {
+        let (key, proof) = credentials(hub, person, ADDRESS, server);
+        ClientMessage::Register {
+            reference: Some(2),
+            key,
+            proof,
+            name: who.to_owned(),
+            invitation: invitation.clone(),
+        }
+        .encode()
+    }
+
+    fn welcome(who: &str, role: Role) -> ServerMessage {
+        ServerMessage::Welcome {
+            reference: Some(2),
+            name: name(who),
+            role,
+        }
+    }
+
+    fn owner_code(hub: &mut Hub) -> Code {
+        let invite = hub
+            .owner_link(now())
+            .expect("stored")
+            .expect("the server has no owner");
+        Code::parse(invite.rsplit('/').next().expect("a invite has a code")).expect("a valid code")
+    }
+
+    fn invitation(hub: &mut Hub, number: u32) -> Code {
+        let owner = seed(1).account_key(&hub.key.public()).public();
+        let owner = hub
+            .store
+            .account(&owner)
+            .expect("stored")
+            .expect("the owner has an account");
+        hub.store
+            .invite(owner.id, &code(number), None, None, now())
+            .expect("stored")
+            .code
+    }
+
+    fn registered(hub: &mut Hub, person: u8, who: &str, invitation: &Code) -> ConnectionId {
+        let id = hub.connect();
+        let server = challenged(hub, id, &[]);
+        let line = register(hub, person, &server, who, invitation);
+        let outgoing = hub.receive(id, &line, now());
+        assert!(
+            matches!(outgoing[0].message, ServerMessage::Welcome { .. }),
+            "{outgoing:?}"
+        );
+        id
+    }
+
+    fn with_owner() -> (Hub, ConnectionId) {
+        let mut hub = new_hub();
+        let invite = owner_code(&mut hub);
+        let ana = registered(&mut hub, 1, "ana", &invite);
+        (hub, ana)
+    }
+
+    #[test]
+    fn answers_a_hello_with_a_challenge_that_proves_the_server_key() {
+        let mut hub = new_hub();
+        let id = hub.connect();
+
+        let outgoing = hub.receive(id, &hello(7, ADDRESS, &["voice"]), now());
+
+        let [
+            Outgoing {
+                to,
+                message:
+                    ServerMessage::Challenge {
+                        reference,
+                        protocol,
+                        key,
+                        nonce,
+                        proof,
+                        requires,
+                    },
+            },
+        ] = &outgoing[..]
+        else {
+            panic!("the server sends one challenge, not {outgoing:?}");
+        };
+        assert_eq!((*to, *reference, *protocol), (id, Some(7), 0));
+        assert_eq!(*key, hub.key.public());
+        assert_eq!(*nonce, Nonce::from_bytes([1; 32]));
+        assert_eq!(requires, &[]);
+        let client = client_nonce();
+        let exchange = Exchange {
+            address: ADDRESS,
+            client: &client,
+            server: nonce,
+        };
+        assert!(exchange.server_proof_is_valid(key, proof));
+    }
+
+    #[test]
+    fn makes_a_different_random_value_for_each_connection() {
+        let mut hub = new_hub();
+        let first = hub.connect();
+        let second = hub.connect();
+
+        assert_ne!(
+            challenged(&mut hub, first, &[]),
+            challenged(&mut hub, second, &[])
+        );
+    }
+
+    #[test]
+    fn refuses_a_hello_that_it_cannot_accept() {
+        let mut hub = new_hub();
+        let id = hub.connect();
+        let other_version = ClientMessage::Hello {
+            reference: Some(1),
+            protocol: 1,
+            address: ADDRESS.to_owned(),
+            nonce: client_nonce(),
+            supports: Vec::new(),
+        }
+        .encode();
+
+        assert_eq!(
+            hub.receive(id, &other_version, now()),
+            [to(id, error(Some(1), ErrorCode::UnsupportedProtocol))]
+        );
+        for address in [
+            "false.example.org:443",
+            "chat.example.org:444",
+            "chat.example.org",
+            "",
+        ] {
+            assert_eq!(
+                hub.receive(id, &hello(4, address, &[]), now()),
+                [to(id, error(Some(4), ErrorCode::WrongAddress))],
+                "{address}"
+            );
+        }
+
+        challenged(&mut hub, id, &[]);
+        assert_eq!(
+            hub.receive(id, &hello(5, ADDRESS, &[]), now()),
+            [to(id, error(Some(5), ErrorCode::DuplicateHello))]
+        );
+        assert_eq!(
+            hub.receive(id, &guest(6, "ana"), now()),
+            [to(id, error(Some(6), ErrorCode::DuplicateHello))]
+        );
+    }
+
+    #[test]
+    fn gives_an_owner_link_with_the_address_of_the_server() {
+        let mut hub = new_hub();
+
+        let first = hub.owner_link(now()).expect("stored");
+        let second = hub.owner_link(later()).expect("stored");
+
+        assert_eq!(
+            first.as_deref(),
+            Some("https://chat.example.org/i/code00000001")
+        );
+        assert_eq!(second, first);
+    }
+
+    #[test]
+    fn makes_the_user_of_the_owner_link_the_server_owner() {
+        let mut hub = new_hub();
+        let invite = owner_code(&mut hub);
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+
+        let line = register(&hub, 1, &server, "ana", &invite);
+        let outgoing = hub.receive(id, &line, now());
+
+        assert_eq!(
+            outgoing,
+            [to(id, welcome("ana", Role::Owner)), to(id, join("ana"))]
+        );
+        assert_eq!(hub.owner_link(now()).expect("stored"), None);
+    }
+
+    #[test]
+    fn makes_an_invited_user_a_member_and_tells_the_lobby() {
+        let (mut hub, ana) = with_owner();
+        let code = invitation(&mut hub, 50);
+        let ben = hub.connect();
+        let server = challenged(&mut hub, ben, &[]);
+
+        let line = register(&hub, 2, &server, "ben", &code);
+        let outgoing = hub.receive(ben, &line, now());
+
+        assert_eq!(
+            outgoing,
+            [
+                to(ben, welcome("ben", Role::Member)),
+                to(ana, join("ben")),
+                to(ben, join("ben")),
+            ]
+        );
+    }
+
+    #[test]
+    fn signs_in_a_user_who_has_an_account() {
+        let (mut hub, ana) = with_owner();
+        hub.disconnect(ana, now());
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+
+        let line = identify(&hub, 1, &server, None);
+        let outgoing = hub.receive(id, &line, now());
+
+        assert_eq!(
+            outgoing,
+            [to(id, welcome("ana", Role::Owner)), to(id, join("ana"))]
+        );
+    }
+
+    #[test]
+    fn refuses_a_key_that_has_no_account() {
+        let (mut hub, _ana) = with_owner();
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+
+        let line = identify(&hub, 2, &server, None);
+
+        assert_eq!(
+            hub.receive(id, &line, now()),
+            [to(id, error(Some(2), ErrorCode::UnknownAccount))]
+        );
+    }
+
+    #[test]
+    fn refuses_a_sign_in_message_at_an_incorrect_moment() {
+        let (mut hub, ana) = with_owner();
+        let invite = code(1);
+        let new = hub.connect();
+
+        for line in [
+            identify(&hub, 1, &client_nonce(), None),
+            register(&hub, 2, &client_nonce(), "ben", &invite),
+        ] {
+            assert_eq!(
+                hub.receive(new, &line, now()),
+                [to(new, error(Some(2), ErrorCode::HelloRequired))]
+            );
+            assert_eq!(
+                hub.receive(ana, &line, now()),
+                [to(ana, error(Some(2), ErrorCode::DuplicateIdentify))]
+            );
+        }
+
+        challenged(&mut hub, new, &[]);
+        assert_eq!(
+            hub.receive(new, &send(Some(8), LOBBY, "Hello"), now()),
+            [to(new, error(Some(8), ErrorCode::IdentifyRequired))]
+        );
+    }
+
+    #[test]
+    fn refuses_a_proof_that_is_not_for_this_connection() {
+        let (mut hub, ana) = with_owner();
+        hub.disconnect(ana, now());
+        let invite = invitation(&mut hub, 50);
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        let earlier = Nonce::from_bytes([1; 32]);
+        assert_ne!(server, earlier);
+
+        let (key, _) = credentials(&hub, 1, ADDRESS, &server);
+        let (_, for_other_address) = credentials(&hub, 1, "false.example.org:443", &server);
+        let (_, from_other_seed) = credentials(&hub, 2, ADDRESS, &server);
+        let lines = [
+            identify(&hub, 1, &earlier, None),
+            register(&hub, 2, &earlier, "ben", &invite),
+            ClientMessage::Identify {
+                reference: Some(2),
+                key,
+                proof: for_other_address,
+                invitation: None,
+            }
+            .encode(),
+            ClientMessage::Identify {
+                reference: Some(2),
+                key,
+                proof: from_other_seed,
+                invitation: None,
+            }
+            .encode(),
+        ];
+        for line in lines {
+            assert_eq!(
+                hub.receive(id, &line, now()),
+                [to(id, error(Some(2), ErrorCode::InvalidProof))],
+                "{line}"
+            );
+        }
+
+        let line = identify(&hub, 1, &server, None);
+        assert_eq!(
+            hub.receive(id, &line, now())[0],
+            to(id, welcome("ana", Role::Owner))
+        );
+    }
+
+    #[test]
+    fn refuses_a_new_account_that_breaks_a_rule() {
+        let (mut hub, _ana) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+
+        let attempts = [
+            (2, "Not A Name", open.clone(), ErrorCode::InvalidName),
+            (2, "ben", code(99), ErrorCode::InvalidInvitation),
+            (2, "ben", code(1), ErrorCode::InvalidInvitation),
+            (2, "ana", open.clone(), ErrorCode::NameTaken),
+            (1, "ana-2", open.clone(), ErrorCode::AccountExists),
+        ];
+        for (person, who, invitation, refused) in attempts {
+            let line = register(&hub, person, &server, who, &invitation);
+            assert_eq!(
+                hub.receive(id, &line, now()),
+                [to(id, error(Some(2), refused))],
+                "{who}"
+            );
+        }
+
+        let line = register(&hub, 2, &server, "ben", &open);
+        assert_eq!(
+            hub.receive(id, &line, now())[0],
+            to(id, welcome("ben", Role::Member))
+        );
+    }
+
+    #[test]
+    fn makes_an_account_that_exists_the_owner_with_a_new_owner_link() {
+        let (mut hub, ana) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let ben = registered(&mut hub, 2, "ben", &open);
+        hub.disconnect(ana, now());
+        hub.disconnect(ben, now());
+        hub.store.new_owner_code(&code(60), now()).expect("stored");
+
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        let line = identify(&hub, 2, &server, Some(&code(60)));
+        assert_eq!(
+            hub.receive(id, &line, now())[0],
+            to(id, welcome("ben", Role::Owner))
+        );
+
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        let line = identify(&hub, 1, &server, Some(&code(60)));
+        assert_eq!(
+            hub.receive(id, &line, now())[0],
+            to(id, welcome("ana", Role::Member))
+        );
+    }
+
+    #[test]
+    fn ignores_an_invitation_at_the_sign_in_of_a_member() {
+        let (mut hub, ana) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let ben = registered(&mut hub, 2, "ben", &open);
+        hub.disconnect(ben, now());
+
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        let line = identify(&hub, 2, &server, Some(&open));
+        let outgoing = hub.receive(id, &line, now());
+
+        assert_eq!(
+            outgoing,
+            [
+                to(id, welcome("ben", Role::Member)),
+                to(ana, join("ben")),
+                to(id, join("ben")),
+            ]
+        );
+        let used = hub.store.invitations(now()).expect("stored")[0].used;
+        assert_eq!(used, 1);
+    }
+
+    #[test]
+    fn refuses_a_client_that_does_not_support_a_required_part() {
+        let store = Store::in_memory().expect("a database in memory");
+        let requires = vec![Part::parse("sealed").expect("valid")];
+        let settings = Settings {
+            requires: requires.clone(),
+            ..settings()
+        };
+        let mut hub = Hub::new(store, settings, random()).expect("a hub");
+        let invite = owner_code(&mut hub);
+
+        let id = hub.connect();
+        match &hub.receive(id, &hello(1, ADDRESS, &[]), now())[..] {
+            [
+                Outgoing {
+                    message: ServerMessage::Challenge { requires: sent, .. },
+                    ..
+                },
+            ] => assert_eq!(sent, &requires),
+            other => panic!("{other:?}"),
+        }
+        let server = Nonce::from_bytes([1; 32]);
+        let line = register(&hub, 1, &server, "ana", &invite);
+        assert_eq!(
+            hub.receive(id, &line, now()),
+            [to(id, error(Some(2), ErrorCode::MissingPart))]
+        );
+
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &["voice", "sealed"]);
+        let line = register(&hub, 1, &server, "ana", &invite);
+        assert_eq!(
+            hub.receive(id, &line, now())[0],
+            to(id, welcome("ana", Role::Owner))
+        );
+        hub.disconnect(id, now());
+
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &["voice"]);
+        let line = identify(&hub, 1, &server, None);
+        assert_eq!(
+            hub.receive(id, &line, now()),
+            [to(id, error(Some(2), ErrorCode::MissingPart))]
+        );
+    }
+
+    #[test]
+    fn tells_the_lobby_one_time_about_a_user_with_two_connections() {
+        let (mut hub, first) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let ben = registered(&mut hub, 2, "ben", &open);
+
+        let second = hub.connect();
+        let server = challenged(&mut hub, second, &[]);
+        let line = identify(&hub, 1, &server, None);
+        assert_eq!(
+            hub.receive(second, &line, now()),
+            [to(second, welcome("ana", Role::Owner))]
+        );
+
+        let delivered = hub.receive(second, &send(Some(4), LOBBY, "Hello"), now());
+        let receivers: Vec<ConnectionId> = delivered.iter().map(|outgoing| outgoing.to).collect();
+        assert_eq!(receivers, [first, ben, second]);
+
+        assert_eq!(hub.disconnect(first, later()), []);
+        assert_eq!(
+            hub.disconnect(second, later()),
+            [to(
+                ben,
+                ServerMessage::Leave {
+                    channel: LOBBY.to_owned(),
+                    name: name("ana"),
+                    time: later(),
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn answers_with_a_server_error_when_the_storage_fails() {
+        let (mut hub, _ana) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        hub.store.lose_its_tables();
+
+        for line in [
+            identify(&hub, 1, &server, None),
+            register(&hub, 2, &server, "ben", &open),
+        ] {
+            assert_eq!(
+                hub.receive(id, &line, now()),
+                [to(id, error(Some(2), ErrorCode::ServerError))]
+            );
+        }
+        assert!(hub.owner_link(now()).is_err());
     }
 }

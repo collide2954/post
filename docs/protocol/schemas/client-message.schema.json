@@ -4,6 +4,141 @@
   "description": "A message from a client to the server.",
   "oneOf": [
     {
+      "description": "Starts the sign-in. The server answers with a `challenge` message.",
+      "type": "object",
+      "properties": {
+        "address": {
+          "description": "The address that the client used for the connection, as `host:port`.",
+          "type": "string"
+        },
+        "nonce": {
+          "description": "A random value that the client makes for this connection.",
+          "$ref": "#/$defs/Nonce"
+        },
+        "protocol": {
+          "description": "The protocol version of the client.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "supports": {
+          "description": "The optional parts of the protocol that the client supports.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Part"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "hello"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "protocol",
+        "address",
+        "nonce",
+        "supports"
+      ]
+    },
+    {
+      "description": "Signs in to an account that exists.",
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "description": "The code of an owner link. It makes the account the server owner.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Code"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "description": "The public key of the account.",
+          "$ref": "#/$defs/Key"
+        },
+        "proof": {
+          "description": "The signature of the account key for this connection.",
+          "$ref": "#/$defs/Signature"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "identify"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "key",
+        "proof"
+      ]
+    },
+    {
+      "description": "Makes an account and signs in to it.",
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "description": "The code of an invitation or of an owner link.",
+          "$ref": "#/$defs/Code"
+        },
+        "key": {
+          "description": "The public key of the new account.",
+          "$ref": "#/$defs/Key"
+        },
+        "name": {
+          "description": "The name that the user wants.",
+          "type": "string"
+        },
+        "proof": {
+          "description": "The signature of the account key for this connection.",
+          "$ref": "#/$defs/Signature"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "register"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "key",
+        "proof",
+        "name",
+        "invitation"
+      ]
+    },
+    {
       "description": "Starts a session with a temporary name and no account.\nThis message is temporary. It goes away before version 0.2.",
       "type": "object",
       "properties": {
@@ -71,5 +206,32 @@
         "text"
       ]
     }
-  ]
+  ],
+  "$defs": {
+    "Code": {
+      "description": "The code of an invitation: 12 letters and digits.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]{12}$"
+    },
+    "Key": {
+      "description": "A public key: 32 bytes as base64url text with no `=` characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "Nonce": {
+      "description": "A random value: 32 bytes as base64url text with no `=` characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "Part": {
+      "description": "The word for an optional part of the protocol: 2 to 20 lower-case letters and hyphens.",
+      "type": "string",
+      "pattern": "^[a-z]([a-z-]{0,18}[a-z])$"
+    },
+    "Signature": {
+      "description": "A signature: 64 bytes as base64url text with no `=` characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    }
+  }
 }

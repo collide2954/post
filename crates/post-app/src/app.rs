@@ -281,9 +281,18 @@ pub fn error_text(code: ErrorCode) -> Text {
         ErrorCode::NoSuchChannel => Text::ErrorNoSuchChannel,
         ErrorCode::EmptyText => Text::ErrorEmptyText,
         ErrorCode::TextTooLong => Text::ErrorTextTooLong,
-        ErrorCode::BadMessage | ErrorCode::HelloRequired | ErrorCode::DuplicateHello => {
-            Text::ErrorOther
-        }
+        ErrorCode::BadMessage
+        | ErrorCode::HelloRequired
+        | ErrorCode::DuplicateHello
+        | ErrorCode::WrongAddress
+        | ErrorCode::IdentifyRequired
+        | ErrorCode::DuplicateIdentify
+        | ErrorCode::InvalidProof
+        | ErrorCode::UnknownAccount
+        | ErrorCode::AccountExists
+        | ErrorCode::InvalidInvitation
+        | ErrorCode::MissingPart
+        | ErrorCode::ServerError => Text::ErrorOther,
     }
 }
 

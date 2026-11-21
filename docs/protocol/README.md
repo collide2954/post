@@ -14,13 +14,13 @@ The automatic checks fail if the code, the schemas, and the examples do not agre
 
 This document describes protocol version 0. Version 0 is not stable. It can change in each release of Post, and it makes no promise to other clients. Protocol version 1 starts with version 1.0 of the application.
 
-Protocol version 0 in Post 0.1 is only for a test on one computer. It has no accounts and no encryption.
+Protocol version 0 changes while the project builds Post 0.2. At this time, a connection has no TLS, and the server listens only on the local computer.
 
 ## Transport
 
 A client opens a WebSocket connection to the path `/` of the server.
 
-- In Post 0.1, the address is `ws://localhost:7678/`. The server listens only on the loopback addresses of the computer.
+- At this time, the address is `ws://localhost:7678/`. The server listens only on the loopback addresses of the computer.
 - Each protocol message is one WebSocket text message.
 - The server answers a binary message with the error `bad-message`.
 
@@ -46,7 +46,7 @@ A name identifies a user. A name obeys these rules:
 - It has 2 to 20 characters.
 - It contains only the letters `a` to `z`, the digits `0` to `9`, the hyphen, and the underscore.
 
-A channel name in a message does not have the `#` sign. Post 0.1 has one channel, `lobby`.
+A channel name in a message does not have the `#` sign. At this time, Post has one channel, `lobby`.
 
 ### Text
 
@@ -59,7 +59,144 @@ The text of a message obeys these rules:
 
 A time is in UTC and has milliseconds. It always has this form: `2026-11-21T14:02:07.120Z`. Only the server writes a time.
 
+### Keys, random values, and signatures
+
+A key, a random value, and a signature are bytes. A message contains them as base64url text (RFC 4648). The text has no `=` characters at its end.
+
+| Value | Bytes | Characters |
+|---|---|---|
+| A key | 32 | 43 |
+| A random value | 32 | 43 |
+| A signature | 64 | 86 |
+
+### Addresses
+
+An address in a message has the form `host:port`, for example `chat.example.org:443`.
+
+- The host is in lower case.
+- The port is always there.
+- An IPv6 address is in brackets, for example `[::1]:7678`.
+
+### Codes
+
+The code of an invitation has 12 letters and digits, for example `7Hq2kdX9mPq4`. An invite link ends with this code.
+
+### Parts of the protocol
+
+Some parts of the protocol are optional. The specification gives each optional part one word. The word has 2 to 20 lower-case letters and hyphens.
+
+- A client tells the server which parts it supports.
+- A server tells the client which parts it requires. If the client does not support a required part, the server refuses the sign-in.
+- A requirement applies to the client of a person, not to a bot.
+
+Protocol version 0 defines no parts at this time. Thus the two lists are empty.
+
+A server cannot examine a client. A requirement stops a client that is honest but not complete. It is not a security control.
+
+## Keys
+
+Each key is an Ed25519 key (RFC 8032).
+
+- A server has one key pair, the server key. The server makes it at the first start.
+- A user has a secret seed of 32 random bytes.
+- For each server, the client calculates an account key from the seed and the public server key. The server binds the name of the user to the public account key.
+
+### How to calculate an account key
+
+Use HKDF with SHA-256 (RFC 5869):
+
+| Input | Value |
+|---|---|
+| Input key | The 32 bytes of the seed |
+| Salt | None |
+| Info | The ASCII text `post-account-key-1`, then one zero byte, then the 32 bytes of the public server key |
+| Length | 32 bytes |
+
+The result is the secret Ed25519 key of the account.
+
+### Proofs
+
+A proof is an Ed25519 signature. It shows that the sender has a secret key, and it is valid only for one connection.
+
+The server proof is a signature of the server key. The server signs these parts, in this sequence:
+
+1. The ASCII text `post-server-proof-0`.
+2. One zero byte.
+3. The address, as ASCII text.
+4. One zero byte.
+5. The random value of the client.
+6. The random value of the server.
+
+The account proof is a signature of the account key. The client signs these parts, in this sequence:
+
+1. The ASCII text `post-account-proof-0`.
+2. One zero byte.
+3. The address, as ASCII text.
+4. One zero byte.
+5. The public server key.
+6. The random value of the client.
+7. The random value of the server.
+
+The address is the address that the client used for the connection.
+
+A receiver must refuse a signature that is not in its standard form. A receiver must also refuse a public key of small order.
+
+## The sign-in
+
+1. The client sends a `hello` message. It contains the address that the client used and a new random value.
+2. The server answers with a `challenge` message. It contains the public server key, a new random value, and the server proof.
+3. The client examines the server proof. If the proof is not valid, the client must close the connection. The client must not calculate or send an account key in this condition.
+4. The client calculates the account key and sends an `identify` message with the account proof.
+5. If the key has an account, the server answers with a `welcome` message. The session starts.
+6. If the key has no account, the server answers with the error `unknown-account`. The client can then send a `register` message with a name and the code of an invitation.
+
+A server signs only its own addresses. Thus a false server cannot show the key of a different server. The client then calculates a key that has no value for a different server.
+
 ## Messages from the client
+
+### `hello`
+
+The `hello` message starts the sign-in. It must be the first message on a connection.
+
+| Field | Value |
+|---|---|
+| `type` | `"hello"` |
+| `ref` | Optional. See "The `ref` field". |
+| `protocol` | The protocol version of the client. This document describes version 0. |
+| `address` | The address that the client used for the connection. |
+| `nonce` | A random value that the client makes for this connection. |
+| `supports` | The list of the optional parts that the client supports. |
+
+The server answers with a `challenge` message or with an `error` message. After an error, the client can send a new `hello` message on the same connection.
+
+### `identify`
+
+The `identify` message signs in to an account that exists.
+
+| Field | Value |
+|---|---|
+| `type` | `"identify"` |
+| `ref` | Optional. |
+| `key` | The public key of the account. |
+| `proof` | The account proof. |
+| `invitation` | Optional. The code of an owner link. It makes the account the server owner. The server ignores a different code. |
+
+The server answers with a `welcome` message or with an `error` message.
+
+### `register`
+
+The `register` message makes an account and signs in to it.
+
+| Field | Value |
+|---|---|
+| `type` | `"register"` |
+| `ref` | Optional. |
+| `key` | The public key of the new account. |
+| `proof` | The account proof. |
+| `name` | The name that the user wants. |
+| `invitation` | The code of an invitation or of an owner link. An owner link makes the new account the server owner. |
+
+The server answers with a `welcome` message or with an `error` message. After an error, the client can send a new `register` message on the same connection.
 
 ### `guest`
 
@@ -70,8 +207,8 @@ This message is temporary. The project removes it before version 0.2, when the a
 | Field | Value |
 |---|---|
 | `type` | `"guest"` |
-| `ref` | Optional. See "The `ref` field". |
-| `protocol` | The protocol version of the client. This document describes version 0. |
+| `ref` | Optional. |
+| `protocol` | The protocol version of the client. |
 | `name` | The name that the user wants. |
 
 The server answers with a `welcome` message or with an `error` message. After an error, the client can send a new `guest` message on the same connection.
@@ -83,13 +220,27 @@ The `send` message sends a text to a channel.
 | Field | Value |
 |---|---|
 | `type` | `"send"` |
-| `ref` | Optional. See "The `ref` field". |
+| `ref` | Optional. |
 | `channel` | The name of the channel. |
 | `text` | The text. |
 
 The server answers with a `message` message or with an `error` message.
 
 ## Messages from the server
+
+### `challenge`
+
+The `challenge` message answers a `hello` message.
+
+| Field | Value |
+|---|---|
+| `type` | `"challenge"` |
+| `ref` | The value from the `hello` message, if it had one. |
+| `protocol` | The protocol version of the session. |
+| `key` | The public server key. |
+| `nonce` | A random value that the server makes for this connection. |
+| `proof` | The server proof. |
+| `requires` | The list of the optional parts that a client must support. |
 
 ### `welcome`
 
@@ -104,6 +255,8 @@ The `welcome` message starts the session of a user. The session now has a name.
 
 After the `welcome` message, the server puts the user into the channel `lobby`. The server sends a `join` message to each user in the channel, also to the new user.
 
+One account can have more than one connection at the same time. The server sends the `join` message only for the first connection of an account, and the `leave` message only for the last one.
+
 ### `join`
 
 The `join` message tells that a user came into a channel.
@@ -117,7 +270,7 @@ The `join` message tells that a user came into a channel.
 
 ### `leave`
 
-The `leave` message tells that a user went out of a channel. In Post 0.1, this occurs when the connection of the user closes.
+The `leave` message tells that a user went out of a channel. At this time, this occurs when the last connection of the user closes.
 
 | Field | Value |
 |---|---|
@@ -156,13 +309,22 @@ A client must use the `code` field to make a decision. The `text` field can chan
 |---|---|
 | `bad-message` | The line is not a valid protocol message. |
 | `unsupported-protocol` | The server does not support the protocol version of the client. |
-| `hello-required` | The client sent a different message before the `guest` message. |
-| `duplicate-hello` | The client sent a `guest` message after a `welcome` message. |
+| `hello-required` | The client sent a different message before the `hello` message. |
+| `duplicate-hello` | The client sent a second `hello` message. |
+| `wrong-address` | The server does not answer to the address in the `hello` message. |
+| `identify-required` | The client sent a message that is only for a user with a session. |
+| `duplicate-identify` | The client sent an `identify` or a `register` message after a `welcome` message. |
+| `invalid-proof` | The account proof does not agree with the key and this connection. |
+| `unknown-account` | The server has no account for the key. |
+| `account-exists` | The key in a `register` message already has an account. |
+| `invalid-invitation` | The invitation does not exist, or it is not open. |
+| `missing-part` | The client does not support a part of the protocol that the server requires. |
 | `invalid-name` | The name does not obey the rules for a name. |
-| `name-taken` | A different connected user has the name. |
+| `name-taken` | A different user has the name, or the name is reserved. |
 | `no-such-channel` | The channel does not exist. |
 | `empty-text` | The text has no visible character. |
 | `text-too-long` | The text has more than 4,000 characters. |
+| `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations
 
@@ -174,5 +336,9 @@ Each file in the [examples](examples) directory shows one connection.
 
 | File | Content |
 |---|---|
-| [two-users.txt](examples/two-users.txt) | Two users exchange text. |
-| [errors.txt](examples/errors.txt) | The server refuses messages. Each error code shows one time. |
+| [sign-in.txt](examples/sign-in.txt) | A person makes an account with an invitation. The keys and the signatures are real, and a test examines them. |
+| [sign-in-errors.txt](examples/sign-in-errors.txt) | The server refuses messages of the sign-in. |
+| [requirements.txt](examples/requirements.txt) | A server requires a part of the protocol that the client does not support. |
+| [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
+| [two-users.txt](examples/two-users.txt) | Two users with temporary names exchange text. |
+| [errors.txt](examples/errors.txt) | The server refuses other messages. |

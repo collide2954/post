@@ -4,6 +4,59 @@
   "description": "A message from the server to a client.",
   "oneOf": [
     {
+      "description": "Answers a `hello` message. It proves that the server has its key.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The public key of the server.",
+          "$ref": "#/$defs/Key"
+        },
+        "nonce": {
+          "description": "A random value that the server makes for this connection.",
+          "$ref": "#/$defs/Nonce"
+        },
+        "proof": {
+          "description": "The signature of the server key for this connection.",
+          "$ref": "#/$defs/Signature"
+        },
+        "protocol": {
+          "description": "The protocol version of the session.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ref": {
+          "description": "The number from the `hello` message, if it had one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "requires": {
+          "description": "The optional parts of the protocol that a client must support.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Part"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "challenge"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "protocol",
+        "key",
+        "nonce",
+        "proof",
+        "requires"
+      ]
+    },
+    {
       "description": "Starts the session of a user. The session now has a name.",
       "type": "object",
       "properties": {
@@ -191,9 +244,49 @@
           "const": "hello-required"
         },
         {
-          "description": "The client sent a second `hello` message after a `welcome` message.",
+          "description": "The client sent a second `hello` message.",
           "type": "string",
           "const": "duplicate-hello"
+        },
+        {
+          "description": "The server does not answer to the address that the client used.",
+          "type": "string",
+          "const": "wrong-address"
+        },
+        {
+          "description": "The client sent a message that is only for a user with a session.",
+          "type": "string",
+          "const": "identify-required"
+        },
+        {
+          "description": "The client sent a sign-in message after a `welcome` message.",
+          "type": "string",
+          "const": "duplicate-identify"
+        },
+        {
+          "description": "The signature does not agree with the key and this connection.",
+          "type": "string",
+          "const": "invalid-proof"
+        },
+        {
+          "description": "The server has no account for the key.",
+          "type": "string",
+          "const": "unknown-account"
+        },
+        {
+          "description": "The key already has an account.",
+          "type": "string",
+          "const": "account-exists"
+        },
+        {
+          "description": "The invitation does not exist, or it is not open.",
+          "type": "string",
+          "const": "invalid-invitation"
+        },
+        {
+          "description": "The client does not support a part of the protocol that the server requires.",
+          "type": "string",
+          "const": "missing-part"
         },
         {
           "description": "The name does not obey the rules for a name.",
@@ -201,7 +294,7 @@
           "const": "invalid-name"
         },
         {
-          "description": "A different connected user has the name.",
+          "description": "A different user has the name, or the name is reserved.",
           "type": "string",
           "const": "name-taken"
         },
@@ -219,13 +312,33 @@
           "description": "The text has too many characters.",
           "type": "string",
           "const": "text-too-long"
+        },
+        {
+          "description": "The server has a problem and cannot do the task.",
+          "type": "string",
+          "const": "server-error"
         }
       ]
+    },
+    "Key": {
+      "description": "A public key: 32 bytes as base64url text with no `=` characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "Name": {
       "description": "The name of a user: 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore.",
       "type": "string",
       "pattern": "^[a-z0-9_-]{2,20}$"
+    },
+    "Nonce": {
+      "description": "A random value: 32 bytes as base64url text with no `=` characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "Part": {
+      "description": "The word for an optional part of the protocol: 2 to 20 lower-case letters and hyphens.",
+      "type": "string",
+      "pattern": "^[a-z]([a-z-]{0,18}[a-z])$"
     },
     "Role": {
       "description": "The role of an account on a server.",
@@ -241,6 +354,11 @@
           "const": "member"
         }
       ]
+    },
+    "Signature": {
+      "description": "A signature: 64 bytes as base64url text with no `=` characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
     },
     "Timestamp": {
       "description": "A time in UTC with milliseconds, for example 2026-11-21T14:02:07.120Z.",

@@ -1,0 +1,30 @@
+# The server refuses messages of the sign-in.
+# The user "ana" of the example "sign-in.txt" connects again.
+
+# The server answers only to its own addresses.
+C: {"type":"hello","ref":1,"protocol":0,"address":"false.example.org:443","nonce":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM","supports":[]}
+S: {"type":"error","ref":1,"code":"wrong-address","text":"This server does not answer to this address."}
+
+C: {"type":"hello","ref":2,"protocol":0,"address":"chat.example.org:443","nonce":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM","supports":[]}
+S: {"type":"challenge","ref":2,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ","proof":"J-_uXcNxGu88y0Qjq2YbJJDK-2vGzwlT0Hdv-Ta0AiX9MfvlimJ9hapnDNb-22WCKniwEfvDAvw_wFz6S9ftCw","requires":[]}
+
+# A text is possible only after the sign-in.
+C: {"type":"send","ref":3,"channel":"lobby","text":"Hello"}
+S: {"type":"error","ref":3,"code":"identify-required","text":"Sign in before you send this message."}
+
+# This signature is from a different connection.
+C: {"type":"identify","ref":4,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
+S: {"type":"error","ref":4,"code":"invalid-proof","text":"The signature is not valid for this connection."}
+
+# The key of "ana" already has an account.
+C: {"type":"register","ref":5,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"w6E3-9F8fyYSMvYgN5irctX2VYSXN5wD6QT_WqEiZEUGsy5ODkcJ1z6Dlpl2xdZaD05A5fRkw2ULcvqPSQpDAg","name":"ana2","invitation":"7Hq2kdX9mPq4"}
+S: {"type":"error","ref":5,"code":"account-exists","text":"This key already has an account."}
+
+# The session starts.
+C: {"type":"identify","ref":6,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"w6E3-9F8fyYSMvYgN5irctX2VYSXN5wD6QT_WqEiZEUGsy5ODkcJ1z6Dlpl2xdZaD05A5fRkw2ULcvqPSQpDAg"}
+S: {"type":"welcome","ref":6,"name":"ana","role":"member"}
+S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
+
+# A session has only one sign-in.
+C: {"type":"identify","ref":7,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"w6E3-9F8fyYSMvYgN5irctX2VYSXN5wD6QT_WqEiZEUGsy5ODkcJ1z6Dlpl2xdZaD05A5fRkw2ULcvqPSQpDAg"}
+S: {"type":"error","ref":7,"code":"duplicate-identify","text":"The session already has an account."}

@@ -12,9 +12,9 @@ pub struct Sessions {
 }
 
 impl Sessions {
-    pub fn new(clock: fn() -> Timestamp) -> Self {
+    pub fn new(hub: Hub, clock: fn() -> Timestamp) -> Self {
         Self {
-            hub: Hub::new(),
+            hub,
             queues: HashMap::new(),
             clock,
         }
@@ -61,7 +61,8 @@ mod tests {
     use tokio::sync::mpsc::{self, Receiver, error::TryRecvError};
 
     use super::Sessions;
-    use crate::hub::ConnectionId;
+    use crate::hub::{ConnectionId, Hub, Random, Settings};
+    use crate::store::Store;
 
     fn clock() -> Timestamp {
         Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid")
@@ -69,6 +70,17 @@ mod tests {
 
     fn name(text: &str) -> Name {
         Name::parse(text).expect(text)
+    }
+
+    fn sessions() -> Sessions {
+        let store = Store::in_memory().expect("a database in memory");
+        let settings = Settings {
+            addresses: vec!["localhost:7678".to_owned()],
+            link: "http://localhost:7678".to_owned(),
+            requires: Vec::new(),
+        };
+        let hub = Hub::new(store, settings, Random::default()).expect("a hub");
+        Sessions::new(hub, clock)
     }
 
     fn guest(name: &str) -> String {
@@ -128,7 +140,7 @@ mod tests {
 
     #[test]
     fn puts_each_answer_into_the_queue_of_its_connection() {
-        let mut sessions = Sessions::new(clock);
+        let mut sessions = sessions();
         let (ana, mut ana_lines) = user(&mut sessions, "ana", 8);
         let (_ben, mut ben_lines) = user(&mut sessions, "ben", 8);
 
@@ -163,7 +175,7 @@ mod tests {
 
     #[test]
     fn answers_data_that_is_not_text_with_an_error() {
-        let mut sessions = Sessions::new(clock);
+        let mut sessions = sessions();
         let (queue, mut lines) = mpsc::channel(8);
         let id = sessions.connect(queue);
 
@@ -177,7 +189,7 @@ mod tests {
 
     #[test]
     fn closes_the_queue_of_a_connection_that_does_not_read() {
-        let mut sessions = Sessions::new(clock);
+        let mut sessions = sessions();
         let (ana, mut ana_lines) = user(&mut sessions, "ana", 16);
         let (_ben, mut ben_lines) = user(&mut sessions, "ben", 4);
 
@@ -196,7 +208,7 @@ mod tests {
 
     #[test]
     fn tells_the_other_users_when_a_connection_closes() {
-        let mut sessions = Sessions::new(clock);
+        let mut sessions = sessions();
         let (_ana, mut ana_lines) = user(&mut sessions, "ana", 8);
         let (ben, mut ben_lines) = user(&mut sessions, "ben", 8);
         drain(&mut ana_lines);

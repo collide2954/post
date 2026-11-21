@@ -8,13 +8,15 @@ use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use axum::routing::any;
-use post_proto::{MAX_LINE_BYTES, Timestamp};
+use post_proto::{Address, MAX_LINE_BYTES, Timestamp};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
 use tokio::time::timeout;
 
+use crate::hub::{Hub, Random, Settings};
 use crate::sessions::Sessions;
+use crate::store::Store;
 
 const QUEUE_LINES: usize = 256;
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -22,6 +24,8 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct Server {
     listeners: Vec<TcpListener>,
     addresses: Vec<SocketAddr>,
+    hub: Hub,
+    owner_link: Option<String>,
 }
 
 struct Shared {
@@ -41,15 +45,36 @@ impl Server {
             listeners.push(ipv6);
         }
 
+        let port = ipv4_address.port();
+        let settings = Settings {
+            addresses: vec![
+                Address::localhost(port).to_string(),
+                Address::from_ip(Ipv4Addr::LOCALHOST.into(), port).to_string(),
+                Address::from_ip(Ipv6Addr::LOCALHOST.into(), port).to_string(),
+            ],
+            link: format!("http://{}", Address::localhost(port)),
+            requires: Vec::new(),
+        };
+        let store = Store::in_memory().map_err(io::Error::other)?;
+        let mut hub = Hub::new(store, settings, Random::default()).map_err(io::Error::other)?;
+        let owner_link = hub.owner_link(Timestamp::now()).map_err(io::Error::other)?;
+
         Ok(Self {
             listeners,
             addresses,
+            hub,
+            owner_link,
         })
     }
 
     #[must_use]
     pub fn addresses(&self) -> &[SocketAddr] {
         &self.addresses
+    }
+
+    #[must_use]
+    pub fn owner_link(&self) -> Option<&str> {
+        self.owner_link.as_deref()
     }
 
     pub async fn run(self, stop: impl Future<Output = ()> + Send + 'static) -> io::Result<()> {
@@ -60,7 +85,7 @@ impl Server {
         });
 
         let shared = Arc::new(Shared {
-            sessions: Mutex::new(Sessions::new(Timestamp::now)),
+            sessions: Mutex::new(Sessions::new(self.hub, Timestamp::now)),
             stopped: stopped.clone(),
         });
         let router = Router::new().route("/", any(upgrade)).with_state(shared);

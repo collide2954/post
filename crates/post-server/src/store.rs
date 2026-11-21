@@ -379,6 +379,16 @@ impl Store {
         Ok(Some(code))
     }
 
+    #[cfg(test)]
+    pub(crate) fn lose_its_tables(&self) {
+        self.database
+            .execute_batch(
+                "PRAGMA foreign_keys = OFF;
+                 DROP TABLE reserved_name; DROP TABLE account; DROP TABLE invitation;",
+            )
+            .expect("the tables go away");
+    }
+
     pub fn new_owner_code(&mut self, fresh: &Code, now: Timestamp) -> Stored<()> {
         let change = self.database.transaction()?;
         change.execute(
