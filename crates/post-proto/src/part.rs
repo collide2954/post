@@ -4,8 +4,28 @@ use std::fmt;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vstd::prelude::*;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
+#[cfg(verus_keep_ghost)]
+use vstd::utf8::encode_utf8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+use crate::ascii::is_lower;
+
+verus! {
+
+pub open spec fn is_part_character(byte: u8) -> bool {
+    is_lower(byte) || byte == b'-'
+}
+
+pub open spec fn is_part_word(bytes: Seq<u8>) -> bool {
+    &&& 2 <= bytes.len() <= 20
+    &&& forall|i: int| 0 <= i < bytes.len() ==> is_part_character(#[trigger] bytes[i])
+    &&& bytes[0] != b'-'
+    &&& bytes[bytes.len() - 1] != b'-'
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Part(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,15 +33,24 @@ pub struct PartError;
 
 impl Part {
     pub const MIN_LENGTH: usize = 2;
+
     pub const MAX_LENGTH: usize = 20;
 
-    pub fn parse(text: &str) -> Result<Self, PartError> {
-        let has_length = (Self::MIN_LENGTH..=Self::MAX_LENGTH).contains(&text.len());
-        let has_letters = text
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
-        let has_ends = !text.starts_with('-') && !text.ends_with('-');
-        if has_length && has_letters && has_ends {
+    #[verifier::type_invariant]
+    spec fn is_a_word(self) -> bool {
+        is_part_word(encode_utf8(self.0@))
+    }
+
+    pub closed spec fn view(self) -> Seq<char> {
+        self.0@
+    }
+
+    pub fn parse(text: &str) -> (part: Result<Self, PartError>)
+        ensures
+            part is Ok <==> is_part_word(text.spec_bytes()),
+            part matches Ok(part) ==> part@ == text@,
+    {
+        if is_word(text.as_bytes()) {
             Ok(Self(text.to_owned()))
         } else {
             Err(PartError)
@@ -29,11 +58,57 @@ impl Part {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn as_str(&self) -> (text: &str)
+        ensures
+            text@ == self@,
+            is_part_word(text.spec_bytes()),
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        self.0.as_str()
     }
 }
 
+impl Clone for Part {
+    fn clone(&self) -> (part: Self)
+        ensures
+            part@ == self@,
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        Self(self.0.clone())
+    }
+}
+
+fn is_word(bytes: &[u8]) -> (word: bool)
+    ensures
+        word == is_part_word(bytes@),
+{
+    let length = bytes.len();
+    if !(Part::MIN_LENGTH..=Part::MAX_LENGTH).contains(&length) {
+        return false;
+    }
+    if bytes[0] == b'-' || bytes[length - 1] == b'-' {
+        return false;
+    }
+    let mut index = 0;
+    while index < length
+        invariant
+            index <= length == bytes.len(),
+            forall|i: int| 0 <= i < index ==> is_part_character(#[trigger] bytes@[i]),
+        decreases length - index,
+    {
+        if !(is_lower(bytes[index]) || bytes[index] == b'-') {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+} // verus!
 impl fmt::Display for Part {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)

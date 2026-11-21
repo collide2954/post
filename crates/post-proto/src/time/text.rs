@@ -11,6 +11,7 @@ use super::date::{
     date_of, day_number, last_day, lemma_the_date_of_a_day_gives_the_day,
     lemma_the_day_of_a_date_gives_the_date, valid_date,
 };
+use crate::ascii::is_digit;
 
 verus! {
 
@@ -79,9 +80,6 @@ pub open spec fn time_text(millis: int) -> Seq<u8> {
     )
 }
 
-pub open spec fn is_digit(byte: u8) -> bool {
-    48 <= byte <= 57
-}
 
 pub open spec fn pair(text: Seq<u8>, at: int) -> int {
     (text[at] - 48) * 10 + (text[at + 1] - 48)
@@ -424,13 +422,12 @@ pub(super) fn write_text(millis: u64) -> (text: [u8; 24])
     ]
 }
 
-#[expect(clippy::manual_is_ascii_check, reason = "Verus has no specification for is_ascii_digit")]
 fn digit_value(byte: u8) -> (value: Option<u64>)
     ensures
         value is Some <==> is_digit(byte),
         value matches Some(value) ==> value == byte - 48,
 {
-    if (b'0'..=b'9').contains(&byte) {
+    if is_digit(byte) {
         Some(u64::from(byte - b'0'))
     } else {
         None

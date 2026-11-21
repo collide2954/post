@@ -1,4 +1,5 @@
 mod address;
+mod ascii;
 mod bytes;
 mod code;
 mod codec;
