@@ -28,12 +28,12 @@ A new record gets the next free number. Do not use a number again.
 
 | File | Subject | Records |
 |---|---|---|
-| [product.md](product.md) | What Post does for a user | D-001 to D-036 |
-| [voice.md](voice.md) | Voice channels | D-037 to D-044 |
+| [product.md](product.md) | What Post does for a user | D-001 to D-036, D-122 to D-130 |
+| [voice.md](voice.md) | Voice channels | D-037 to D-044, D-131, D-132 |
 | [protocol.md](protocol.md) | The Post protocol | D-045 to D-050 |
-| [server.md](server.md) | The server and its operation | D-051 to D-060 |
-| [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076 |
-| [application.md](application.md) | The desktop application | D-077 to D-096 |
+| [server.md](server.md) | The server and its operation | D-051 to D-060, D-133 to D-146 |
+| [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076, D-147 to D-149 |
+| [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154 |
 | [engineering.md](engineering.md) | How we build Post | D-097 to D-112 |
 | [distribution-and-community.md](distribution-and-community.md) | Releases and the project community | D-113 to D-121 |
 
@@ -65,7 +65,7 @@ A new record gets the next free number. Do not use a number again.
 - D-022 Notification text
 - D-023 Names
 - D-024 Handle change
-- D-025 Profiles
+- D-025 Profile card
 - D-026 Welcome text
 - D-027 Export
 - D-028 Account deletion
@@ -78,6 +78,14 @@ A new record gets the next free number. Do not use a number again.
 - D-035 Functions that are not in Post
 - D-036 Description of Post
 - D-122 Version 1.0 is complete
+- D-123 Media in the timeline
+- D-124 Timeline comforts
+- D-125 Mentions view
+- D-126 Drafts
+- D-127 Find a person
+- D-128 Bot commands
+- D-129 Limits for bots
+- D-130 Help for bot authors
 
 ### Voice
 
@@ -88,7 +96,9 @@ A new record gets the next free number. Do not use a number again.
 - D-041 Voice security
 - D-042 Voice transport
 - D-043 Microphone mode
-- D-044 First voice release
+- D-044 Voice functions
+- D-131 Voice quality
+- D-132 Voice sounds
 
 ### Protocol
 
@@ -111,6 +121,20 @@ A new record gets the next free number. Do not use a number again.
 - D-058 Roles
 - D-059 Server logs
 - D-060 Server directory
+- D-133 Where the server settings are
+- D-134 Server limits
+- D-135 Function switches
+- D-136 No default channels
+- D-137 Limits for new accounts
+- D-138 Moderation tools
+- D-139 No automatic moderation
+- D-140 Server bans
+- D-141 What an operator can read
+- D-142 Operator power over channels
+- D-143 Reserved names
+- D-144 Lockdown switch
+- D-145 Server status view
+- D-146 Operator tools
 
 ### Identity and security
 
@@ -130,6 +154,9 @@ A new record gets the next free number. Do not use a number again.
 - D-074 Proxy
 - D-075 Assurance
 - D-076 No telemetry
+- D-147 Application profiles
+- D-148 Account proof
+- D-149 Operator control of sealed chats
 
 ### Application
 
@@ -153,6 +180,11 @@ A new record gets the next free number. Do not use a number again.
 - D-094 Protocol console
 - D-095 Icon
 - D-096 Words in the interface
+- D-150 Sidebar order
+- D-151 Key bindings
+- D-152 Appearance settings
+- D-153 Sounds and automatic start
+- D-154 Links
 
 ### Engineering
 
