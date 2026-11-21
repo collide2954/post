@@ -33,7 +33,7 @@ A new record gets the next free number. Do not use a number again.
 |---|---|---|
 | [product.md](product.md) | What Post does for a user | D-001 to D-036, D-122 to D-130 |
 | [voice.md](voice.md) | Voice channels | D-037 to D-044, D-131, D-132 |
-| [protocol.md](protocol.md) | The Post protocol | D-045 to D-050, D-155, D-156 |
+| [protocol.md](protocol.md) | The Post protocol | D-045 to D-050, D-155, D-156, D-176 |
 | [server.md](server.md) | The server and its operation | D-051 to D-060, D-133 to D-146, D-164, D-166, D-172 |
 | [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076, D-147 to D-149, D-163, D-169 |
 | [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154, D-160, D-161, D-165, D-167, D-171 |
@@ -113,6 +113,7 @@ A new record gets the next free number. Do not use a number again.
 - D-050 Invite links
 - D-155 Message style
 - D-156 Protocol version 0
+- D-176 Client requirements
 
 ### Server
 

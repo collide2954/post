@@ -96,3 +96,30 @@ An `error` message has a `code` for programs and a `text` for people. A code is 
 A client gives its protocol version in the `hello` message. The server refuses a version that it does not support.
 
 **Reason.** The protocol must be free to change while we build the functions. An honest number tells the author of a different client that the protocol is not stable.
+
+### D-176 Client requirements
+
+**Date.** 2026-11-21.
+
+**Decision.** A server can require that a client supports specific parts of the protocol.
+
+- The specification gives each optional part of the protocol one word, for example `sealed` for sealed chats. The function switches of a server (D-135) use the same words.
+- At the start of a connection, the client tells the server which parts it supports. The server tells the client which parts it requires.
+- An operator selects the required parts. By default, a server requires none.
+- If a client does not support a required part, the server refuses the sign-in. The application tells the user which part is missing.
+- A requirement applies to the client of a person. A bot has its own limits (D-129).
+- The specification defines all the words. An operator cannot define a new word.
+
+The server cannot examine a client. A requirement stops a client that is honest but not complete. It is not a security control, and the documents say this.
+
+The sign-in messages carry the two lists from version 0.2. The lists are empty until the first optional part exists. The operator setting comes in version 0.9.
+
+**Reason.** All members of a community get the same functions, and a user gets a clear message, not a chat that works only in part. Each program that supports the required parts can connect, thus the protocol stays open (D-029). A closed list of words keeps one protocol for all servers (D-122).
+
+**Not selected.**
+
+- A minimum protocol version as the only requirement.
+- Names that an operator defines. Different servers then have different protocols.
+- Requirements that also apply to bots. A server that requires sealed chats then has no bots.
+- No client requirements.
+- The sign-in fields in version 0.9. A change to the sign-in is easier before other clients exist.

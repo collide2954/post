@@ -59,7 +59,7 @@ The `tools` directory holds the scripts of the automatic checks and the program 
 | 0.6 | Replies, reactions, edit, delete, mentions, keyword highlights, mentions view, text format |
 | 0.7 | Files and images |
 | 0.8 | Search, notifications, message links, saved messages, export |
-| 0.9 | Moderation tools, administration in the application, server settings and limits, join policies |
+| 0.9 | Moderation tools, administration in the application, server settings and limits, join policies, client requirements |
 | 0.10 | Sealed chats |
 | 0.11 | Recovery phrase, device link, keychain, passphrase, application lock, account proof |
 | 0.12 | Voice: transport, relay, and sound path |
@@ -78,7 +78,7 @@ The public web view is an open decision (D-032). If the project selects it, it g
 - The smaller server functions before voice.
 - A thin voice slice directly after direct messages.
 
-**History.** On 2026-11-21, the question round for version 0.2 gave a version to functions that had none (D-167, D-173). The handle change, the first settings screen, and the text size went into version 0.2. The join policies went into version 0.9, the other appearance settings into version 0.15, and the links that open Post into version 0.16.
+**History.** On 2026-11-21, the question round for version 0.2 gave a version to functions that had none (D-167, D-173). The handle change, the first settings screen, and the text size went into version 0.2. The join policies went into version 0.9, the other appearance settings into version 0.15, and the links that open Post into version 0.16. On the same day, the client requirements went into version 0.9 (D-176).
 
 ### D-101 Tests first
 
@@ -323,6 +323,7 @@ The reference computer is a laptop with an Intel Core i5-8365U processor and bui
 
 - The handle change (D-024) is in version 0.2.
 - The first Settings screen and the text size are in version 0.2 (D-167).
+- The sign-in messages carry the parts that a client supports and the parts that a server requires (D-176). The two lists are empty in version 0.2.
 - A server has only the join policy "invitation". The other two policies (D-055) come in version 0.9 with the server settings.
 - In a browser, the page of an invite link shows the link and a Copy button. It tells the person to paste the link into the application, and it has a link to the downloads. The page has English and Latin American Spanish text.
 - The button "Open in Post" (D-050) comes with the packages in version 0.16. Only an installed package can register the application for links on all three systems.
