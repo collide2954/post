@@ -99,3 +99,70 @@ fn focus_key(event: &keyboard::Event) -> Option<Message> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use iced::keyboard::key::{self, Named};
+    use iced::keyboard::{self, Key, Location, Modifiers};
+    use iced::theme;
+
+    use super::{focus_key, mode_changed};
+    use crate::app::Message;
+    use crate::palette::Mode;
+
+    fn pressed(key: Key, modifiers: Modifiers) -> keyboard::Event {
+        keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
+            location: Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        }
+    }
+
+    #[test]
+    fn the_tab_key_moves_the_focus_to_the_next_field() {
+        let event = pressed(Key::Named(Named::Tab), Modifiers::empty());
+
+        assert!(matches!(focus_key(&event), Some(Message::FocusNext)));
+    }
+
+    #[test]
+    fn the_shift_and_tab_keys_move_the_focus_to_the_field_before() {
+        let event = pressed(Key::Named(Named::Tab), Modifiers::SHIFT);
+
+        assert!(matches!(focus_key(&event), Some(Message::FocusPrevious)));
+    }
+
+    #[test]
+    fn a_different_key_does_not_move_the_focus() {
+        let enter = pressed(Key::Named(Named::Enter), Modifiers::empty());
+        let released = keyboard::Event::KeyReleased {
+            key: Key::Named(Named::Tab),
+            modified_key: Key::Named(Named::Tab),
+            physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+        };
+
+        assert!(focus_key(&enter).is_none());
+        assert!(focus_key(&released).is_none());
+    }
+
+    #[test]
+    fn the_application_obeys_the_mode_of_the_system() {
+        let modes = [
+            (theme::Mode::Dark, Mode::Dark),
+            (theme::Mode::Light, Mode::Light),
+            (theme::Mode::None, Mode::Light),
+        ];
+        for (system, expected) in modes {
+            assert!(
+                matches!(mode_changed(system), Message::ModeChanged(mode) if mode == expected),
+                "{system:?}"
+            );
+        }
+    }
+}
