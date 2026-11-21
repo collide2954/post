@@ -40,6 +40,12 @@ pub struct Link {
 
 impl Link {
     #[must_use]
+    pub fn channel(name: Name, capacity: usize) -> (Self, mpsc::Receiver<ClientMessage>) {
+        let (queue, messages) = mpsc::channel(capacity);
+        (Self { name, queue }, messages)
+    }
+
+    #[must_use]
     pub fn name(&self) -> &Name {
         &self.name
     }
@@ -69,12 +75,9 @@ async fn step(state: State) -> Option<(Event, State)> {
     match state {
         State::Start { address, name } => Some(match open(&address, &name).await {
             Ok((socket, name)) => {
-                let (sender, queue) = mpsc::channel(QUEUE_MESSAGES);
+                let (link, queue) = Link::channel(name, QUEUE_MESSAGES);
                 (
-                    Event::Connected(Link {
-                        name,
-                        queue: sender,
-                    }),
+                    Event::Connected(link),
                     State::Open(Box::new(Open { socket, queue })),
                 )
             }

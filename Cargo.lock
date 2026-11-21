@@ -472,6 +472,8 @@ name = "post-app"
 version = "0.0.5"
 dependencies = [
  "fluent-bundle",
+ "post-client",
+ "post-proto",
  "unic-langid",
 ]
 

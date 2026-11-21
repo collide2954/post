@@ -13,6 +13,7 @@ publish = false
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 fluent-bundle = "0.16.0"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+post-client = { path = "crates/post-client" }
 post-proto = { path = "crates/post-proto" }
 post-server = { path = "crates/post-server" }
 schemars = "1.2.3"
