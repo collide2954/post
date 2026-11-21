@@ -28,7 +28,7 @@ These records tell you how Post handles accounts, keys, and encryption. Read the
 
 ### D-063 One seed and one key for each server
 
-**Decision.** The application keeps one secret seed. From the seed, it calculates a different key pair for each server. A user can prove later that two accounts belong to the same person.
+**Decision.** Each application profile (D-147) has one secret seed. From the seed, the application calculates a different key pair for each server. A user can prove that two accounts belong to the same person (D-148).
 
 **Reason.** Servers cannot connect the accounts of a user with each other. One backup of the seed brings all accounts back.
 
@@ -93,7 +93,7 @@ These records tell you how Post handles accounts, keys, and encryption. Read the
 
 ### D-069 How a chat becomes sealed
 
-**Decision.** A user can select "sealed" when the user makes a chat. A user can also seal a chat later. A chat cannot go back from sealed to normal. A line in the timeline shows where the sealed part starts. Earlier messages do not change. An operator can make "sealed" the default for new direct messages.
+**Decision.** A user can select "sealed" when the user makes a chat. A user can also seal a chat later. A chat cannot go back from sealed to normal. A line in the timeline shows where the sealed part starts. Earlier messages do not change. An operator can make "sealed" the default for new direct messages. An operator can also stop the creation of new sealed chats (D-149).
 
 **Reason.** Protection never goes away silently. A user can seal a conversation that already exists.
 
@@ -170,3 +170,35 @@ The documents must tell the reader that no independent audit exists. They must a
 **Decision.** Post collects no usage data and sends no crash reports. The application connects only to the servers that the user adds. The server directory (D-060) and the update check (D-090) are the only exceptions, and the user starts each of them.
 
 **Reason.** The user controls each connection that the application makes.
+
+### D-147 Application profiles
+
+**Decision.** The application can have more than one profile, for example "work" and "personal". Each profile has its own seed, its own servers, and its own settings. A user who wants a second account on a server makes a second profile.
+
+**Reason.** A user can keep parts of life fully apart. In one profile, the rule stays simple: one account for each server.
+
+**Not selected.**
+
+- One account for each server and no profiles.
+- More than one account on a server in one profile. Each view must then show which account is active.
+
+### D-148 Account proof
+
+**Decision.** A user can show on one server that the user also owns an account on a different server. The application makes a cryptographic proof from the keys of the two accounts. The profile card shows the proven link. A proof lets each reader connect the two accounts. Without a proof, servers cannot connect them (D-063).
+
+**Reason.** A well-known person can protect the name against a false account on a different server.
+
+**Not selected.**
+
+- No account proof.
+
+### D-149 Operator control of sealed chats
+
+**Decision.** Sealed chats are on by default. An operator can stop the creation of new sealed chats on a server. The application then tells the user that the server does not permit sealed chats. A chat that is already sealed stays sealed.
+
+**Reason.** An operator cannot moderate a chat that the server cannot read. Some communities, for example a company or a group for young people, must be able to moderate all chats. The user knows the rule before the user writes.
+
+**Not selected.**
+
+- Sealed chats that an operator cannot turn off.
+- A switch for sealed channels only.
