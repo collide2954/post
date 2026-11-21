@@ -6,7 +6,9 @@ use post_crypto::{Exchange, Seed};
 use post_proto::{
     ClientMessage, Code, ErrorCode, Key, MAX_LINE_BYTES, Name, Role, ServerMessage, Signature,
 };
-use post_server::Server;
+use post_server::config::{Config, Listen, Tls};
+use post_server::{Server, StartError, new_owner_link};
+use post_testing::Directory;
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -22,12 +24,22 @@ struct Running {
     port: u16,
     addresses: Vec<SocketAddr>,
     owner_link: Option<String>,
+    config: Config,
+    data: Directory,
     stop: oneshot::Sender<()>,
     task: JoinHandle<std::io::Result<()>>,
 }
 
 async fn start() -> Running {
-    let server = Server::bind(0).await.expect("the server can bind");
+    start_with(Directory::new()).await
+}
+
+async fn start_with(data: Directory) -> Running {
+    let config = Config {
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    };
+    let server = Server::bind(&config).await.expect("the server can bind");
     let addresses = server.addresses().to_vec();
     let owner_link = server.owner_link().map(str::to_owned);
     let (stop, stopped) = oneshot::channel::<()>();
@@ -38,8 +50,22 @@ async fn start() -> Running {
         port: addresses[0].port(),
         addresses,
         owner_link,
+        config,
+        data,
         stop,
         task,
+    }
+}
+
+impl Running {
+    async fn stop(self) -> Directory {
+        self.stop.send(()).expect("the server runs");
+        timeout(PATIENCE, self.task)
+            .await
+            .expect("the server stops in time")
+            .expect("the server task does not panic")
+            .expect("the server stops without an error");
+        self.data
     }
 }
 
@@ -182,6 +208,170 @@ async fn the_owner_makes_an_account_and_signs_in_again() {
     assert_eq!(read(&mut second).await, welcome);
 }
 
+async fn register(port: u16, seed: &Seed, who: &str, link: &str) -> ServerMessage {
+    let (_, code) = link.rsplit_once('/').expect("a link has a code");
+    let mut socket = connect_v4(port).await;
+    let (key, proof) = prove(&mut socket, &format!("localhost:{port}"), seed).await;
+    let register = ClientMessage::Register {
+        reference: None,
+        key,
+        proof,
+        name: who.to_owned(),
+        invitation: Code::parse(code).expect("a valid code"),
+    };
+    write(&mut socket, &register).await;
+    read(&mut socket).await
+}
+
+async fn identify(port: u16, seed: &Seed) -> ServerMessage {
+    let mut socket = connect_v4(port).await;
+    let (key, proof) = prove(&mut socket, &format!("localhost:{port}"), seed).await;
+    let identify = ClientMessage::Identify {
+        reference: None,
+        key,
+        proof,
+        invitation: None,
+    };
+    write(&mut socket, &identify).await;
+    read(&mut socket).await
+}
+
+fn welcome(who: &str, role: Role) -> ServerMessage {
+    ServerMessage::Welcome {
+        reference: None,
+        name: name(who),
+        role,
+    }
+}
+
+#[tokio::test]
+async fn keeps_the_accounts_when_it_starts_again() {
+    let server = start().await;
+    let owner_link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let seed = Seed::from_bytes([7; 32]);
+    assert_eq!(
+        register(server.port, &seed, "ana", &owner_link).await,
+        welcome("ana", Role::Owner)
+    );
+    let data = server.stop().await;
+    assert!(data.join("post.db").is_file());
+
+    let server = start_with(data).await;
+
+    assert_eq!(server.owner_link, None);
+    assert_eq!(
+        identify(server.port, &seed).await,
+        welcome("ana", Role::Owner)
+    );
+    assert_eq!(
+        identify(server.port, &Seed::from_bytes([8; 32])).await,
+        ServerMessage::error(None, ErrorCode::UnknownAccount)
+    );
+}
+
+#[tokio::test]
+async fn makes_a_new_owner_link_for_a_server_that_runs() {
+    let server = start().await;
+    let owner_link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let ana = Seed::from_bytes([7; 32]);
+    register(server.port, &ana, "ana", &owner_link).await;
+
+    let config = Config {
+        listen: Listen::Loopback(server.port),
+        ..server.config.clone()
+    };
+    let link = new_owner_link(&config).expect("the storage is open");
+
+    assert!(link.starts_with(&format!("http://localhost:{}/i/", server.port)));
+    assert_ne!(link, owner_link);
+    let ben = Seed::from_bytes([8; 32]);
+    assert_eq!(
+        register(server.port, &ben, "ben", &link).await,
+        welcome("ben", Role::Owner)
+    );
+    assert_eq!(
+        identify(server.port, &ana).await,
+        welcome("ana", Role::Member)
+    );
+}
+
+#[tokio::test]
+async fn tells_why_it_cannot_start() {
+    let data = Directory::new();
+    let development = Config {
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    };
+
+    let with_tls = Config {
+        tls: Tls::Own,
+        ..development.clone()
+    };
+    let error = Server::bind(&with_tls).await.err().expect("an error");
+    assert!(matches!(error, StartError::NoTls));
+    assert!(
+        error
+            .to_string()
+            .starts_with("this version cannot use TLS yet")
+    );
+
+    let first = Server::bind(&development)
+        .await
+        .expect("the server can bind");
+    let taken = Config {
+        listen: Listen::Given(first.addresses().to_vec()),
+        ..development.clone()
+    };
+    let error = Server::bind(&taken).await.err().expect("an error");
+    assert!(matches!(error, StartError::Listen { .. }));
+    assert!(error.to_string().starts_with("cannot listen on 127.0.0.1:"));
+
+    let file = data.join("a-file");
+    std::fs::write(&file, "text").expect("a file");
+    let in_a_file = Config {
+        data: file.join("data"),
+        ..Config::development(0)
+    };
+    let error = Server::bind(&in_a_file).await.err().expect("an error");
+    assert!(matches!(error, StartError::Data { .. }));
+    assert!(
+        error
+            .to_string()
+            .starts_with("cannot make the data directory")
+    );
+
+    let damaged = Directory::new();
+    std::fs::write(damaged.join("post.db"), "This file is not a database.").expect("a file");
+    let with_damage = Config {
+        data: damaged.path().to_owned(),
+        ..Config::development(0)
+    };
+    let error = Server::bind(&with_damage).await.err().expect("an error");
+    assert!(matches!(error, StartError::Store(_)));
+    assert!(error.to_string().starts_with("the database has a problem"));
+}
+
+#[tokio::test]
+async fn listens_on_the_addresses_that_the_configuration_gives() {
+    let data = Directory::new();
+    let config = Config {
+        listen: Listen::Given(vec![SocketAddr::from((Ipv4Addr::LOCALHOST, 0))]),
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    };
+
+    let server = Server::bind(&config).await.expect("the server can bind");
+
+    assert_eq!(server.addresses().len(), 1);
+    assert!(server.addresses()[0].ip().is_loopback());
+}
+
 #[tokio::test]
 async fn two_users_exchange_text() {
     let server = start().await;
@@ -310,14 +500,10 @@ async fn stops_and_closes_each_connection_when_the_stop_signal_comes() {
     let server = start().await;
     let mut ana = join_as(server.port, "ana").await;
 
-    server.stop.send(()).expect("the server runs");
+    let stopped = tokio::spawn(server.stop());
 
     assert!(is_closed(&mut ana).await);
-    timeout(PATIENCE, server.task)
-        .await
-        .expect("the server stops in time")
-        .expect("the server task does not panic")
-        .expect("the server stops without an error");
+    stopped.await.expect("the server stops");
 }
 
 #[tokio::test]

@@ -5,5 +5,5 @@ mod server;
 mod sessions;
 pub mod store;
 
-pub use cli::{USAGE, port_from};
-pub use server::Server;
+pub use cli::{Command, Source, USAGE, command_from};
+pub use server::{Server, StartError, new_owner_link};

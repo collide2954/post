@@ -1,5 +1,7 @@
+use std::fmt;
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -8,15 +10,16 @@ use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use axum::routing::any;
-use post_proto::{Address, MAX_LINE_BYTES, Timestamp};
+use post_proto::{MAX_LINE_BYTES, Timestamp};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
 use tokio::time::timeout;
 
+use crate::config::{Config, Listen, Tls};
 use crate::hub::{Hub, Random, Settings};
 use crate::sessions::Sessions;
-use crate::store::Store;
+use crate::store::{Store, StoreError};
 
 const QUEUE_LINES: usize = 256;
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -28,36 +31,43 @@ pub struct Server {
     owner_link: Option<String>,
 }
 
+#[derive(Debug)]
+pub enum StartError {
+    Listen {
+        address: SocketAddr,
+        error: io::Error,
+    },
+    Data {
+        path: PathBuf,
+        error: io::Error,
+    },
+    Store(StoreError),
+    NoTls,
+}
+
 struct Shared {
     sessions: Mutex<Sessions>,
     stopped: watch::Receiver<bool>,
 }
 
 impl Server {
-    pub async fn bind(port: u16) -> io::Result<Self> {
-        let ipv4 = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
-        let ipv4_address = ipv4.local_addr()?;
-        let mut listeners = vec![ipv4];
-        let mut addresses = vec![ipv4_address];
-
-        if let Ok(ipv6) = TcpListener::bind((Ipv6Addr::LOCALHOST, ipv4_address.port())).await {
-            addresses.push(ipv6.local_addr()?);
-            listeners.push(ipv6);
+    pub async fn bind(config: &Config) -> Result<Self, StartError> {
+        if matches!(config.tls, Tls::Own | Tls::Files { .. }) {
+            return Err(StartError::NoTls);
         }
-
-        let port = ipv4_address.port();
+        let (listeners, addresses) = listen(&config.listen).await?;
+        let port = addresses[0].port();
         let settings = Settings {
-            addresses: vec![
-                Address::localhost(port).to_string(),
-                Address::from_ip(Ipv4Addr::LOCALHOST.into(), port).to_string(),
-                Address::from_ip(Ipv6Addr::LOCALHOST.into(), port).to_string(),
-            ],
-            link: format!("http://{}", Address::localhost(port)),
+            addresses: config
+                .public_addresses(port)
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            link: config.link(port),
             requires: Vec::new(),
         };
-        let store = Store::in_memory().map_err(io::Error::other)?;
-        let mut hub = Hub::new(store, settings, Random::default()).map_err(io::Error::other)?;
-        let owner_link = hub.owner_link(Timestamp::now()).map_err(io::Error::other)?;
+        let mut hub = Hub::new(open_store(config)?, settings, Random::default())?;
+        let owner_link = hub.owner_link(Timestamp::now())?;
 
         Ok(Self {
             listeners,
@@ -106,6 +116,93 @@ impl Server {
         Ok(())
     }
 }
+
+pub fn new_owner_link(config: &Config) -> Result<String, StartError> {
+    let code = post_crypto::code();
+    open_store(config)?.new_owner_code(&code, Timestamp::now())?;
+    Ok(format!("{}/i/{code}", config.link(config.port())))
+}
+
+fn open_store(config: &Config) -> Result<Store, StartError> {
+    std::fs::create_dir_all(&config.data).map_err(|error| StartError::Data {
+        path: config.data.clone(),
+        error,
+    })?;
+    Ok(Store::open(&config.database())?)
+}
+
+async fn listen(listen: &Listen) -> Result<(Vec<TcpListener>, Vec<SocketAddr>), StartError> {
+    let mut listeners = Vec::new();
+    match listen {
+        Listen::Loopback(port) => {
+            let local = [Ipv4Addr::LOCALHOST.into(), Ipv6Addr::LOCALHOST.into()];
+            listen_on_two(&mut listeners, local, *port).await?;
+        }
+        Listen::All(port) => {
+            let all = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()];
+            listen_on_two(&mut listeners, all, *port).await?;
+        }
+        Listen::Given(addresses) => {
+            for address in addresses {
+                listeners.push(listen_on(*address).await?);
+            }
+        }
+    }
+    let addresses = listeners.iter().map(|(_, address)| *address).collect();
+    let listeners = listeners
+        .into_iter()
+        .map(|(listener, _)| listener)
+        .collect();
+    Ok((listeners, addresses))
+}
+
+async fn listen_on_two(
+    listeners: &mut Vec<(TcpListener, SocketAddr)>,
+    [required, optional]: [IpAddr; 2],
+    port: u16,
+) -> Result<(), StartError> {
+    let first = listen_on(SocketAddr::new(required, port)).await?;
+    let port = first.1.port();
+    listeners.push(first);
+    if let Ok(second) = listen_on(SocketAddr::new(optional, port)).await {
+        listeners.push(second);
+    }
+    Ok(())
+}
+
+async fn listen_on(address: SocketAddr) -> Result<(TcpListener, SocketAddr), StartError> {
+    let failed = |error| StartError::Listen { address, error };
+    let listener = TcpListener::bind(address).await.map_err(failed)?;
+    let address = listener.local_addr().map_err(failed)?;
+    Ok((listener, address))
+}
+
+impl From<StoreError> for StartError {
+    fn from(error: StoreError) -> Self {
+        Self::Store(error)
+    }
+}
+
+impl fmt::Display for StartError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Listen { address, error } => {
+                write!(formatter, "cannot listen on {address}: {error}")
+            }
+            Self::Data { path, error } => write!(
+                formatter,
+                "cannot make the data directory {}: {error}",
+                path.display()
+            ),
+            Self::Store(error) => error.fmt(formatter),
+            Self::NoTls => formatter.write_str(
+                "this version cannot use TLS yet: use the TLS mode \"proxy\" or no configuration file",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for StartError {}
 
 impl Shared {
     fn sessions(&self) -> MutexGuard<'_, Sessions> {

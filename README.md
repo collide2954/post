@@ -41,7 +41,7 @@ You must have [rustup](https://rustup.rs). It installs the Rust release that the
 4. Start the application again in a third terminal. Use a different name.
 5. Write a message in one window. The message shows in the two windows.
 
-The server listens on port 7678. To use a different port, give the number: `cargo run --bin post-server -- 9000`.
+The server listens on port 7678. To use a different port, give the number: `cargo run --bin post-server -- --port 9000`. The server keeps its data in the directory `post-server-data`.
 
 ## Documents
 

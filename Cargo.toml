@@ -25,6 +25,7 @@ post-client = { path = "crates/post-client" }
 post-crypto = { path = "crates/post-crypto" }
 post-proto = { path = "crates/post-proto" }
 post-server = { path = "crates/post-server" }
+post-testing = { path = "crates/post-testing" }
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 rusqlite = { version = "0.43.0", default-features = false, features = ["bundled", "cache"] }
 schemars = "1.2.3"

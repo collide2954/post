@@ -13,6 +13,8 @@ use post_app::shell;
 use post_client::{Event, ServerAddress, connect};
 use post_proto::{ClientMessage, Name, ServerMessage};
 use post_server::Server;
+use post_server::config::Config;
+use post_testing::Directory;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 
@@ -95,12 +97,18 @@ struct Backstage {
     runtime: Runtime,
     port: u16,
     _stop: oneshot::Sender<()>,
+    _data: Directory,
 }
 
 fn start_server() -> Backstage {
     let runtime = Runtime::new().expect("a runtime for the server");
+    let data = Directory::new();
+    let config = Config {
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    };
     let server = runtime
-        .block_on(Server::bind(0))
+        .block_on(Server::bind(&config))
         .expect("the server can bind");
     let port = server.addresses()[0].port();
     let (stop, stopped) = oneshot::channel::<()>();
@@ -111,6 +119,7 @@ fn start_server() -> Backstage {
         runtime,
         port,
         _stop: stop,
+        _data: data,
     }
 }
 

@@ -7,6 +7,8 @@ use futures_util::{SinkExt, Stream, StreamExt};
 use post_client::{Disconnect, Event, Link, ServerAddress, connect};
 use post_proto::{ClientMessage, ErrorCode, Name, ServerMessage};
 use post_server::Server;
+use post_server::config::Config;
+use post_testing::Directory;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -25,14 +27,19 @@ fn address(text: &str) -> ServerAddress {
     ServerAddress::parse(text).expect(text)
 }
 
-async fn start_server() -> (u16, oneshot::Sender<()>) {
-    let server = Server::bind(0).await.expect("the server can bind");
+async fn start_server() -> (u16, (oneshot::Sender<()>, Directory)) {
+    let data = Directory::new();
+    let config = Config {
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    };
+    let server = Server::bind(&config).await.expect("the server can bind");
     let port = server.addresses()[0].port();
     let (stop, stopped) = oneshot::channel::<()>();
     tokio::spawn(server.run(async {
         let _ = stopped.await;
     }));
-    (port, stop)
+    (port, (stop, data))
 }
 
 async fn fake_server<F, Fut>(script: F) -> ServerAddress
@@ -208,7 +215,7 @@ async fn tells_that_the_server_stopped() {
     let (port, stop) = start_server().await;
     let (mut ana, _link) = join(&address(&format!("localhost:{port}")), "ana").await;
 
-    stop.send(()).expect("the server runs");
+    stop.0.send(()).expect("the server runs");
 
     assert_eq!(disconnected(&mut ana).await, Disconnect::Closed);
 }
@@ -309,7 +316,7 @@ async fn uses_the_name_that_the_server_gives() {
 async fn a_link_cannot_send_after_the_connection_stops() {
     let (port, stop) = start_server().await;
     let (mut ana, link) = join(&address(&format!("localhost:{port}")), "ana").await;
-    stop.send(()).expect("the server runs");
+    stop.0.send(()).expect("the server runs");
     assert_eq!(disconnected(&mut ana).await, Disconnect::Closed);
     drop(ana);
 

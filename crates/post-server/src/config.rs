@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use post_proto::{Address, DEFAULT_PORT};
@@ -9,6 +9,7 @@ pub const FILE_NAME: &str = "post-server.toml";
 pub const TLS_PORT: u16 = 443;
 const DEVELOPMENT_DATA: &str = "post-server-data";
 const DATA: &str = "data";
+const DATABASE: &str = "post.db";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -86,6 +87,42 @@ impl Config {
             data: PathBuf::from(DEVELOPMENT_DATA),
             tls: Tls::Off,
         }
+    }
+
+    #[must_use]
+    pub fn public_addresses(&self, port: u16) -> Vec<Address> {
+        if self.addresses.is_empty() {
+            vec![
+                Address::localhost(port),
+                Address::from_ip(Ipv4Addr::LOCALHOST.into(), port),
+                Address::from_ip(Ipv6Addr::LOCALHOST.into(), port),
+            ]
+        } else {
+            self.addresses.clone()
+        }
+    }
+
+    #[must_use]
+    pub fn link(&self, port: u16) -> String {
+        let address = &self.public_addresses(port)[0];
+        match self.tls {
+            Tls::Off => format!("http://{address}"),
+            _ if address.port() == TLS_PORT => format!("https://{}", address.host()),
+            _ => format!("https://{address}"),
+        }
+    }
+
+    #[must_use]
+    pub fn port(&self) -> u16 {
+        match &self.listen {
+            Listen::Loopback(port) | Listen::All(port) => *port,
+            Listen::Given(addresses) => addresses.first().map_or(TLS_PORT, SocketAddr::port),
+        }
+    }
+
+    #[must_use]
+    pub fn database(&self) -> PathBuf {
+        self.data.join(DATABASE)
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
@@ -226,6 +263,48 @@ mod tests {
                 tls: Tls::Off,
             }
         );
+    }
+
+    #[test]
+    fn answers_to_the_names_of_the_local_computer_in_development_mode() {
+        let config = Config::development(0);
+
+        let addresses: Vec<String> = config
+            .public_addresses(9000)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+
+        assert_eq!(
+            addresses,
+            ["localhost:9000", "127.0.0.1:9000", "[::1]:9000"]
+        );
+        assert_eq!(config.link(9000), "http://localhost:9000");
+        assert_eq!(config.port(), 0);
+        assert_eq!(
+            config.database(),
+            Path::new("post-server-data").join("post.db")
+        );
+    }
+
+    #[test]
+    fn answers_to_the_addresses_of_the_file() {
+        let config =
+            parse("address = [\"chat.example.org\", \"192.168.1.20:7678\"]\n").expect("valid");
+
+        assert_eq!(config.public_addresses(9000), config.addresses);
+        assert_eq!(config.link(9000), "https://chat.example.org");
+        assert_eq!(config.port(), 443);
+        assert_eq!(config.database(), directory().join("data").join("post.db"));
+    }
+
+    #[test]
+    fn puts_a_port_that_is_not_443_into_the_link() {
+        let config = parse("address = \"chat.example.org:7678\"\nlisten = \"0.0.0.0:7000\"\n")
+            .expect("valid");
+
+        assert_eq!(config.link(1), "https://chat.example.org:7678");
+        assert_eq!(config.port(), 7000);
     }
 
     #[test]

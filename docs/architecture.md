@@ -13,6 +13,7 @@ The repository is one Cargo workspace (decision record D-097). Each crate depend
 | `post-server` | The server. The program has the name `post-server`. | `post-crypto`, `post-proto` |
 | `post-crypto` | Keys and proofs of accounts and servers | `post-proto` |
 | `post-proto` | Message types, codec, and protocol rules | No other crate of Post |
+| `post-testing` | Helpers for the tests | No other crate of Post |
 
 ## How a message travels
 
@@ -54,12 +55,12 @@ A test examines the proofs in the example conversations of the protocol specific
 
 - `hub` does the sign-in and decides who gets which message. It has no network code and no clock. Each function gets the present time as a value, and a test can give it fixed random values. Thus a test controls all inputs.
 - `store` keeps the server key, the accounts, the reserved names, and the invitations in SQLite (D-051). The other modules do not use SQL.
-- `config` reads the configuration file of the server. The server program does not use it yet.
+- `config` reads the configuration file of the server. Without a file, the server operates in development mode on the local computer.
 - `sessions` connects the hub to one queue for each connection. If a queue is full, the server closes that connection.
 - `server` holds the network code. It accepts WebSocket connections on the loopback addresses and moves lines between a socket and its queue.
-- `cli` reads the arguments of the program.
+- `cli` reads the arguments of the program. The command `owner-link` makes a new owner link (D-172).
 
-At this time, the server program opens its storage in memory. A later step gives it a data directory.
+The server keeps its storage in a data directory. In development mode, the directory has the name `post-server-data`. At this time, the server cannot use TLS.
 
 ## The client crate
 
