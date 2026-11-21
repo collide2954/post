@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.0.5"
@@ -14,6 +15,7 @@ axum = { version = "0.8.9", default-features = false, features = ["http1", "toki
 fluent-bundle = "0.16.0"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 iced = { version = "0.14.0", default-features = false, features = ["advanced-shaping", "crisp", "linux-theme-detection", "tiny-skia", "tokio", "wayland", "web-colors", "wgpu", "x11"] }
+iced_test = "0.14.0"
 jiff = "1.0.1"
 post-client = { path = "crates/post-client" }
 post-proto = { path = "crates/post-proto" }
@@ -25,6 +27,12 @@ sys-locale = "0.3.2"
 tokio = { version = "1.54.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake"] }
 unic-langid = "0.9.6"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+strip = true
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

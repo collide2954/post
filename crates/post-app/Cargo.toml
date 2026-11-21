@@ -22,3 +22,6 @@ post-client.workspace = true
 post-proto.workspace = true
 sys-locale.workspace = true
 unic-langid.workspace = true
+
+[dev-dependencies]
+iced_test.workspace = true

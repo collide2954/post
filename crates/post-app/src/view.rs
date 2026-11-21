@@ -105,9 +105,11 @@ fn connect_screen<'a>(
             "address",
             &target.address.to_string(),
         ))
+        .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
         .color(color(palette.muted))
         .into(),
         (None, Some(problem)) => text(strings.text(problem.text()))
+            .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
             .color(color(palette.danger))
             .into(),
         (None, None) => Space::new().height(LINE_HEIGHT).into(),
