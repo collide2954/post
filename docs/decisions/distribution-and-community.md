@@ -104,3 +104,16 @@ Each system gets builds for x86-64 and ARM64 processors. The automatic checks ru
 
 - The Contributor Covenant. Its text is not in ASD-STE100.
 - No code of conduct before version 1.0.
+
+### D-162 Security reports
+
+**Date.** 2026-11-21.
+
+**Decision.** A person reports a security problem with the private vulnerability report function of GitHub. The `SECURITY.md` file tells the person how to do this. The report stays private until a correction exists.
+
+**Reason.** A private report protects the users. The project does not have to publish an email address.
+
+**Not selected.**
+
+- An email address.
+- Public issues only.
