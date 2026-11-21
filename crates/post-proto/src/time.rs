@@ -1,20 +1,23 @@
 use std::borrow::Cow;
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vstd::prelude::*;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
 
-use date::{civil_from_days, days_from_civil, days_in_month};
+use text::{LAST_MILLIS, read_text, write_text};
+#[cfg(verus_keep_ghost)]
+use text::{last_millis, lemma_the_text_of_each_time, time_text};
 
 mod date;
+mod text;
 
-const MILLIS_IN_SECOND: u64 = 1000;
-const MILLIS_IN_MINUTE: u64 = 60 * MILLIS_IN_SECOND;
-const MILLIS_IN_HOUR: u64 = 60 * MILLIS_IN_MINUTE;
-const MILLIS_IN_DAY: u64 = 24 * MILLIS_IN_HOUR;
+verus! {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(u64);
@@ -23,18 +26,71 @@ pub struct Timestamp(u64);
 pub struct TimestampError;
 
 impl Timestamp {
-    pub const MAX: Self = Self(253_402_300_799_999);
+    pub exec const MAX: Self = Self(LAST_MILLIS);
 
-    #[must_use]
-    pub fn from_unix_millis(millis: u64) -> Option<Self> {
-        (millis <= Self::MAX.0).then_some(Self(millis))
+    #[verifier::type_invariant]
+    spec fn is_in_range(self) -> bool {
+        self.0 <= last_millis()
+    }
+
+    pub closed spec fn millis(self) -> int {
+        self.0 as int
     }
 
     #[must_use]
-    pub fn unix_millis(self) -> u64 {
+    pub fn from_unix_millis(millis: u64) -> (time: Option<Self>)
+        ensures
+            time is Some <==> millis <= last_millis(),
+            time matches Some(time) ==> time.millis() == millis,
+    {
+        if millis <= LAST_MILLIS {
+            Some(Self(millis))
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub fn unix_millis(self) -> (millis: u64)
+        ensures
+            millis == self.millis(),
+            millis <= last_millis(),
+    {
+        proof {
+            use_type_invariant(self);
+        }
         self.0
     }
 
+    pub fn parse(text: &str) -> (time: Result<Self, TimestampError>)
+        ensures
+            forall|millis: int|
+                0 <= millis <= last_millis() ==> (text.spec_bytes() == #[trigger] time_text(millis)
+                    <==> (time matches Ok(time) && time.millis() == millis)),
+    {
+        proof {
+            lemma_the_text_of_each_time(text.spec_bytes());
+        }
+        match read_text(text.as_bytes()) {
+            Some(millis) => Ok(Self(millis)),
+            None => Err(TimestampError),
+        }
+    }
+
+    fn text(self) -> (text: [u8; 24])
+        ensures
+            text@ == time_text(self.millis()),
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        write_text(self.0)
+    }
+}
+
+} // verus!
+
+impl Timestamp {
     #[must_use]
     pub fn now() -> Self {
         let millis = SystemTime::now()
@@ -45,78 +101,15 @@ impl Timestamp {
             .and_then(Self::from_unix_millis)
             .unwrap_or(Self::MAX)
     }
-
-    pub fn parse(text: &str) -> Result<Self, TimestampError> {
-        let bytes: &[u8; 24] = text.as_bytes().try_into().map_err(|_| TimestampError)?;
-        let separators = [
-            (4, b'-'),
-            (7, b'-'),
-            (10, b'T'),
-            (13, b':'),
-            (16, b':'),
-            (19, b'.'),
-            (23, b'Z'),
-        ];
-        if separators
-            .iter()
-            .any(|&(index, separator)| bytes[index] != separator)
-        {
-            return Err(TimestampError);
-        }
-
-        let year = number(&bytes[0..4])?;
-        let month = number(&bytes[5..7])?;
-        let day = number(&bytes[8..10])?;
-        let hour = number(&bytes[11..13])?;
-        let minute = number(&bytes[14..16])?;
-        let second = number(&bytes[17..19])?;
-        let millis = number(&bytes[20..23])?;
-
-        let valid = year >= 1970
-            && (1..=12).contains(&month)
-            && (1..=days_in_month(year, month)).contains(&day)
-            && hour <= 23
-            && minute <= 59
-            && second <= 59;
-        if !valid {
-            return Err(TimestampError);
-        }
-
-        Ok(Self(
-            days_from_civil(year, month, day) * MILLIS_IN_DAY
-                + hour * MILLIS_IN_HOUR
-                + minute * MILLIS_IN_MINUTE
-                + second * MILLIS_IN_SECOND
-                + millis,
-        ))
-    }
-}
-
-fn number(digits: &[u8]) -> Result<u64, TimestampError> {
-    digits.iter().try_fold(0, |value, digit| {
-        if digit.is_ascii_digit() {
-            Ok(value * 10 + u64::from(digit - b'0'))
-        } else {
-            Err(TimestampError)
-        }
-    })
 }
 
 impl fmt::Display for Timestamp {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (year, month, day) = civil_from_days(self.0 / MILLIS_IN_DAY);
-        let in_day = self.0 % MILLIS_IN_DAY;
-        write!(
-            formatter,
-            "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:03}Z",
-            in_day / MILLIS_IN_HOUR,
-            in_day % MILLIS_IN_HOUR / MILLIS_IN_MINUTE,
-            in_day % MILLIS_IN_MINUTE / MILLIS_IN_SECOND,
-            in_day % MILLIS_IN_SECOND,
-        )
+        self.text()
+            .into_iter()
+            .try_for_each(|byte| formatter.write_char(char::from(byte)))
     }
 }
-
 impl FromStr for Timestamp {
     type Err = TimestampError;
 

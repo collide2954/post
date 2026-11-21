@@ -24,7 +24,9 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 
 | Part | File | What the proof shows |
 |---|---|---|
-| The date arithmetic of a time | `crates/post-proto/src/time.rs` | For each day from 1970-01-01 to 9999-12-31, the arithmetic has no overflow. Each day number gives a valid date, with the correct length of each month. The conversion from a date to a day number and the conversion back are exact inverses. |
+| The date arithmetic of a time | `crates/post-proto/src/time/date.rs` | For each day from 1970-01-01 to 9999-12-31, the arithmetic has no overflow. Each day number gives a valid date, with the correct length of each month. The conversion from a date to a day number and the conversion back are exact inverses. |
+| The text form of a time | `crates/post-proto/src/time/text.rs` | The specification gives the 24 characters of each time. The writer makes exactly these characters. The reader accepts a text only if it is the text of a time, and it gives that time. Thus the reader gives back each time that the writer writes, and it refuses all other texts. |
+| The time type | `crates/post-proto/src/time.rs` | Each value that the proved code makes is a time from 1970-01-01 to 9999-12-31. |
 
 ## Holes
 
@@ -34,7 +36,6 @@ A hole is code or an assumption that has no proof. Each hole is in this list.
 
 | Hole | State |
 |---|---|
-| The text form of a time. The code that reads and writes the 24 characters calls the proved date arithmetic, but has no proof itself. | Open |
 | The rules for names, text, codes, and addresses in the protocol crate. | Open |
 | The rules of the server for accounts, handles, and invitations. | Open |
 | The steps of the sign-in in the server and in the client. | Open |
@@ -45,7 +46,8 @@ Verus cannot work on these parts, or the parts are not our code:
 
 - The network code, because Verus does not support async code.
 - TLS, SQLite, the window toolkit, and the JSON library.
-- Files and other input and output.
+- Files, the clock, and other input and output.
+- The connection code. Small functions connect the proved code to the libraries, for example the `Display` function and the serde functions of a type. They have tests, but no proof.
 - The cryptographic algorithms. They come from libraries (D-168).
 - The security of the sign-in against an attacker in the network. Verus does not analyze cryptographic protocols. The [threat model](threat-model.md) gives the argument in words.
 
