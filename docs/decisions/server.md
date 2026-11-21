@@ -47,9 +47,13 @@ These records tell you how a Post server works and how an operator uses it. Read
 
 ### D-055 Who can join a server
 
-**Decision.** The operator selects the join policy. A new server accepts new members by invitation only. The operator can change the server to open sign-up.
+**Decision.** The operator selects one of three join policies:
 
-**Reason.** A new server is safe from spam from the first minute.
+- Invitation: a person joins with an invite link. A new server has this policy.
+- Open sign-up: each person who knows the address can join.
+- Request: a person asks to join with a short note, and an operator approves or declines.
+
+**Reason.** A new server is safe from spam from the first minute. An operator can open the server gradually.
 
 **Not selected.**
 
@@ -115,3 +119,145 @@ A moderator can delete messages, mute a member, remove a member, and ban a membe
 
 - A list inside each release.
 - A directory service that operators update themselves.
+
+### D-133 Where the server settings are
+
+**Decision.** The TOML file holds the settings that the server must have to start: the address, the domain name, the certificate, and the data directories. An operator sets all policy in the Post application: limits, the join policy, function switches, and the retention rule. A policy change applies immediately, and the server does not have to start again. The file can give the first values of the policy for an installation by script.
+
+**Reason.** The operator changes policy in the same place where the operator sees its effect. An installation by script stays possible.
+
+**Not selected.**
+
+- All settings in the file.
+- All settings in the application.
+
+### D-134 Server limits
+
+**Decision.** An operator can set these limits:
+
+- The message length.
+- The upload size.
+- The storage for each member, and the total storage.
+- The number of channels for each member.
+- The message rate.
+
+Each limit has a safe default. The same limits apply to all members.
+
+**Reason.** A new operator has to change nothing. A small set of limits is easy to understand.
+
+**Not selected.**
+
+- Different limits for each role and each channel, and rules for file types.
+- Limits for upload size and total storage only.
+
+### D-135 Function switches
+
+**Decision.** An operator can turn off each of these functions for a server: voice, file upload, link previews, webhooks, and the public web view. The application hides a function that is off.
+
+**Reason.** A small server operates only the functions that it can protect and pay for.
+
+**Not selected.**
+
+- All functions always on.
+
+### D-136 No default channels
+
+**Decision.** A server has no default channels. A new member starts with the channel list and selects the channels to join.
+
+**Reason.** A member is only in channels that the member selected.
+
+**Not selected.**
+
+- Default channels that each new member joins automatically.
+
+### D-137 Limits for new accounts
+
+**Decision.** An operator can set limits for a new account, for a set number of hours or days. In this time, the account cannot upload files and cannot invite. It can start a direct message only with a person who shares a channel with it. These limits are off by default.
+
+**Reason.** An open server gets a simple and clear defense against spam accounts.
+
+**Not selected.**
+
+- No limits for new accounts.
+
+### D-138 Moderation tools
+
+**Decision.** In addition to the powers in D-058, moderators have these tools:
+
+- A mute or a ban can end automatically after a set time.
+- A member can report a message with a short reason. The owner and the moderators of the channel see the report.
+- A moderation log records each moderation action, the person who did it, and the reason. Owners and operators can read the log.
+- Slow mode: a channel setting that lets each member send only one message in a set time.
+
+**Reason.** Moderators get tools that are in proportion to the problem. The log makes the use of power visible.
+
+### D-139 No automatic moderation
+
+**Decision.** The server does not moderate content automatically. It has no word filters and no spam scores. Rate limits protect the server from a flood of messages. A bot can tell the moderators about a problem, but it cannot moderate (D-129).
+
+**Reason.** Automatic moderation makes errors that are hard to explain. Decisions about people stay with people.
+
+**Not selected.**
+
+- A word filter for each channel.
+- Spam detection in the server.
+
+### D-140 Server bans
+
+**Decision.** An operator can ban an account from the server. An operator can also ban a network address or a range of addresses. Each ban can have an end time and a reason. Each ban goes into the moderation log.
+
+**Reason.** An address ban stops a person who makes new accounts after a ban.
+
+**Not selected.**
+
+- Bans for accounts only.
+
+### D-141 What an operator can read
+
+**Decision.** The application does not let an operator open a private channel or a direct message of other persons. A report shows the reported message with some messages before and after it. The documents tell the user that a person with access to the server computer can read normal chats.
+
+**Reason.** An operator gets what is necessary to act on a report, and no more. The truth about the server computer stays visible.
+
+**Not selected.**
+
+- Access to each normal chat, with an entry in the moderation log.
+- Free access to each normal chat.
+
+### D-142 Operator power over channels
+
+**Decision.** An operator can manage each channel on the server. The operator can moderate it, change its owner, put it into archive mode, or delete it. Each of these actions goes into the moderation log. For a private channel, the operator does these actions without access to its messages (D-141).
+
+**Reason.** The server stays manageable, as an IRC network does. A channel whose owner went away does not stay without control.
+
+**Not selected.**
+
+- Operators who can only delete a channel or ban a person.
+
+### D-143 Reserved names
+
+**Decision.** An operator keeps a list of handles and channel names that no person can take, for example `admin` or `support`.
+
+**Reason.** This prevents an account that pretends to be the staff of the server.
+
+### D-144 Lockdown switch
+
+**Decision.** One switch stops new joins and new invitations and puts slow mode on all channels. An operator uses it for the time of a spam attack.
+
+**Reason.** In an attack, an operator must be able to act with one step.
+
+### D-145 Server status view
+
+**Decision.** Operators see the status of the server in the application. The view shows the members online, the messages for each day, the storage in use, and the voice use.
+
+**Reason.** An operator sees problems early, with no tools outside Post.
+
+### D-146 Operator tools
+
+**Decision.** The server has these tools:
+
+- A backup command makes a consistent copy of the database and the files while the server runs. A restore command puts the copy back.
+- A member can get a copy of the data that the server holds about the account.
+- An optional metrics endpoint gives numbers to tools such as Prometheus. It is off by default.
+- An operator setting can make the handle of an account free after a set time without use, as IRC networks do.
+
+**Reason.** A self-hosted server must be easy to keep safe. The data copy helps an operator who must obey a privacy law.
