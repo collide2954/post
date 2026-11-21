@@ -4,6 +4,8 @@
 
 Post is between IRC and Telegram. It keeps the simplicity of IRC, and it adds the functions that most people use each day. The [design philosophy](docs/philosophy.md) gives the ideas behind Post.
 
+The website of the project is [collide2954.github.io/post](https://collide2954.github.io/post/).
+
 ![The chat screen of Post 0.1 in light mode](docs/images/chat-light.png)
 
 ## State of the project
@@ -61,7 +63,8 @@ The server listens on port 7678. To use a different port, give the number: `carg
 | `crates/post-client` | The client logic without an interface |
 | `crates/post-app` | The application, `post` |
 | `docs` | The documents |
-| `tools` | Scripts for the automatic checks |
+| `site` | The pages and the styles of the website |
+| `tools` | Scripts for the automatic checks, and the program that makes the website |
 
 ## Development
 

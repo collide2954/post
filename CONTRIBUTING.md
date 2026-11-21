@@ -49,6 +49,8 @@ All documents obey ASD-STE100 Simplified Technical English (D-107).
 
 A change to the code and the related change to a document go into the same commit.
 
+The website shows the documents as web pages (D-175). A test examines each link of the website. A change to the English home page in `site` also changes the Spanish home page.
+
 A design decision gets a [decision record](docs/decisions/README.md).
 
 ## Commands
@@ -61,6 +63,7 @@ A design decision gets a [decision record](docs/decisions/README.md).
 | Write the JSON Schemas again | Set `POST_UPDATE_SPECIFICATION=1`, then run `cargo test -p post-proto` |
 | Write screenshots of each screen | Set `POST_SCREENSHOTS` to a directory, then run `cargo test -p post-app --test window` |
 | Start the application in Spanish | Set `POST_LANGUAGE=es-419`, then run `cargo run --bin post` |
+| Make the website in `target/site` | `cargo run -p post-site -- . target/site` |
 
 The coverage command uses `cargo-llvm-cov`. The license command uses `cargo-deny`.
 
@@ -74,3 +77,5 @@ Each push starts these checks on GitHub (D-103):
 - The coverage minimum of 90% for each crate (D-104).
 
 Mutation tests and fuzz tests start each night.
+
+A push that changes a document or a file in `site` publishes the website again.

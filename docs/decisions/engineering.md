@@ -14,6 +14,8 @@ These records tell you how we build Post. Read the [guide](README.md) first.
 | `post-client` | The client logic without an interface, and the local store |
 | `post-app` | The iced application |
 
+The `tools` directory holds the scripts of the automatic checks and the program that makes the website (D-175).
+
 **Reason.** A protocol change goes into the client and the server in one commit. One set of automatic checks examines all code.
 
 **Not selected.**

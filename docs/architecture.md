@@ -66,6 +66,17 @@ The application uses the iced toolkit (D-077).
 - `shell` connects the state to the toolkit: the start, the updates, and the subscriptions.
 - `main` selects the language and starts the shell.
 
+## The website
+
+The website is not a part of the product (D-175).
+
+- The `site` directory holds the home page in English and in Spanish, the page layout for documents, the styles, the fonts, and the icon.
+- The program `post-site` in `tools/site` makes the website. It copies the files of the `site` directory. It also makes one web page from each document of the repository.
+- In a document page, each decision record number is a link to that record.
+- A link to a file that is not a document goes to the repository on GitHub.
+
+A test makes the website from the repository and examines each link. The same test fails if a page loads content from a different server.
+
 ## Tests
 
 - Each module has unit tests. We write a test before the code that it examines (D-101).
