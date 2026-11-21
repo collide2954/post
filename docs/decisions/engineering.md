@@ -396,8 +396,50 @@ These holes stay: the async network code, TLS, SQLite, the window toolkit, JSON,
 
 Verus is under active development, and its makers say that functions can be broken or missing. The project accepts this risk. The normal build does not use Verus, thus the program can always be built without it.
 
+**History.** On 2026-11-21, the project selected the sequence of the work. The build of version 0.2 continues, and each new part with no input and no output gets its proof in the same step. The rules of the server get a proved core (D-178). The text form of keys gets its own proved code (D-179).
+
 **Not selected.**
 
 - ProVerif for the sign-in, Kani for the parsers, and TLA+ for the server rules.
 - A trial of Verus before the decision.
 - No formal verification.
+
+### D-178 Proved rules core of the server
+
+**Date.** 2026-11-21.
+
+**Decision.** The server keeps its accounts, handles, and invitations in memory, in a part that has no input and no output. This part is the rules core. The core makes each decision about an account, a handle, or an invitation. Verus proves its rules (D-177).
+
+- A change has three steps. The core calculates the new state and the list of changes. The server writes the changes to SQLite in one transaction. Only then does the new state replace the old state.
+- SQLite stores the data (D-051). It makes no decisions.
+- At the start, the server loads the data and examines it against the rules. If the data does not obey the rules, the server does not start.
+- The messages of the channels are not a part of the core.
+
+As a minimum, Verus proves these rules:
+
+- A key has a maximum of one account.
+- A handle has a maximum of one owner.
+- A reserved handle goes only to the account that had it, until the reserved time ends.
+- An invitation is not used more times than its limit, and it is not used after its end.
+- A handle change obeys the minimum interval.
+
+**Reason.** Verus cannot prove SQL. Rules in Rust with no input and no output can have a proof. They are also faster, because a sign-in needs no query. The server writes a change before it uses the change, thus the memory and the file agree after a failure.
+
+**Not selected.**
+
+- Proved functions for the small decisions only. SQLite then keeps the rules that connect many rows, and these rules have no proof.
+- Tests only for the rules of the server.
+
+### D-179 Own code for the text form of keys
+
+**Date.** 2026-11-21.
+
+**Decision.** The protocol crate contains its own code for the text form of keys, random values, and signatures. Verus proves this code (D-177). The project does not use the library `base64`.
+
+The proof shows two properties. The reader gives back each value that the writer writes. Each value has only one text.
+
+**Reason.** The text form is small, and each sign-in uses it. With our own code, the text form has a proof, and the project has one dependency less. The values are public, thus the code needs no protection against an attacker who measures time.
+
+**Not selected.**
+
+- The library `base64`. Many projects use it, but the text form of keys then has no proof.

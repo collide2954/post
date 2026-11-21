@@ -8,6 +8,8 @@ These records tell you how a Post server works and how an operator uses it. Read
 
 **Reason.** An operator installs nothing more. One file and one directory are easy to back up.
 
+**History.** On 2026-11-21, the project gave the rules for accounts, handles, and invitations to a proved core in memory (D-178). SQLite stores the data of the core, and it makes no decisions about these rules.
+
 **Not selected.**
 
 - PostgreSQL only.
