@@ -1,7 +1,20 @@
-[package]
-name = "post"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.0.4"
 edition = "2024"
 license = "Apache-2.0"
+repository = "https://github.com/collide2954/post"
+publish = false
 
-[dependencies]
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# The code has few comments (decision record D-106), thus these lints do not apply.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
