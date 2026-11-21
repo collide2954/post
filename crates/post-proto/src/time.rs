@@ -2,6 +2,9 @@ use std::fmt;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 const MILLIS_IN_SECOND: u64 = 1000;
 const MILLIS_IN_MINUTE: u64 = 60 * MILLIS_IN_SECOND;
 const MILLIS_IN_HOUR: u64 = 60 * MILLIS_IN_MINUTE;
@@ -166,6 +169,19 @@ impl fmt::Display for TimestampError {
 }
 
 impl std::error::Error for TimestampError {}
+
+impl Serialize for Timestamp {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Self::parse(&text).map_err(D::Error::custom)
+    }
+}
 
 #[cfg(test)]
 mod tests {

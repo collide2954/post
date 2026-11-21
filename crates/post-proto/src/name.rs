@@ -1,5 +1,8 @@
 use std::fmt;
 
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Name(String);
 
@@ -63,6 +66,19 @@ impl fmt::Display for NameError {
 }
 
 impl std::error::Error for NameError {}
+
+impl Serialize for Name {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for Name {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Self::parse(&text).map_err(D::Error::custom)
+    }
+}
 
 #[cfg(test)]
 mod tests {
