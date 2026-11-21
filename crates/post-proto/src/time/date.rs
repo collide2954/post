@@ -148,12 +148,11 @@ pub proof fn lemma_the_day_of_a_date_gives_the_date(year: int, month: int, day: 
     assert((5 * day_of_year + 2) / 153 == month_from_march);
 }
 
-#[expect(clippy::manual_is_multiple_of, reason = "Verus proves the arithmetic operators")]
 fn is_leap_year(year: u64) -> (leap: bool)
     ensures
         leap == leap_year(year as int),
 {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
 pub(super) fn days_in_month(year: u64, month: u64) -> (days: u64)
