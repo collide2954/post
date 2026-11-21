@@ -22,8 +22,10 @@ iced = { version = "0.14.0", default-features = false, features = ["advanced-sha
 iced_test = "0.14.0"
 jiff = "1.0.1"
 post-client = { path = "crates/post-client" }
+post-crypto = { path = "crates/post-crypto" }
 post-proto = { path = "crates/post-proto" }
 post-server = { path = "crates/post-server" }
+rusqlite = { version = "0.43.0", default-features = false, features = ["bundled", "cache"] }
 schemars = "1.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.154"

@@ -12,7 +12,9 @@ workspace = true
 
 [dependencies]
 axum.workspace = true
+post-crypto.workspace = true
 post-proto.workspace = true
+rusqlite.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
