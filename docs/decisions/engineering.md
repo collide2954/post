@@ -165,7 +165,7 @@ Benchmarks run in the automatic checks, and we record the results. A clear decre
 - A threat model in `docs/threat-model.md` (D-075).
 - The design philosophy and the decision records.
 
-All documents obey ASD-STE100 Simplified Technical English. A change to the code and the related change to a document go into the same commit.
+All documents obey ASD-STE100 Simplified Technical English. A change to the code and the related change to a document go into the same commit. The website shows the documents as web pages (D-175).
 
 **Reason.** Simple English is clear for all readers, also for a reader with a different first language. Documents that change with the code stay correct.
 
@@ -173,6 +173,8 @@ All documents obey ASD-STE100 Simplified Technical English. A change to the code
 
 - A README and a protocol specification only.
 - A website with guides from the start.
+
+**History.** On 2026-11-21, the project added a website that shows the documents (D-175). The website has no separate guides.
 
 ### D-108 Commits
 

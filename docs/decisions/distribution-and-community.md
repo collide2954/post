@@ -75,13 +75,15 @@ Each system gets builds for x86-64 and ARM64 processors. The automatic checks ru
 
 ### D-119 Application identifier
 
-**Decision.** The identifier of the application is `io.github.collide2954.Post`. The home page of the project is the GitHub repository.
+**Decision.** The identifier of the application is `io.github.collide2954.Post`. The home page of the project is the website (D-175).
 
 **Reason.** The identifier is free and valid for Flatpak and macOS. An identifier is hard to change later.
 
 **Not selected.**
 
 - An identifier from a domain name of the project.
+
+**History.** At first, the home page of the project was the GitHub repository. On 2026-11-21, the project added the website.
 
 ### D-120 Contributions
 
@@ -117,3 +119,22 @@ Each system gets builds for x86-64 and ARM64 processors. The automatic checks ru
 
 - An email address.
 - Public issues only.
+
+### D-175 Website
+
+**Date.** 2026-11-21.
+
+**Decision.** The project has a website at `https://collide2954.github.io/post/`. GitHub Pages serves it.
+
+- The home page tells what Post is. It has English and Latin American Spanish text.
+- The website shows the documents of the repository as web pages, in English: the philosophy, the decision records, the protocol specification, the architecture, the threat model, and the changelog.
+- A program in the repository makes the pages from the Markdown files. The automatic checks publish the website after each change.
+- The website uses no scripts, no cookies, and no content from other servers.
+
+**Reason.** A person who is not a programmer gets a clear first view of Post. Each document still has one source, thus the website cannot disagree with the repository. The website obeys the same privacy rule as the application (D-076).
+
+**Not selected.**
+
+- A home page only, with links to the documents in the repository.
+- English text only.
+- No website. This was the decision until 2026-11-21 (D-107, D-119).

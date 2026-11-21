@@ -223,6 +223,8 @@ Screen reader support depends on the iced toolkit. We add it when the toolkit ma
 - The letter P.
 - A postage stamp.
 
+**Open point.** The first form of the icon is on the website (D-175). The project must examine it before the application uses it.
+
 ### D-096 Words in the interface
 
 **Decision.** The interface uses plain words: server, channel, direct message, operator, moderator. It uses one word from the post office: "sealed".
