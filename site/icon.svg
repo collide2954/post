@@ -1,16 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>Post</title>
-  <mask id="icon-ring">
-    <rect width="64" height="64" fill="#fff"/>
-    <circle cx="23.5" cy="32" r="21.5" fill="#000"/>
-  </mask>
-  <rect width="64" height="64" rx="13" fill="#fbf8f3"/>
-  <g fill="none" stroke="#1f2328" stroke-linecap="round" transform="rotate(-10 32 32)">
-    <circle cx="23.5" cy="32" r="16" stroke-width="5"/>
-    <g stroke-width="4" mask="url(#icon-ring)">
-      <path d="M30 22.5q2.42-4 4.83 0t4.83 0 4.83 0 4.83 0 4.83 0 4.83 0"/>
-      <path d="M30 32q2.42-4 4.83 0t4.83 0 4.83 0 4.83 0 4.83 0 4.83 0"/>
-      <path d="M30 41.5q2.42-4 4.83 0t4.83 0 4.83 0 4.83 0 4.83 0 4.83 0"/>
+  <clipPath id="tile">
+    <rect width="64" height="64" rx="14"/>
+  </clipPath>
+  <g clip-path="url(#tile)">
+    <rect width="64" height="64" fill="#fbf8f3"/>
+    <g fill="none" stroke="#1f2328" stroke-width="5.5" stroke-linecap="round">
+      <circle cx="22" cy="32" r="15.5"/>
+      <path d="M42.78 20Q46.28 15 49.78 20Q53.28 25 56.78 20Q60.28 15 63.78 20Q67.28 25 70.78 20Q71.39 19.13 72 18.57"/>
+      <path d="M46 29.52Q47.89 29.3 49.78 32Q53.28 37 56.78 32Q60.28 27 63.78 32Q67.28 37 70.78 32Q71.39 31.13 72 30.57"/>
+      <path d="M42.78 44Q46.28 39 49.78 44Q53.28 49 56.78 44Q60.28 39 63.78 44Q67.28 49 70.78 44Q71.39 43.13 72 42.57"/>
     </g>
   </g>
 </svg>

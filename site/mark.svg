@@ -1,16 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 64" aria-hidden="true">
-  <mask id="mark-ring">
-    <rect width="96" height="64" fill="#fff"/>
-    <circle cx="32" cy="32" r="30.5" fill="#000"/>
-  </mask>
-  <g fill="none" stroke="currentColor" stroke-linecap="round" transform="rotate(-8 48 32)">
-    <circle cx="32" cy="32" r="26" stroke-width="3.5"/>
-    <circle cx="32" cy="32" r="19.5" stroke-width="1.5"/>
-    <g stroke-width="2.5" mask="url(#mark-ring)">
-      <path d="M40 17q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
-      <path d="M40 27q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
-      <path d="M40 37q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
-      <path d="M40 47q2.75-3.6 5.5 0t5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0 5.5 0"/>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 93 48" aria-hidden="true">
+  <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round">
+    <circle cx="24" cy="24" r="20"/>
+    <path d="M48.19 12Q51.69 7.5 55.19 12Q58.69 16.5 62.19 12Q65.69 7.5 69.19 12Q72.69 16.5 76.19 12Q79.69 7.5 83.19 12Q86.69 16.5 90.19 12"/>
+    <path d="M51 21.84Q53.09 21.31 55.19 24Q58.69 28.5 62.19 24Q65.69 19.5 69.19 24Q72.69 28.5 76.19 24Q79.69 19.5 83.19 24Q86.69 28.5 90.19 24"/>
+    <path d="M48.19 36Q51.69 31.5 55.19 36Q58.69 40.5 62.19 36Q65.69 31.5 69.19 36Q72.69 40.5 76.19 36Q79.69 31.5 83.19 36Q86.69 40.5 90.19 36"/>
   </g>
 </svg>
