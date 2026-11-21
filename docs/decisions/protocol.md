@@ -69,3 +69,30 @@ The automatic checks fail if the code, the schemas, and the examples do not agre
 
 - A custom `post://` link.
 - A server address together with a code that the user types.
+
+### D-155 Message style
+
+**Date.** 2026-11-21.
+
+**Decision.** A protocol message is a flat JSON object. The `type` field gives the kind of message as a word in lower case, for example `hello`, `send`, or `message`.
+
+A client can put a `ref` number in a request. The answer of the server contains the same number.
+
+An `error` message has a `code` for programs and a `text` for people. A code is in lower case. If a code has more than one word, hyphens join the words, for example `no-such-channel`.
+
+**Reason.** A person can read a flat object easily. A JSON Schema describes it easily. The style keeps no habit of an older protocol.
+
+**Not selected.**
+
+- Verbs in the IRC style, for example `MSG` and `JOIN`.
+- JSON-RPC 2.0. Each line has more levels and more fixed fields.
+
+### D-156 Protocol version 0
+
+**Date.** 2026-11-21.
+
+**Decision.** The protocol version is 0 while the version of the application is below 1.0. Version 0 can change in each release, and it makes no promise to other clients. Protocol version 1 starts with version 1.0 of the application.
+
+A client gives its protocol version in the `hello` message. The server refuses a version that it does not support.
+
+**Reason.** The protocol must be free to change while we build the functions. An honest number tells the author of a different client that the protocol is not stable.
