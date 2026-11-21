@@ -135,7 +135,7 @@ mod tests {
     };
 
     fn bytes(text: &str) -> [u8; 32] {
-        hex::decode(text).expect("valid hexadecimal text")
+        hex::decode(text.as_bytes()).expect("valid hexadecimal text")
     }
 
     fn server_key() -> ServerKey {

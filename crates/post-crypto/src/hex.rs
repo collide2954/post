@@ -1,6 +1,4 @@
 use vstd::prelude::*;
-#[cfg(verus_keep_ghost)]
-use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
 
@@ -90,13 +88,12 @@ pub fn push(text: &mut String, bytes: &[u8])
     assert(bytes@.take(index as int) =~= bytes@);
 }
 
-pub fn decode<const N: usize>(text: &str) -> (bytes: Option<[u8; N]>)
+pub fn decode<const N: usize>(digits: &[u8]) -> (bytes: Option<[u8; N]>)
     ensures
-        bytes matches Some(bytes) ==> text.spec_bytes() == hex_text(bytes@),
+        bytes matches Some(bytes) ==> digits@ == hex_text(bytes@),
         bytes is None ==> forall|bytes: Seq<u8>|
-            bytes.len() == N ==> text.spec_bytes() != #[trigger] hex_text(bytes),
+            bytes.len() == N ==> digits@ != #[trigger] hex_text(bytes),
 {
-    let digits = text.as_bytes();
     if !digits.len().is_multiple_of(2) || digits.len() / 2 != N {
         return None;
     }
@@ -104,7 +101,6 @@ pub fn decode<const N: usize>(text: &str) -> (bytes: Option<[u8; N]>)
     let mut index = 0;
     while index < N
         invariant
-            digits@ == text.spec_bytes(),
             digits@.len() == 2 * N <= usize::MAX,
             index <= N,
             forall|i: int|
@@ -157,21 +153,21 @@ mod tests {
 
     #[test]
     fn reads_the_text_that_it_writes() {
-        assert_eq!(decode::<4>("000fa5ff"), Some([0x00, 0x0f, 0xa5, 0xff]));
-        assert_eq!(decode::<0>(""), Some([]));
+        assert_eq!(decode::<4>(b"000fa5ff"), Some([0x00, 0x0f, 0xa5, 0xff]));
+        assert_eq!(decode::<0>(b""), Some([]));
     }
 
     #[test]
     fn refuses_an_incorrect_length() {
-        assert_eq!(decode::<2>("00"), None);
-        assert_eq!(decode::<2>("000"), None);
-        assert_eq!(decode::<2>("000000"), None);
+        assert_eq!(decode::<2>(b"00"), None);
+        assert_eq!(decode::<2>(b"000"), None);
+        assert_eq!(decode::<2>(b"000000"), None);
     }
 
     #[test]
     fn refuses_a_character_that_is_not_a_lower_case_digit() {
         for text in ["0g", "g0", "0A", "A0", " 0", "0 ", "-1", "\u{e9}"] {
-            assert_eq!(decode::<1>(text), None, "{text:?}");
+            assert_eq!(decode::<1>(text.as_bytes()), None, "{text:?}");
         }
     }
 }

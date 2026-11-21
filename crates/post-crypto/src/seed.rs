@@ -6,9 +6,10 @@ use sha2::Sha256;
 use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::keys::AccountKey;
-use crate::{hex, random};
+use crate::random;
 
-const PREFIX: &str = "post-seed-1:";
+mod text;
+
 const ACCOUNT_KEY: &[u8] = b"post-account-key-1\0";
 
 pub struct Seed([u8; Seed::BYTES]);
@@ -31,21 +32,13 @@ impl Seed {
 
     #[must_use]
     pub fn encode(&self) -> Zeroizing<String> {
-        let mut text = Zeroizing::new(String::with_capacity(PREFIX.len() + Self::BYTES * 2));
-        text.push_str(PREFIX);
-        hex::push(&mut text, &self.0);
+        let mut text = Zeroizing::new(String::with_capacity(text::LENGTH));
+        text::write(&mut text, &self.0);
         text
     }
 
     pub fn decode(text: &str) -> Result<Self, SeedError> {
-        let line = text
-            .strip_suffix("\r\n")
-            .or_else(|| text.strip_suffix('\n'))
-            .unwrap_or(text);
-        line.strip_prefix(PREFIX)
-            .and_then(hex::decode)
-            .map(Self)
-            .ok_or(SeedError)
+        text::read(text).map(Self).ok_or(SeedError)
     }
 
     #[must_use]
@@ -98,7 +91,7 @@ mod tests {
 
     fn server() -> Key {
         let public = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
-        Key::from_bytes(hex::decode(public).expect("valid hexadecimal text"))
+        Key::from_bytes(hex::decode(public.as_bytes()).expect("valid hexadecimal text"))
     }
 
     #[test]
@@ -150,7 +143,8 @@ mod tests {
     #[test]
     fn calculates_the_account_key_with_hkdf() {
         let expected = "ad9e14c9f86cbdd79ca7314be65c336c6cd0ed7ddf24dd51e3ca397bfee85443";
-        let expected = ServerKey::from_bytes(&hex::decode(expected).expect("valid text"));
+        let expected =
+            ServerKey::from_bytes(&hex::decode(expected.as_bytes()).expect("valid text"));
 
         let account = counted().account_key(&server());
 

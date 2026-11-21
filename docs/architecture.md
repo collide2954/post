@@ -48,7 +48,7 @@ Verus proves the rules of `name`, `code`, `part`, and `time`. The [verification]
 
 `post-crypto` uses libraries for all cryptography (D-168). It contains no algorithm of its own.
 
-- `seed` holds the secret seed of a profile. It calculates the account key for a server.
+- `seed` holds the secret seed of a profile. It calculates the account key for a server, and it writes and reads the text form of the seed.
 - `keys` holds the server key and the account key. It makes and examines the proofs of the sign-in.
 - `transcript` writes the bytes that a proof of the sign-in signs.
 - `hex` writes and reads the hexadecimal text of the seed.
@@ -56,7 +56,7 @@ Verus proves the rules of `name`, `code`, `part`, and `time`. The [verification]
 
 A test examines the proofs in the example conversations of the protocol specification.
 
-Verus proves `transcript`, `hex`, and the generator of invitation codes in `random` (see the [verification](verification.md) document).
+Verus proves `transcript`, `hex`, the text form of the seed, and the generator of invitation codes in `random` (see the [verification](verification.md) document).
 
 ## The server crate
 
