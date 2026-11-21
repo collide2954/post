@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{title}} · Post</title>
+<link rel="icon" href="{{root}}icon.svg" type="image/svg+xml">
+<link rel="preload" href="{{root}}fonts/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{root}}style.css">
+</head>
+<body>
+<a class="skip" href="#content">Go to the content</a>
+<header class="top">
+<div class="wrap">
+<a class="brand" href="{{root}}">{{mark}}<span>Post</span></a>
+<nav aria-label="Documents">
+<ul>
+<li><a href="{{root}}philosophy.html">Philosophy</a></li>
+<li><a href="{{root}}decisions/">Decisions</a></li>
+<li><a href="{{root}}protocol/">Protocol</a></li>
+<li><a href="{{root}}architecture.html">Architecture</a></li>
+<li><a href="{{root}}threat-model.html">Threat model</a></li>
+<li><a href="{{root}}changelog.html">Changelog</a></li>
+</ul>
+</nav>
+</div>
+</header>
+<main id="content" class="document">
+{{content}}
+<p class="source">This page comes from <a href="{{source}}">a file in the repository</a>. The project changes the file and the page together.</p>
+</main>
+<footer class="bottom">
+<div class="wrap">
+<p>Post has the <a href="https://github.com/collide2954/post/blob/main/LICENSE">Apache License, version 2.0</a>. The source code is in the <a href="https://github.com/collide2954/post">repository on GitHub</a>.</p>
+<p>This website uses no scripts, no cookies, and no content from other servers.</p>
+</div>
+</footer>
+</body>
+</html>

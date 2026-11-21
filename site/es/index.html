@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es-419">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Post: una aplicación de chat moderna con el espíritu de IRC</title>
+<meta name="description" content="Post es una aplicación de chat moderna con el espíritu de IRC: simple, abierta, autoalojada y con cifrado de extremo a extremo opcional.">
+<link rel="canonical" href="https://collide2954.github.io/post/es/">
+<link rel="alternate" hreflang="en" href="https://collide2954.github.io/post/">
+<link rel="alternate" hreflang="es-419" href="https://collide2954.github.io/post/es/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Post">
+<meta property="og:locale" content="es_419">
+<meta property="og:title" content="Post: una aplicación de chat moderna con el espíritu de IRC">
+<meta property="og:description" content="Simple, abierta, autoalojada y con cifrado de extremo a extremo opcional.">
+<meta property="og:url" content="https://collide2954.github.io/post/es/">
+<meta property="og:image" content="https://collide2954.github.io/post/images/chat-light.png">
+<link rel="icon" href="{{root}}icon.svg" type="image/svg+xml">
+<link rel="preload" href="{{root}}fonts/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{root}}style.css">
+</head>
+<body>
+<a class="skip" href="#content">Ir al contenido</a>
+<header class="top">
+<div class="wrap">
+<a class="brand" href="./">{{mark}}<span>Post</span></a>
+<nav aria-label="Sitio web">
+<ul>
+<li><a href="{{root}}philosophy.html" hreflang="en">Filosofía</a></li>
+<li><a href="{{root}}decisions/" hreflang="en">Decisiones</a></li>
+<li><a href="{{root}}protocol/" hreflang="en">Protocolo</a></li>
+<li><a href="{{root}}changelog.html" hreflang="en">Cambios</a></li>
+<li><a href="https://github.com/collide2954/post">GitHub</a></li>
+<li><a href="{{root}}" lang="en" hreflang="en">English</a></li>
+</ul>
+</nav>
+</div>
+</header>
+<main id="content">
+<section class="hero">
+<div class="wrap">
+<div>
+<h1>Una aplicación de chat moderna con el espíritu de IRC.</h1>
+<p class="lead">Post es simple, abierta y autoalojada, con cifrado de extremo a extremo opcional. Conserva la simplicidad de IRC y agrega las funciones que la mayoría de las personas usa todos los días.</p>
+<p class="actions">
+<a class="button" href="https://github.com/collide2954/post/releases">Descargas</a>
+<a href="https://github.com/collide2954/post">Código fuente</a>
+</p>
+<p class="state">Post está al inicio de su desarrollo. No lo uses para conversaciones reales.</p>
+</div>
+<figure>
+<div class="window">
+<picture>
+<source srcset="{{root}}images/chat-dark.png" media="(prefers-color-scheme: dark)">
+<img src="{{root}}images/chat-light.png" width="1800" height="1200" alt="La pantalla de chat de Post. Los usuarios ana y ben intercambian mensajes en el canal #lobby.">
+</picture>
+</div>
+<figcaption>Una parte de la pantalla de chat de Post. La imagen sigue el modo claro o el modo oscuro de tu sistema.</figcaption>
+</figure>
+</div>
+</section>
+
+<section class="band" aria-labelledby="ideas">
+<div class="wrap">
+<h2 id="ideas">Entre IRC y Telegram</h2>
+<p class="intro">IRC es simple y claro, pero es antiguo. Telegram tiene muchas funciones, pero se volvió demasiado complejo. Post está entre los dos.</p>
+<ul class="grid">
+<li>
+<h3>Primero, lo simple</h3>
+<p>Post tiene pocos conceptos: servidor, canal, mensaje directo, mensaje y usuario. Cada tarea tiene un solo método bueno.</p>
+</li>
+<li>
+<h3>La seguridad siempre está activa</h3>
+<p>Cada conexión usa TLS. Un chat puede tener cifrado de extremo a extremo. Ese chat es un chat sellado.</p>
+</li>
+<li>
+<h3>La verdad</h3>
+<p>Cada chat muestra quién puede leerlo. Post no tiene telemetría ni publicidad.</p>
+</li>
+<li>
+<h3>Tu servidor, tus datos</h3>
+<p>Cada servidor es independiente y cualquier persona puede operar uno. Una cuenta no tiene contraseña, correo electrónico ni número de teléfono.</p>
+</li>
+<li>
+<h3>Abierto</h3>
+<p>El protocolo es público. Sus mensajes son texto JSON que una persona puede leer. Cualquier programa que respete el protocolo puede conectarse.</p>
+</li>
+<li>
+<h3>Rápido y tranquilo</h3>
+<p>El texto va primero. Solo un mensaje directo o una mención genera una notificación. Post no tiene confirmaciones de lectura.</p>
+</li>
+<li>
+<h3>Para todas las personas</h3>
+<p>Puedes hacer cada tarea con el teclado. La interfaz tiene texto en inglés y en español de Latinoamérica.</p>
+</li>
+<li>
+<h3>Un final</h3>
+<p>La versión 1.0 contiene todas las funciones de Post. Después, el proyecto corrige errores y mantiene Post seguro.</p>
+</li>
+</ul>
+<p class="more">Lee la <a href="{{root}}philosophy.html" hreflang="en">filosofía de diseño</a> (en inglés).</p>
+</div>
+</section>
+
+<section class="band" aria-labelledby="plan">
+<div class="wrap">
+<h2 id="plan">El plan para la versión 1.0</h2>
+<p class="intro">La versión 1.0 contiene estas funciones. La mayoría todavía no existe.</p>
+<ul class="plain">
+<li>Canales, mensajes directos e historial de mensajes.</li>
+<li>Respuestas, reacciones, menciones, archivos, imágenes y búsqueda.</li>
+<li>Canales de voz.</li>
+<li>Chats sellados con cifrado de extremo a extremo.</li>
+<li>Roles y herramientas de moderación para una comunidad.</li>
+<li>Bots, webhooks y un protocolo público.</li>
+</ul>
+<p class="more">La <a href="{{root}}decisions/engineering.html#d-100" hreflang="en">hoja de ruta</a> da el orden de las versiones. El <a href="{{root}}changelog.html" hreflang="en">registro de cambios</a> dice qué puede hacer cada versión. Los dos documentos están en inglés.</p>
+</div>
+</section>
+
+<section class="band" aria-labelledby="limits">
+<div class="wrap">
+<h2 id="limits">Lo que Post no tendrá</h2>
+<p class="intro">Un producto solo se mantiene simple si rechaza funciones.</p>
+<ul class="plain">
+<li>Stickers, búsqueda de GIF e historias.</li>
+<li>Pagos, miniaplicaciones y publicidad.</li>
+<li>Un feed ordenado por un algoritmo.</li>
+<li>Confirmaciones de lectura y horas de «última conexión».</li>
+</ul>
+<p class="more">La filosofía da <a href="{{root}}philosophy.html#what-post-is-not" hreflang="en">la lista completa</a> (en inglés).</p>
+</div>
+</section>
+
+<section class="band" aria-labelledby="documents">
+<div class="wrap">
+<h2 id="documents">Documentos</h2>
+<p class="intro">El proyecto registra cada decisión de diseño y su razón. Los documentos están en inglés simple.</p>
+<ul class="grid">
+<li>
+<h3><a href="{{root}}philosophy.html" hreflang="en">Filosofía de diseño</a></h3>
+<p>Las ideas detrás de Post.</p>
+</li>
+<li>
+<h3><a href="{{root}}decisions/" hreflang="en">Registros de decisiones</a></h3>
+<p>Cada decisión de diseño y su razón.</p>
+</li>
+<li>
+<h3><a href="{{root}}protocol/" hreflang="en">Especificación del protocolo</a></h3>
+<p>Los mensajes entre un cliente y un servidor.</p>
+</li>
+<li>
+<h3><a href="{{root}}architecture.html" hreflang="en">Arquitectura</a></h3>
+<p>Las partes del código.</p>
+</li>
+<li>
+<h3><a href="{{root}}threat-model.html" hreflang="en">Modelo de amenazas</a></h3>
+<p>Lo que Post protege y lo que no protege.</p>
+</li>
+<li>
+<h3><a href="{{root}}changelog.html" hreflang="en">Registro de cambios</a></h3>
+<p>Los cambios de cada versión.</p>
+</li>
+</ul>
+</div>
+</section>
+</main>
+<footer class="bottom">
+<div class="wrap">
+<p>Post tiene la <a href="https://github.com/collide2954/post/blob/main/LICENSE" hreflang="en">Licencia Apache, versión 2.0</a>. El código fuente está en el <a href="https://github.com/collide2954/post">repositorio de GitHub</a>.</p>
+<p>Las fuentes <a href="{{root}}fonts/Inter-LICENSE.txt" hreflang="en">Inter</a> y <a href="{{root}}fonts/JetBrainsMono-LICENSE.txt" hreflang="en">JetBrains Mono</a> tienen la SIL Open Font License, versión 1.1.</p>
+<p>Este sitio web no usa scripts, cookies ni contenido de otros servidores.</p>
+</div>
+</footer>
+</body>
+</html>
