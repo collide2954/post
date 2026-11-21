@@ -76,14 +76,18 @@ These records tell you how the desktop application looks and operates. Read the 
 
 ### D-084 Fonts
 
-**Decision.** The application contains its own open fonts: a sans-serif font for text and a monospace font for code. The first candidates are Inter and JetBrains Mono.
+**Decision.** The application contains its own open fonts: Inter for text and JetBrains Mono for code.
 
-**Reason.** Post looks the same, and equally good, on each system.
+**Reason.** Post looks the same, and equally good, on each system. Inter is neutral and clear at small sizes.
 
 **Not selected.**
 
 - The fonts of each operating system.
 - A monospace font for all text.
+- IBM Plex Sans and IBM Plex Mono.
+- Atkinson Hyperlegible Next and Atkinson Hyperlegible Mono.
+
+**History.** At first, Inter and JetBrains Mono were only candidates. On 2026-11-21, the project selected them before the work on the first window.
 
 ### D-085 Emoji
 
@@ -244,7 +248,7 @@ Screen reader support depends on the iced toolkit. We add it when the toolkit ma
 **Decision.** A user can change these parts of the appearance:
 
 - The font for text and the font for code. The fonts that Post contains are the default.
-- The time format: a setting adds the seconds.
+- The time format: one setting selects the 12-hour format (D-161), and one setting adds the seconds.
 - The handle colors: a setting turns them off.
 - The images: a setting shows each image as a small card until the user clicks it.
 
@@ -266,3 +270,29 @@ Screen reader support depends on the iced toolkit. We add it when the toolkit ma
 
 - A question at the first click for each site.
 - A question at each click.
+
+### D-160 Window of the first slice
+
+**Date.** 2026-11-21.
+
+**Decision.** The window of version 0.1 has the real visual style (D-081), the fonts (D-084), and compact lines (D-078). It has two screens: a connect screen and one chat screen. The chat screen has a header, the timeline, and the input field. The sidebar and the member list (D-079) come in version 0.3.
+
+**Reason.** The first demonstration already looks like Post. The slice has no empty parts of the layout.
+
+**Not selected.**
+
+- The full layout with a sidebar and a member list from the start.
+- A plain window with the default look of the toolkit.
+
+### D-161 Time format
+
+**Date.** 2026-11-21.
+
+**Decision.** The timeline shows the local time of the user in the 24-hour format, for example 14:02. One setting selects the 12-hour format. A different setting adds the seconds (D-152).
+
+**Reason.** A time with a constant width keeps the compact lines in a straight column. The 24-hour format is an IRC tradition.
+
+**Not selected.**
+
+- The convention of the operating system. Separate code for each system is necessary.
+- The 24-hour format with no setting.
