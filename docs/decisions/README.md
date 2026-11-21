@@ -8,6 +8,7 @@ Read the [design philosophy](../philosophy.md) first. The philosophy gives the i
 
 Each record has an identifier (for example D-012) and a title. A record has these parts:
 
+- **Date** gives the date of the record. Some records do not have this part.
 - **Decision** tells you what Post does or what the project does.
 - **Reason** tells you why.
 - **Not selected** gives the other options. Some records do not have this part.
@@ -16,7 +17,7 @@ Each record has an identifier (for example D-012) and a title. A record has thes
 
 If a decision is open, the **Decision** part says so.
 
-All records have the date 2026-11-20, unless a record gives a different date.
+A record without a **Date** part has the date 2026-11-20.
 
 ## How to change a decision
 
@@ -32,12 +33,12 @@ A new record gets the next free number. Do not use a number again.
 |---|---|---|
 | [product.md](product.md) | What Post does for a user | D-001 to D-036, D-122 to D-130 |
 | [voice.md](voice.md) | Voice channels | D-037 to D-044, D-131, D-132 |
-| [protocol.md](protocol.md) | The Post protocol | D-045 to D-050 |
+| [protocol.md](protocol.md) | The Post protocol | D-045 to D-050, D-155, D-156 |
 | [server.md](server.md) | The server and its operation | D-051 to D-060, D-133 to D-146 |
 | [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076, D-147 to D-149 |
-| [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154 |
-| [engineering.md](engineering.md) | How we build Post | D-097 to D-112 |
-| [distribution-and-community.md](distribution-and-community.md) | Releases and the project community | D-113 to D-121 |
+| [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154, D-160, D-161 |
+| [engineering.md](engineering.md) | How we build Post | D-097 to D-112, D-157 to D-159 |
+| [distribution-and-community.md](distribution-and-community.md) | Releases and the project community | D-113 to D-121, D-162 |
 
 ## Index
 
@@ -110,6 +111,8 @@ A new record gets the next free number. Do not use a number again.
 - D-048 Protocol version
 - D-049 Specification
 - D-050 Invite links
+- D-155 Message style
+- D-156 Protocol version 0
 
 ### Server
 
@@ -187,6 +190,8 @@ A new record gets the next free number. Do not use a number again.
 - D-152 Appearance settings
 - D-153 Sounds and automatic start
 - D-154 Links
+- D-160 Window of the first slice
+- D-161 Time format
 
 ### Engineering
 
@@ -206,6 +211,9 @@ A new record gets the next free number. Do not use a number again.
 - D-110 Dependencies
 - D-111 Toolchain
 - D-112 Work procedure
+- D-157 Network libraries
+- D-158 Details of the first slice
+- D-159 Program names
 
 ### Distribution and community
 
@@ -218,3 +226,4 @@ A new record gets the next free number. Do not use a number again.
 - D-119 Application identifier
 - D-120 Contributions
 - D-121 Code of conduct
+- D-162 Security reports
