@@ -6,6 +6,7 @@ use crate::{Name, Timestamp};
 
 pub const PROTOCOL_VERSION: u32 = 0;
 pub const DEFAULT_PORT: u16 = 7678;
+pub const LOBBY: &str = "lobby";
 
 /// A message from a client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -283,6 +284,11 @@ mod tests {
     #[test]
     fn the_protocol_version_is_zero() {
         assert_eq!(PROTOCOL_VERSION, 0);
+    }
+
+    #[test]
+    fn the_one_channel_has_the_name_lobby() {
+        assert_eq!(crate::LOBBY, "lobby");
     }
 
     #[test]

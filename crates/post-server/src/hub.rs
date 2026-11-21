@@ -1,11 +1,9 @@
 use std::collections::BTreeMap;
 
 use post_proto::{
-    ClientMessage, ErrorCode, Name, PROTOCOL_VERSION, ServerMessage, TextError, Timestamp,
+    ClientMessage, ErrorCode, LOBBY, Name, PROTOCOL_VERSION, ServerMessage, TextError, Timestamp,
     check_text,
 };
-
-pub const LOBBY: &str = "lobby";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ConnectionId(u64);
@@ -172,9 +170,9 @@ fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Out
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, Name, ServerMessage, Timestamp};
+    use post_proto::{ClientMessage, ErrorCode, LOBBY, Name, ServerMessage, Timestamp};
 
-    use super::{ConnectionId, Hub, LOBBY, Outgoing};
+    use super::{ConnectionId, Hub, Outgoing};
 
     fn now() -> Timestamp {
         Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid")
@@ -233,11 +231,6 @@ mod tests {
             })
             .collect();
         (hub, ids)
-    }
-
-    #[test]
-    fn the_channel_has_the_name_lobby() {
-        assert_eq!(LOBBY, "lobby");
     }
 
     #[test]
