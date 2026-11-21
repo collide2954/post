@@ -39,9 +39,14 @@ A separate round of design questions sets more details before the voice work sta
 
 ### D-040 Sound only
 
-**Decision.** A voice channel carries sound only. Post has no video and no screen share. Screen share can become a separate decision later.
+**Decision.** A voice channel carries sound only. Post has no video and no screen share.
 
-**Reason.** All the work goes into clear sound with a small delay.
+**Reason.** All the work goes into clear sound with a small delay. A person who must share a screen uses a tool for meetings.
+
+**Not selected.**
+
+- Screen share in version 1.0.
+- Screen share and camera video.
 
 ### D-041 Voice security
 
@@ -76,9 +81,9 @@ A separate round of design questions sets more details before the voice work sta
 - Voice activation as a silent default.
 - Push-to-talk as a silent default.
 
-### D-044 First voice release
+### D-044 Voice functions
 
-**Decision.** The first voice release contains these functions:
+**Decision.** Voice has these functions:
 
 - Go in and go out with one click.
 - An indicator that shows who talks.
@@ -88,10 +93,38 @@ A separate round of design questions sets more details before the voice work sta
 - Noise suppression and echo cancellation.
 - Selection of the sound devices, with a test.
 - Moderator tools: mute a person, or remove a person from the channel.
+- Announcement mode: only the owner and the moderators talk, and the other members listen.
+- Priority speaker: a moderator holds a key, and the volume of all other persons decreases.
+- An away room: a person who is idle for a set time moves to a quiet channel automatically.
 
-**Reason.** Clear sound and a small delay come first. A small set lets us make each function very good.
+Post does not record voice. The documents tell the user that a listener can record with other tools.
+
+**Reason.** Clear sound and a small delay come first. Announcement mode uses a concept that text channels already have. Without a record function, people talk more freely, and the server holds no recordings.
 
 **Not selected.**
 
-- A priority speaker and an announcement mode for voice.
-- The full TeamSpeak set: whisper, an away room, temporary channels, and a record function.
+- Whisper to selected persons. It makes lists, more keys, and more interface necessary.
+- Temporary channels.
+- A record function with a clear sign.
+
+### D-131 Voice quality
+
+**Decision.** Voice uses a default quality that is good for speech on a normal connection. The operator sets the maximum bitrate and the maximum number of persons in one voice channel. A channel owner can select "high quality" for a channel in these limits, for example for music. Users get no codec controls.
+
+**Reason.** Most people do not know which codec values to select. An operator can still control the load on the server.
+
+**Not selected.**
+
+- Detailed codec settings for each channel.
+- One fixed quality for all servers.
+
+### D-132 Voice sounds
+
+**Decision.** Post plays a short, soft sound when a person goes into or out of the voice channel of the user. It also plays a sound when the user mutes the microphone. A setting turns each sound off.
+
+**Reason.** The user knows what occurs while the user looks at a different window.
+
+**Not selected.**
+
+- No sounds.
+- Spoken notices, as in TeamSpeak.
