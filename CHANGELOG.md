@@ -2,6 +2,11 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.0.4 - 2026-11-21
+
+- Add 8 decision records for version 0.1 (D-155 to D-162).
+- Select Inter and JetBrains Mono as the fonts (D-084).
+
 ## 0.0.3 - 2026-11-20
 
 - Make the public web view an open decision (D-032).
