@@ -99,6 +99,7 @@ The public web view is an open decision (D-032). If the project selects it, it g
 - Mutation tests examine the protocol and cryptography crates.
 - Each parser has a fuzz target.
 - A git hook in the repository runs the format check, clippy, and the tests before each commit.
+- Verus proves the code that has a specification (D-177).
 
 **Reason.** The checks stop a decrease in quality before it gets into the `main` branch.
 
@@ -213,7 +214,7 @@ All documents obey ASD-STE100 Simplified Technical English. A change to the code
 
 ### D-111 Toolchain
 
-**Decision.** The file `rust-toolchain.toml` sets one stable Rust release. We change it in a separate commit soon after each new stable release.
+**Decision.** The file `rust-toolchain.toml` sets one stable Rust release. We change it in a separate commit soon after each new stable release. The proofs use the Rust release that Verus sets (D-177), thus the proved code must also build with that release.
 
 **Reason.** The local computer and the automatic checks use the same compiler and the same lints. A new Rust release cannot break the `main` branch.
 
@@ -374,3 +375,29 @@ Application:
 - The F12 key shows and hides the protocol console when the developer setting is on.
 
 **Reason.** Each rule is the final rule, or it is clearly temporary. The rules keep the version as small as the decisions permit.
+
+### D-177 Formal verification
+
+**Date.** 2026-11-21.
+
+**Decision.** The project proves parts of the code with Verus. Verus is the only tool for formal verification in the project.
+
+- We take the proofs as far as the tool permits. A proof applies to all inputs, not to examples.
+- New code that has no input and no output gets a specification and a proof.
+- Where Verus cannot work, the code has a hole. A hole is code or an assumption that has no proof.
+- The document `docs/verification.md` tells what each proof shows, and it names each hole.
+- The proofs run before each commit, if the computer has Verus. They also run in the automatic checks on each push.
+- The documents tell exactly what a proof shows. They never say that Post as a whole is verified.
+- The version of Verus and the version of its library `vstd` are fixed. We change them together.
+
+These holes stay: the async network code, TLS, SQLite, the window toolkit, JSON, files, and the cryptographic algorithms. The security of the sign-in against an attacker in the network also has no proof, because Verus does not analyze cryptographic protocols.
+
+**Reason.** A test examines some inputs. A proof examines all inputs. Verus proves the Rust code itself, thus a proof cannot disagree with the program. It operates on the three systems of the project.
+
+Verus is under active development, and its makers say that functions can be broken or missing. The project accepts this risk. The normal build does not use Verus, thus the program can always be built without it.
+
+**Not selected.**
+
+- ProVerif for the sign-in, Kani for the parsers, and TLA+ for the server rules.
+- A trial of Verus before the decision.
+- No formal verification.

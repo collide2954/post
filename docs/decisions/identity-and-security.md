@@ -154,7 +154,7 @@ These records tell you how Post handles accounts, keys, and encryption. Read the
 
 ### D-075 Assurance
 
-**Decision.** We write a threat model before the work on identity starts. All cryptography comes from libraries that experts examined: rustls and OpenMLS. Tests examine the security functions. The project does not plan an independent audit.
+**Decision.** We write a threat model before the work on identity starts. All cryptography comes from libraries that experts examined: rustls and OpenMLS. Tests examine the security functions, and Verus proves the code that has a specification (D-177). The project does not plan an independent audit.
 
 The documents must tell the reader that no independent audit exists. They must also tell what a server operator can see.
 

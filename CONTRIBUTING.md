@@ -37,6 +37,7 @@ The hook runs the format check, clippy, and the tests before each commit.
 - `unsafe` code is not permitted.
 - Each interface text comes from the catalogs in `crates/post-app/i18n`. A change to an English text also changes the Spanish text (D-092).
 - Examine each new dependency. Post uses few dependencies (D-110).
+- Code that has no input and no output gets a specification and a proof with Verus (D-177). The document [verification](docs/verification.md) tells how to run the proofs.
 
 ## Rules for documents
 
@@ -64,6 +65,7 @@ A design decision gets a [decision record](docs/decisions/README.md).
 | Write screenshots of each screen | Set `POST_SCREENSHOTS` to a directory, then run `cargo test -p post-app --test window` |
 | Start the application in Spanish | Set `POST_LANGUAGE=es-419`, then run `cargo run --bin post` |
 | Make the website in `target/site` | `cargo run -p post-site -- . target/site` |
+| Run the proofs | `sh tools/proofs.sh` |
 
 The coverage command uses `cargo-llvm-cov`. The license command uses `cargo-deny`.
 
@@ -75,6 +77,7 @@ Each push starts these checks on GitHub (D-103):
 - The tests on Windows, macOS, and Linux.
 - `cargo deny`.
 - The coverage minimum of 90% for each crate (D-104).
+- The proofs (D-177).
 
 Mutation tests and fuzz tests start each night.
 

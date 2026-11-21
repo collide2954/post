@@ -37,7 +37,7 @@ A new record gets the next free number. Do not use a number again.
 | [server.md](server.md) | The server and its operation | D-051 to D-060, D-133 to D-146, D-164, D-166, D-172 |
 | [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076, D-147 to D-149, D-163, D-169 |
 | [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154, D-160, D-161, D-165, D-167, D-171 |
-| [engineering.md](engineering.md) | How we build Post | D-097 to D-112, D-157 to D-159, D-168, D-170, D-173, D-174 |
+| [engineering.md](engineering.md) | How we build Post | D-097 to D-112, D-157 to D-159, D-168, D-170, D-173, D-174, D-177 |
 | [distribution-and-community.md](distribution-and-community.md) | Releases and the project community | D-113 to D-121, D-162, D-175 |
 
 ## Index
@@ -227,6 +227,7 @@ A new record gets the next free number. Do not use a number again.
 - D-170 Performance budgets
 - D-173 Content of version 0.2
 - D-174 Details of version 0.2
+- D-177 Formal verification
 
 ### Distribution and community
 

@@ -12,12 +12,13 @@ const TEMPLATE: &str = "document.html";
 const MARK: &str = "mark.svg";
 const DECISIONS: &str = "docs/decisions";
 const GUIDE: &str = "README.md";
-const DOCUMENTS: [(&str, &str); 6] = [
+const DOCUMENTS: [(&str, &str); 7] = [
     ("docs/philosophy.md", "philosophy.html"),
     ("docs/decisions/README.md", "decisions/index.html"),
     ("docs/protocol/README.md", "protocol/index.html"),
     ("docs/architecture.md", "architecture.html"),
     ("docs/threat-model.md", "threat-model.html"),
+    ("docs/verification.md", "verification.html"),
     ("CHANGELOG.md", "changelog.html"),
 ];
 const COPIES: [(&str, &str, &str); 2] = [
@@ -318,6 +319,7 @@ mod tests {
         root.put("docs/protocol/schemas/a.json", "{}");
         root.put("docs/architecture.md", "# Architecture\n");
         root.put("docs/threat-model.md", "# Threat model\n");
+        root.put("docs/verification.md", "# Verification\n");
         root.put("CHANGELOG.md", "# Changelog\n\nRecord D-001.\n");
         root
     }
@@ -379,6 +381,7 @@ mod tests {
             "protocol/index.html",
             "architecture.html",
             "threat-model.html",
+            "verification.html",
             "changelog.html",
         ] {
             assert!(out.get(page).starts_with("<title>"), "{page}");

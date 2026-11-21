@@ -34,7 +34,7 @@ The sender sees the message only when it comes back from the server. Thus all us
 - `name` and `text` hold the rules for a name and for the text of a message.
 - `address` holds the form of a server address that the client and the server share.
 - `bytes`, `code`, and `part` hold the text forms of keys, signatures, invitation codes, and the words for parts of the protocol.
-- `time` holds the time type. It writes and reads the one time form of the protocol.
+- `time` holds the time type. It writes and reads the one time form of the protocol. Verus proves its date arithmetic (see the [verification](verification.md) document).
 - `message` holds the message types. The doc comments on these types go into the JSON Schemas.
 - `codec` writes a message as one line and reads a line.
 - `schema` makes the JSON Schemas from the message types.
