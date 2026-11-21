@@ -99,7 +99,7 @@ These records tell you how the desktop application looks and operates. Read the 
 
 ### D-086 Commands and keyboard
 
-**Decision.** Post has slash commands with completion, for example `/join`, `/msg`, `/me`, and `/topic`. The user can do each task with the keyboard. Each command also has a button or a menu item.
+**Decision.** Post has slash commands with completion, for example `/join`, `/msg`, `/me`, and `/topic`. The user can do each task with the keyboard. Each command also has a button or a menu item. A bot can add commands to the `/` menu (D-128).
 
 **Reason.** An expert works quickly, and a new user never has to type a command.
 
@@ -217,3 +217,52 @@ Screen reader support depends on the iced toolkit. We add it when the toolkit ma
 **Decision.** The interface uses plain words: server, channel, direct message, operator, moderator. It uses one word from the post office: "sealed".
 
 **Reason.** Plain words are easy to understand and to translate.
+
+### D-150 Sidebar order
+
+**Decision.** In the sidebar, channels sort by name, and direct messages sort by the latest activity. A user can mark a chat as a favorite. Favorites stay at the top. A user can also mute or hide a chat.
+
+**Reason.** The user maintains nothing, and no chat moves by surprise. The chats that the user uses most are easy to reach.
+
+**Not selected.**
+
+- A manual order by drag.
+- An automatic order with no favorites.
+
+### D-151 Key bindings
+
+**Decision.** Each keyboard shortcut has a default, and a user can change it. The settings screen and the settings file show the shortcuts.
+
+**Reason.** IRC users expect this function. It also solves a conflict with a keyboard layout or with a shortcut of the operating system.
+
+**Not selected.**
+
+- Fixed shortcuts.
+
+### D-152 Appearance settings
+
+**Decision.** A user can change these parts of the appearance:
+
+- The font for text and the font for code. The fonts that Post contains are the default.
+- The time format: a setting adds the seconds.
+- The handle colors: a setting turns them off.
+- The images: a setting shows each image as a small card until the user clicks it.
+
+**Reason.** A different font helps some people to read. The other settings let a user make the timeline as plain as the user wants.
+
+### D-153 Sounds and automatic start
+
+**Decision.** Post can play one soft sound for a notification. Post can start when the user signs in to the computer. These two settings are off by default.
+
+**Reason.** The functions help a user who keeps Post open all day. The defaults stay quiet.
+
+### D-154 Links
+
+**Decision.** A click on a link opens the link in the default browser. The application does not ask first.
+
+**Reason.** A message always shows the full address of a link (D-010), thus the user sees the target before the click.
+
+**Not selected.**
+
+- A question at the first click for each site.
+- A question at each click.
