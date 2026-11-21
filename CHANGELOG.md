@@ -2,6 +2,10 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.0.3 - 2026-11-20
+
+- Make the public web view an open decision (D-032).
+
 ## 0.0.2 - 2026-11-20
 
 - Make version 1.0 the final function set (D-122).
