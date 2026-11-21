@@ -2,6 +2,19 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.0 - 2026-11-21
+
+Version 0.1 is the first slice (D-099). Two or more users on one computer exchange text in the channel `#lobby`.
+
+- Add the application window with a connect screen and a chat screen.
+- Add light mode and dark mode in the "ink and paper" style, with the fonts Inter and JetBrains Mono.
+- Add English and Latin American Spanish text for the interface.
+- Add interface tests that run without a window. One test runs the complete application with a real server.
+- Add fuzz targets, nightly checks, and release builds for Windows, macOS, and Linux.
+- Add the README, the contribution documents, and the architecture document.
+
+This version has no accounts, no encryption, and no stored history. It connects only to a server on the same computer.
+
 ## 0.0.5 - 2026-11-21
 
 - Make the repository a Cargo workspace with a pinned toolchain, a commit hook, and automatic checks.
