@@ -2,6 +2,14 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.3 - 2026-11-21
+
+- Add the sign-in of an account to the protocol and to the server (D-163). The application does not use it yet.
+- Add the fields for client requirements to the sign-in (D-176).
+- Add the configuration file, the data directory, and the owner-link command of the server.
+- Add the profile store of the client, and the reader for invite links and server addresses. The application does not use them yet.
+- Add formal proofs with Verus (D-177). The document `docs/verification.md` tells what each proof shows.
+
 ## 0.1.2 - 2026-11-21
 
 - Add the website of the project (D-175).

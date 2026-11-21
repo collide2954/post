@@ -2861,7 +2861,7 @@ dependencies = [
 
 [[package]]
 name = "post-app"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "fluent-bundle",
  "futures-util",
@@ -2879,7 +2879,7 @@ dependencies = [
 
 [[package]]
 name = "post-client"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "futures-util",
  "post-crypto",
@@ -2894,7 +2894,7 @@ dependencies = [
 
 [[package]]
 name = "post-crypto"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.4.3",
@@ -2907,7 +2907,7 @@ dependencies = [
 
 [[package]]
 name = "post-proto"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "base64",
  "schemars",
@@ -2918,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "post-server"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum",
  "futures-util",
@@ -2934,14 +2934,14 @@ dependencies = [
 
 [[package]]
 name = "post-site"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "post-testing"
-version = "0.1.2"
+version = "0.1.3"
 
 [[package]]
 name = "ppv-lite86"
