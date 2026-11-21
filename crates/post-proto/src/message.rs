@@ -5,6 +5,7 @@ use crate::codec::{self, DecodeError};
 use crate::{Name, Timestamp};
 
 pub const PROTOCOL_VERSION: u32 = 0;
+pub const DEFAULT_PORT: u16 = 7678;
 
 /// A message from a client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -282,6 +283,11 @@ mod tests {
     #[test]
     fn the_protocol_version_is_zero() {
         assert_eq!(PROTOCOL_VERSION, 0);
+    }
+
+    #[test]
+    fn the_default_port_spells_post_on_a_telephone_keypad() {
+        assert_eq!(crate::DEFAULT_PORT, 7678);
     }
 
     #[test]
