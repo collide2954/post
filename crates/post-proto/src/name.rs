@@ -4,8 +4,29 @@ use std::fmt;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vstd::prelude::*;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
+#[cfg(verus_keep_ghost)]
+use vstd::utf8::encode_utf8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+use crate::ascii::{is_digit, is_lower};
+
+verus! {
+
+pub open spec fn is_name_character(byte: u8) -> bool {
+    is_lower(byte) || is_digit(byte) || byte == b'-' || byte == b'_'
+}
+
+pub open spec fn has_name_characters(bytes: Seq<u8>) -> bool {
+    forall|i: int| 0 <= i < bytes.len() ==> is_name_character(#[trigger] bytes[i])
+}
+
+pub open spec fn is_name(bytes: Seq<u8>) -> bool {
+    has_name_characters(bytes) && 2 <= bytes.len() <= 20
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Name(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,31 +38,88 @@ pub enum NameError {
 
 impl Name {
     pub const MIN_LENGTH: usize = 2;
+
     pub const MAX_LENGTH: usize = 20;
 
-    pub fn parse(text: &str) -> Result<Self, NameError> {
-        if !text.bytes().all(is_permitted) {
+    #[verifier::type_invariant]
+    spec fn is_a_name(self) -> bool {
+        is_name(encode_utf8(self.0@))
+    }
+
+    pub closed spec fn view(self) -> Seq<char> {
+        self.0@
+    }
+
+    pub fn parse(text: &str) -> (name: Result<Self, NameError>)
+        ensures
+            match name {
+                Ok(name) => is_name(text.spec_bytes()) && name@ == text@,
+                Err(NameError::InvalidCharacter) => !has_name_characters(text.spec_bytes()),
+                Err(NameError::TooShort) => has_name_characters(text.spec_bytes())
+                    && text.spec_bytes().len() < 2,
+                Err(NameError::TooLong) => has_name_characters(text.spec_bytes())
+                    && text.spec_bytes().len() > 20,
+            },
+    {
+        let bytes = text.as_bytes();
+        if !has_permitted_characters(bytes) {
             return Err(NameError::InvalidCharacter);
         }
-        if text.len() < Self::MIN_LENGTH {
+        if bytes.len() < Self::MIN_LENGTH {
             return Err(NameError::TooShort);
         }
-        if text.len() > Self::MAX_LENGTH {
+        if bytes.len() > Self::MAX_LENGTH {
             return Err(NameError::TooLong);
         }
         Ok(Self(text.to_owned()))
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn as_str(&self) -> (text: &str)
+        ensures
+            text@ == self@,
+            is_name(text.spec_bytes()),
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        self.0.as_str()
     }
 }
 
-fn is_permitted(byte: u8) -> bool {
-    matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_')
+impl Clone for Name {
+    fn clone(&self) -> (name: Self)
+        ensures
+            name@ == self@,
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        Self(self.0.clone())
+    }
 }
 
+fn has_permitted_characters(bytes: &[u8]) -> (permitted: bool)
+    ensures
+        permitted == has_name_characters(bytes@),
+{
+    let mut index = 0;
+    while index < bytes.len()
+        invariant
+            index <= bytes.len(),
+            forall|i: int| 0 <= i < index ==> is_name_character(#[trigger] bytes@[i]),
+        decreases bytes.len() - index,
+    {
+        let byte = bytes[index];
+        if !(is_lower(byte) || is_digit(byte) || byte == b'-' || byte == b'_') {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+} // verus!
 impl fmt::Display for Name {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
