@@ -121,7 +121,7 @@ fn the_schemas_list_each_message_type() {
     let client: Vec<String> = message_types(&client_message_schema())
         .into_iter()
         .collect();
-    assert_eq!(client, ["hello", "send"]);
+    assert_eq!(client, ["guest", "send"]);
 
     let server: Vec<String> = message_types(&server_message_schema())
         .into_iter()

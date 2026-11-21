@@ -4,27 +4,25 @@
   "description": "A message from the server to a client.",
   "oneOf": [
     {
-      "description": "Accepts a `hello` message. The session now has a name.",
+      "description": "Starts the session of a user. The session now has a name.",
       "type": "object",
       "properties": {
         "name": {
           "description": "The name of the user in this session.",
           "$ref": "#/$defs/Name"
         },
-        "protocol": {
-          "description": "The protocol version of the session.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "ref": {
-          "description": "The number from the `hello` message, if it had one.",
+          "description": "The number from the message that the server accepts, if it had one.",
           "type": [
             "integer",
             "null"
           ],
           "format": "uint32",
           "minimum": 0
+        },
+        "role": {
+          "description": "The role of the user on this server.",
+          "$ref": "#/$defs/Role"
         },
         "type": {
           "type": "string",
@@ -34,8 +32,8 @@
       "additionalProperties": false,
       "required": [
         "type",
-        "protocol",
-        "name"
+        "name",
+        "role"
       ]
     },
     {
@@ -228,6 +226,21 @@
       "description": "The name of a user: 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore.",
       "type": "string",
       "pattern": "^[a-z0-9_-]{2,20}$"
+    },
+    "Role": {
+      "description": "The role of an account on a server.",
+      "oneOf": [
+        {
+          "description": "The account owns the server.",
+          "type": "string",
+          "const": "owner"
+        },
+        {
+          "description": "The account is a normal member.",
+          "type": "string",
+          "const": "member"
+        }
+      ]
     },
     "Timestamp": {
       "description": "A time in UTC with milliseconds, for example 2026-11-21T14:02:07.120Z.",

@@ -3,8 +3,8 @@
 # "C:" is a line from the client. "S:" is a line from the server.
 
 # Ana starts a session and comes into the channel.
-C: {"type":"hello","protocol":0,"name":"ana"}
-S: {"type":"welcome","protocol":0,"name":"ana"}
+C: {"type":"guest","protocol":0,"name":"ana"}
+S: {"type":"welcome","name":"ana","role":"member"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
 # Ben comes into the channel.

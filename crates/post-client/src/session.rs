@@ -99,7 +99,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, Name, ServerMessage, TextError, Timestamp};
+    use post_proto::{ClientMessage, ErrorCode, Name, Role, ServerMessage, TextError, Timestamp};
 
     use super::{Entry, Session};
 
@@ -191,8 +191,8 @@ mod tests {
 
         session.apply(ServerMessage::Welcome {
             reference: None,
-            protocol: 0,
             name: name("ben"),
+            role: Role::Member,
         });
 
         assert_eq!(session.name(), &name("ana"));

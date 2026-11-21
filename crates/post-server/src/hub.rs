@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use post_proto::{
-    ClientMessage, ErrorCode, LOBBY, Name, PROTOCOL_VERSION, ServerMessage, TextError, Timestamp,
-    check_text,
+    ClientMessage, ErrorCode, LOBBY, Name, PROTOCOL_VERSION, Role, ServerMessage, TextError,
+    Timestamp, check_text,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -39,7 +39,7 @@ impl Hub {
         };
         match ClientMessage::decode(line) {
             Err(_) => refusal(from, None, ErrorCode::BadMessage),
-            Ok(ClientMessage::Hello {
+            Ok(ClientMessage::Guest {
                 reference,
                 protocol,
                 name: wanted,
@@ -104,8 +104,8 @@ impl Hub {
             to: id,
             message: ServerMessage::Welcome {
                 reference,
-                protocol: PROTOCOL_VERSION,
                 name: name.clone(),
+                role: Role::Member,
             },
         }];
         outgoing.extend(self.to_each_member(|_| ServerMessage::Join {
@@ -170,7 +170,7 @@ fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Out
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, LOBBY, Name, ServerMessage, Timestamp};
+    use post_proto::{ClientMessage, ErrorCode, LOBBY, Name, Role, ServerMessage, Timestamp};
 
     use super::{ConnectionId, Hub, Outgoing};
 
@@ -186,8 +186,8 @@ mod tests {
         Name::parse(text).expect(text)
     }
 
-    fn hello(reference: u32, name: &str) -> String {
-        ClientMessage::Hello {
+    fn guest(reference: u32, name: &str) -> String {
+        ClientMessage::Guest {
             reference: Some(reference),
             protocol: 0,
             name: name.to_owned(),
@@ -226,7 +226,7 @@ mod tests {
             .iter()
             .map(|name| {
                 let id = hub.connect();
-                hub.receive(id, &hello(0, name), now());
+                hub.receive(id, &guest(0, name), now());
                 id
             })
             .collect();
@@ -246,7 +246,7 @@ mod tests {
         let mut hub = Hub::new();
         let ana = hub.connect();
 
-        let outgoing = hub.receive(ana, &hello(1, "ana"), now());
+        let outgoing = hub.receive(ana, &guest(1, "ana"), now());
 
         assert_eq!(
             outgoing,
@@ -255,8 +255,8 @@ mod tests {
                     ana,
                     ServerMessage::Welcome {
                         reference: Some(1),
-                        protocol: 0,
                         name: name("ana"),
+                        role: Role::Member,
                     }
                 ),
                 to(ana, join("ana")),
@@ -269,7 +269,7 @@ mod tests {
         let (mut hub, ids) = hub_with(&["ana"]);
         let ben = hub.connect();
 
-        let outgoing = hub.receive(ben, &hello(9, "ben"), now());
+        let outgoing = hub.receive(ben, &guest(9, "ben"), now());
 
         assert_eq!(
             outgoing,
@@ -278,8 +278,8 @@ mod tests {
                     ben,
                     ServerMessage::Welcome {
                         reference: Some(9),
-                        protocol: 0,
                         name: name("ben"),
+                        role: Role::Member,
                     }
                 ),
                 to(ids[0], join("ben")),
@@ -294,7 +294,7 @@ mod tests {
         let silent = hub.connect();
         let ben = hub.connect();
 
-        let joined = hub.receive(ben, &hello(1, "ben"), now());
+        let joined = hub.receive(ben, &guest(1, "ben"), now());
         let sent = hub.receive(ids[0], &send(None, "lobby", "Hello"), now());
         let left = hub.disconnect(ben, later());
 
@@ -386,7 +386,7 @@ mod tests {
     fn refuses_a_hello_message_after_the_welcome() {
         let (mut hub, ids) = hub_with(&["ana"]);
 
-        let invalid = ClientMessage::Hello {
+        let invalid = ClientMessage::Guest {
             reference: Some(6),
             protocol: 99,
             name: "Not A Name".to_owned(),
@@ -398,7 +398,7 @@ mod tests {
             [to(ids[0], error(Some(6), ErrorCode::DuplicateHello))]
         );
         assert_eq!(
-            hub.receive(ids[0], &hello(7, "ana2"), now()),
+            hub.receive(ids[0], &guest(7, "ana2"), now()),
             [to(ids[0], error(Some(7), ErrorCode::DuplicateHello))]
         );
     }
@@ -407,7 +407,7 @@ mod tests {
     fn refuses_a_protocol_version_that_it_does_not_support() {
         let mut hub = Hub::new();
         let ana = hub.connect();
-        let line = ClientMessage::Hello {
+        let line = ClientMessage::Guest {
             reference: Some(1),
             protocol: 1,
             name: "Not A Name".to_owned(),
@@ -427,7 +427,7 @@ mod tests {
 
         for invalid in ["Ana", "a", "a name", "abcdefghij0123456789x"] {
             assert_eq!(
-                hub.receive(new, &hello(3, invalid), now()),
+                hub.receive(new, &guest(3, invalid), now()),
                 [to(new, error(Some(3), ErrorCode::InvalidName))],
                 "{invalid}"
             );
@@ -440,7 +440,7 @@ mod tests {
         let new = hub.connect();
 
         assert_eq!(
-            hub.receive(new, &hello(3, "ben"), now()),
+            hub.receive(new, &guest(3, "ben"), now()),
             [to(new, error(Some(3), ErrorCode::NameTaken))]
         );
     }
@@ -449,9 +449,9 @@ mod tests {
     fn accepts_a_new_hello_message_after_an_error() {
         let (mut hub, ids) = hub_with(&["ana"]);
         let new = hub.connect();
-        hub.receive(new, &hello(1, "ana"), now());
+        hub.receive(new, &guest(1, "ana"), now());
 
-        let outgoing = hub.receive(new, &hello(2, "ben"), now());
+        let outgoing = hub.receive(new, &guest(2, "ben"), now());
 
         assert_eq!(
             outgoing,
@@ -460,8 +460,8 @@ mod tests {
                     new,
                     ServerMessage::Welcome {
                         reference: Some(2),
-                        protocol: 0,
                         name: name("ben"),
+                        role: Role::Member,
                     }
                 ),
                 to(ids[0], join("ben")),
@@ -517,7 +517,7 @@ mod tests {
         hub.disconnect(ids[0], later());
         let new = hub.connect();
 
-        let outgoing = hub.receive(new, &hello(1, "ana"), now());
+        let outgoing = hub.receive(new, &guest(1, "ana"), now());
 
         assert_eq!(outgoing.len(), 2);
         assert_eq!(outgoing[1], to(new, join("ana")));
@@ -536,7 +536,7 @@ mod tests {
         let (mut hub, ids) = hub_with(&["ana"]);
         hub.disconnect(ids[0], later());
 
-        assert_eq!(hub.receive(ids[0], &hello(1, "ana"), now()), []);
+        assert_eq!(hub.receive(ids[0], &guest(1, "ana"), now()), []);
         assert_eq!(hub.refuse(ids[0]), []);
         assert_eq!(hub.disconnect(ids[0], later()), []);
     }

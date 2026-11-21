@@ -50,7 +50,7 @@ where
         let hello = socket.next().await.expect("a hello").expect("a frame");
         assert!(matches!(
             ClientMessage::decode(hello.to_text().expect("text")),
-            Ok(ClientMessage::Hello { protocol: 0, .. })
+            Ok(ClientMessage::Guest { protocol: 0, .. })
         ));
         script(socket).await;
     });
@@ -247,7 +247,7 @@ async fn refuses_a_first_answer_that_is_not_a_welcome_or_an_error() {
     }
 }
 
-const WELCOME: &str = r#"{"type":"welcome","protocol":0,"name":"ana"}"#;
+const WELCOME: &str = r#"{"type":"welcome","name":"ana","role":"member"}"#;
 
 async fn connects_and_then_stops_for_a_protocol_error(address: &ServerAddress) {
     let mut events = events(address, "ana");
@@ -290,7 +290,7 @@ async fn uses_the_name_that_the_server_gives() {
     let address = fake_server(|mut socket| async move {
         say(
             &mut socket,
-            r#"{"type":"welcome","protocol":0,"name":"ana-2"}"#,
+            r#"{"type":"welcome","name":"ana-2","role":"member"}"#,
         )
         .await;
         hold(socket).await;

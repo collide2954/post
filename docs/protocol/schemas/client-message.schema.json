@@ -4,7 +4,7 @@
   "description": "A message from a client to the server.",
   "oneOf": [
     {
-      "description": "Starts a session. This must be the first message on a connection.",
+      "description": "Starts a session with a temporary name and no account.\nThis message is temporary. It goes away before version 0.2.",
       "type": "object",
       "properties": {
         "name": {
@@ -28,7 +28,7 @@
         },
         "type": {
           "type": "string",
-          "const": "hello"
+          "const": "guest"
         }
       },
       "additionalProperties": false,

@@ -6,24 +6,24 @@ C: {"type":"send","channel":"lobby","text":"Hello"}
 S: {"type":"error","code":"hello-required","text":"The first message must be a hello message."}
 
 # The server knows only protocol version 0.
-C: {"type":"hello","ref":1,"protocol":7,"name":"ana"}
+C: {"type":"guest","ref":1,"protocol":7,"name":"ana"}
 S: {"type":"error","ref":1,"code":"unsupported-protocol","text":"The server does not support this protocol version."}
 
 # A name cannot contain a capital letter or a space.
-C: {"type":"hello","ref":2,"protocol":0,"name":"Ana Maria"}
+C: {"type":"guest","ref":2,"protocol":0,"name":"Ana Maria"}
 S: {"type":"error","ref":2,"code":"invalid-name","text":"A name has 2 to 20 characters: a to z, 0 to 9, hyphen, and underscore."}
 
 # A different connected user has the name "ben".
-C: {"type":"hello","ref":3,"protocol":0,"name":"ben"}
+C: {"type":"guest","ref":3,"protocol":0,"name":"ben"}
 S: {"type":"error","ref":3,"code":"name-taken","text":"A different user has this name."}
 
 # The session starts.
-C: {"type":"hello","ref":4,"protocol":0,"name":"ana"}
-S: {"type":"welcome","ref":4,"protocol":0,"name":"ana"}
+C: {"type":"guest","ref":4,"protocol":0,"name":"ana"}
+S: {"type":"welcome","ref":4,"name":"ana","role":"member"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
 # A session can have only one hello message.
-C: {"type":"hello","ref":5,"protocol":0,"name":"ana2"}
+C: {"type":"guest","ref":5,"protocol":0,"name":"ana2"}
 S: {"type":"error","ref":5,"code":"duplicate-hello","text":"The session already has a name."}
 
 # Version 0.1 has only the channel "lobby".

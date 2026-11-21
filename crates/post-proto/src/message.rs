@@ -12,8 +12,9 @@ pub const LOBBY: &str = "lobby";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum ClientMessage {
-    /// Starts a session. This must be the first message on a connection.
-    Hello {
+    /// Starts a session with a temporary name and no account.
+    /// This message is temporary. It goes away before version 0.2.
+    Guest {
         /// A number that the answer of the server repeats.
         #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
         reference: Option<u32>,
@@ -38,15 +39,15 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum ServerMessage {
-    /// Accepts a `hello` message. The session now has a name.
+    /// Starts the session of a user. The session now has a name.
     Welcome {
-        /// The number from the `hello` message, if it had one.
+        /// The number from the message that the server accepts, if it had one.
         #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
         reference: Option<u32>,
-        /// The protocol version of the session.
-        protocol: u32,
         /// The name of the user in this session.
         name: Name,
+        /// The role of the user on this server.
+        role: Role,
     },
     /// Tells that a user came into a channel.
     Join {
@@ -201,20 +202,20 @@ mod tests {
     fn client_examples() -> Vec<(ClientMessage, &'static str)> {
         vec![
             (
-                ClientMessage::Hello {
+                ClientMessage::Guest {
                     reference: None,
                     protocol: 0,
                     name: "ana".to_owned(),
                 },
-                r#"{"type":"hello","protocol":0,"name":"ana"}"#,
+                r#"{"type":"guest","protocol":0,"name":"ana"}"#,
             ),
             (
-                ClientMessage::Hello {
+                ClientMessage::Guest {
                     reference: Some(7),
                     protocol: 3,
                     name: "Not A Name".to_owned(),
                 },
-                r#"{"type":"hello","ref":7,"protocol":3,"name":"Not A Name"}"#,
+                r#"{"type":"guest","ref":7,"protocol":3,"name":"Not A Name"}"#,
             ),
             (
                 ClientMessage::Send {
@@ -240,18 +241,18 @@ mod tests {
             (
                 ServerMessage::Welcome {
                     reference: None,
-                    protocol: 0,
                     name: name("ana"),
+                    role: Role::Member,
                 },
-                r#"{"type":"welcome","protocol":0,"name":"ana"}"#,
+                r#"{"type":"welcome","name":"ana","role":"member"}"#,
             ),
             (
                 ServerMessage::Welcome {
                     reference: Some(4_294_967_295),
-                    protocol: 0,
                     name: name("ana"),
+                    role: Role::Member,
                 },
-                r#"{"type":"welcome","ref":4294967295,"protocol":0,"name":"ana"}"#,
+                r#"{"type":"welcome","ref":4294967295,"name":"ana","role":"member"}"#,
             ),
             (
                 ServerMessage::Join {
@@ -428,18 +429,18 @@ mod tests {
             "[]",
             "{}",
             r#"{"type":"dance"}"#,
-            r#"{"type":"hello"}"#,
-            r#"{"type":"hello","protocol":0}"#,
-            r#"{"type":"hello","protocol":"0","name":"ana"}"#,
-            r#"{"type":"hello","protocol":-1,"name":"ana"}"#,
-            r#"{"type":"hello","protocol":0,"name":"ana","extra":1}"#,
-            r#"{"type":"hello","ref":-1,"protocol":0,"name":"ana"}"#,
-            r#"{"type":"hello","ref":4294967296,"protocol":0,"name":"ana"}"#,
-            r#"{"type":"hello","ref":1.5,"protocol":0,"name":"ana"}"#,
-            r#"{"type":"HELLO","protocol":0,"name":"ana"}"#,
-            r#"{"type":"welcome","protocol":0,"name":"ana"}"#,
+            r#"{"type":"guest"}"#,
+            r#"{"type":"guest","protocol":0}"#,
+            r#"{"type":"guest","protocol":"0","name":"ana"}"#,
+            r#"{"type":"guest","protocol":-1,"name":"ana"}"#,
+            r#"{"type":"guest","protocol":0,"name":"ana","extra":1}"#,
+            r#"{"type":"guest","ref":-1,"protocol":0,"name":"ana"}"#,
+            r#"{"type":"guest","ref":4294967296,"protocol":0,"name":"ana"}"#,
+            r#"{"type":"guest","ref":1.5,"protocol":0,"name":"ana"}"#,
+            r#"{"type":"GUEST","protocol":0,"name":"ana"}"#,
+            r#"{"type":"welcome","name":"ana","role":"member"}"#,
             r#"{"type":"send","channel":"lobby"}"#,
-            r#"{"type":"hello","protocol":0,"name":"ana"} x"#,
+            r#"{"type":"guest","protocol":0,"name":"ana"} x"#,
         ] {
             assert!(
                 matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -451,12 +452,12 @@ mod tests {
     #[test]
     fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         for line in [
-            r#"{"type":"welcome","protocol":0,"name":"Ana"}"#,
-            r#"{"type":"welcome","protocol":0,"name":"a"}"#,
+            r#"{"type":"welcome","name":"Ana","role":"member"}"#,
+            r#"{"type":"welcome","name":"a","role":"member"}"#,
             r#"{"type":"join","channel":"lobby","name":"ben","time":"yesterday"}"#,
             r#"{"type":"join","channel":"lobby","name":"ben","time":1795269727120}"#,
             r#"{"type":"error","code":"no-such-code","text":"x"}"#,
-            r#"{"type":"hello","protocol":0,"name":"ana"}"#,
+            r#"{"type":"guest","protocol":0,"name":"ana"}"#,
         ] {
             assert!(
                 matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -468,9 +469,9 @@ mod tests {
     #[test]
     fn refuses_a_message_on_more_than_one_line() {
         for line in [
-            "{\"type\":\"hello\",\n\"protocol\":0,\"name\":\"ana\"}",
-            "{\"type\":\"hello\",\"protocol\":0,\"name\":\"ana\"}\n",
-            "{\"type\":\"hello\",\r\"protocol\":0,\"name\":\"ana\"}",
+            "{\"type\":\"guest\",\n\"protocol\":0,\"name\":\"ana\"}",
+            "{\"type\":\"guest\",\"protocol\":0,\"name\":\"ana\"}\n",
+            "{\"type\":\"guest\",\r\"protocol\":0,\"name\":\"ana\"}",
         ] {
             assert!(
                 matches!(ClientMessage::decode(line), Err(DecodeError::LineBreak)),
@@ -487,7 +488,7 @@ mod tests {
     fn refuses_a_line_that_is_too_long() {
         assert_eq!(MAX_LINE_BYTES, 65_536);
 
-        let start = r#"{"type":"hello","protocol":0,"name":""#;
+        let start = r#"{"type":"guest","protocol":0,"name":""#;
         let end = r#""}"#;
         let fill = MAX_LINE_BYTES - start.len() - end.len();
 

@@ -93,7 +93,7 @@ async fn step(state: State) -> Option<(Event, State)> {
 
 async fn open(address: &ServerAddress, name: &Name) -> Result<(Socket, Name), Disconnect> {
     let mut socket = dial(address).await.ok_or(Disconnect::Unreachable)?;
-    let hello = ClientMessage::Hello {
+    let hello = ClientMessage::Guest {
         reference: None,
         protocol: PROTOCOL_VERSION,
         name: name.as_str().to_owned(),

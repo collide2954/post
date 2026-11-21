@@ -57,7 +57,7 @@ impl Sessions {
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, Name, ServerMessage, Timestamp};
+    use post_proto::{ClientMessage, ErrorCode, Name, Role, ServerMessage, Timestamp};
     use tokio::sync::mpsc::{self, Receiver, error::TryRecvError};
 
     use super::Sessions;
@@ -71,8 +71,8 @@ mod tests {
         Name::parse(text).expect(text)
     }
 
-    fn hello(name: &str) -> String {
-        ClientMessage::Hello {
+    fn guest(name: &str) -> String {
+        ClientMessage::Guest {
             reference: None,
             protocol: 0,
             name: name.to_owned(),
@@ -114,7 +114,7 @@ mod tests {
     ) -> (ConnectionId, Receiver<String>) {
         let (queue, lines) = mpsc::channel(capacity);
         let id = sessions.connect(queue);
-        sessions.receive(id, &hello(who));
+        sessions.receive(id, &guest(who));
         (id, lines)
     }
 
@@ -139,8 +139,8 @@ mod tests {
             [
                 ServerMessage::Welcome {
                     reference: None,
-                    protocol: 0,
                     name: name("ana"),
+                    role: Role::Member,
                 },
                 join("ana"),
                 join("ben"),
@@ -152,8 +152,8 @@ mod tests {
             [
                 ServerMessage::Welcome {
                     reference: None,
-                    protocol: 0,
                     name: name("ben"),
+                    role: Role::Member,
                 },
                 join("ben"),
                 message("ana", "Hello"),

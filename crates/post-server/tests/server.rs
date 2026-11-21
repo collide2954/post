@@ -2,7 +2,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use post_proto::{ClientMessage, ErrorCode, MAX_LINE_BYTES, Name, ServerMessage};
+use post_proto::{ClientMessage, ErrorCode, MAX_LINE_BYTES, Name, Role, ServerMessage};
 use post_server::Server;
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
@@ -79,8 +79,8 @@ async fn is_closed(socket: &mut Socket) -> bool {
     }
 }
 
-fn hello(name: &str) -> ClientMessage {
-    ClientMessage::Hello {
+fn guest(name: &str) -> ClientMessage {
+    ClientMessage::Guest {
         reference: None,
         protocol: 0,
         name: name.to_owned(),
@@ -93,13 +93,13 @@ fn name(text: &str) -> Name {
 
 async fn join_as(port: u16, who: &str) -> Socket {
     let mut socket = connect_v4(port).await;
-    write(&mut socket, &hello(who)).await;
+    write(&mut socket, &guest(who)).await;
     assert_eq!(
         read(&mut socket).await,
         ServerMessage::Welcome {
             reference: None,
-            protocol: 0,
             name: name(who),
+            role: Role::Member,
         }
     );
     assert!(
@@ -181,7 +181,7 @@ async fn keeps_the_connection_open_after_an_error() {
         ServerMessage::error(None, ErrorCode::BadMessage)
     );
 
-    write(&mut socket, &hello("ana")).await;
+    write(&mut socket, &guest("ana")).await;
     assert!(matches!(
         read(&mut socket).await,
         ServerMessage::Welcome { .. }
@@ -223,7 +223,7 @@ async fn accepts_a_connection_on_the_ipv6_loopback_address_if_the_computer_has_o
 
     if server.addresses.contains(&ipv6) {
         let mut socket = connect(ipv6).await;
-        write(&mut socket, &hello("ana")).await;
+        write(&mut socket, &guest("ana")).await;
         assert!(matches!(
             read(&mut socket).await,
             ServerMessage::Welcome { .. }

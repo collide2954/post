@@ -61,18 +61,20 @@ A time is in UTC and has milliseconds. It always has this form: `2026-11-21T14:0
 
 ## Messages from the client
 
-### `hello`
+### `guest`
 
-The `hello` message starts a session. It must be the first message on a connection.
+The `guest` message starts a session with a temporary name and no account. It must be the first message on a connection.
+
+This message is temporary. The project removes it before version 0.2, when the application uses accounts.
 
 | Field | Value |
 |---|---|
-| `type` | `"hello"` |
+| `type` | `"guest"` |
 | `ref` | Optional. See "The `ref` field". |
 | `protocol` | The protocol version of the client. This document describes version 0. |
 | `name` | The name that the user wants. |
 
-The server answers with a `welcome` message or with an `error` message. After an error, the client can send a new `hello` message on the same connection.
+The server answers with a `welcome` message or with an `error` message. After an error, the client can send a new `guest` message on the same connection.
 
 ### `send`
 
@@ -91,14 +93,14 @@ The server answers with a `message` message or with an `error` message.
 
 ### `welcome`
 
-The `welcome` message accepts a `hello` message. The session now has a name.
+The `welcome` message starts the session of a user. The session now has a name.
 
 | Field | Value |
 |---|---|
 | `type` | `"welcome"` |
-| `ref` | The value from the `hello` message, if it had one. |
-| `protocol` | The protocol version of the session. |
+| `ref` | The value from the message that the server accepts, if it had one. |
 | `name` | The name of the user in this session. |
+| `role` | The role of the user on this server: `"owner"` or `"member"`. A user with a temporary name is a member. |
 
 After the `welcome` message, the server puts the user into the channel `lobby`. The server sends a `join` message to each user in the channel, also to the new user.
 
@@ -154,8 +156,8 @@ A client must use the `code` field to make a decision. The `text` field can chan
 |---|---|
 | `bad-message` | The line is not a valid protocol message. |
 | `unsupported-protocol` | The server does not support the protocol version of the client. |
-| `hello-required` | The client sent a different message before the `hello` message. |
-| `duplicate-hello` | The client sent a `hello` message after a `welcome` message. |
+| `hello-required` | The client sent a different message before the `guest` message. |
+| `duplicate-hello` | The client sent a `guest` message after a `welcome` message. |
 | `invalid-name` | The name does not obey the rules for a name. |
 | `name-taken` | A different connected user has the name. |
 | `no-such-channel` | The channel does not exist. |
