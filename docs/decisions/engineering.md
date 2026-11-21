@@ -220,3 +220,47 @@ All documents obey ASD-STE100 Simplified Technical English. A change to the code
 
 - A review after each function.
 - Work without a stop until a problem occurs.
+
+### D-157 Network libraries
+
+**Date.** 2026-11-21.
+
+**Decision.** Post uses these libraries for its network code:
+
+- `tokio` is the async runtime of the server and of the application.
+- `axum` gives the server HTTP and WebSocket on one port.
+- `tokio-tungstenite` gives the client its WebSocket connection.
+
+**Reason.** The libraries are well known, and the tokio project maintains `tokio` and `axum`. Later versions need HTTP and WebSocket on one port for files, invite pages, and webhooks (D-047).
+
+**Not selected.**
+
+- `tokio-tungstenite` on the two sides, with HTTP routes that we write directly on `hyper`. This option has fewer dependencies, but we must test and maintain more HTTP code.
+
+### D-158 Details of the first slice
+
+**Date.** 2026-11-21.
+
+**Decision.** These rules apply to version 0.1 (D-099):
+
+- The temporary name obeys the rules for a handle (D-023). The server refuses a name that a connected user already has.
+- The server listens only on the loopback addresses of the computer. The default port is 7678. On a telephone keypad, these digits spell "POST".
+- The application refuses a server address that is not the local computer.
+- The server sends each message to all people in the channel, also to the sender.
+- The timeline shows a line when a person joins or leaves (D-124).
+- If the connection stops, the application goes back to the connect screen and tells the user. It does not connect again automatically (D-093 comes later).
+- A message has no identifier. Identifiers come with history in version 0.4.
+- Emoji come from the fonts of the operating system. The emoji font (D-085) comes in a later version.
+- The `post-crypto` crate (D-097) starts in version 0.2, when Post gets its first key.
+
+**Reason.** The slice stays thin. Data without encryption never goes across a network. Each rule is the final rule, or it is clearly temporary.
+
+### D-159 Program names
+
+**Date.** 2026-11-21.
+
+**Decision.** The program of the application has the name `post`. The program of the server has the name `post-server`.
+
+**Reason.** The names are short and clear.
+
+**Open point.** Some systems contain a Perl tool with the name `POST`. We must examine a possible conflict on macOS before the first macOS package.
