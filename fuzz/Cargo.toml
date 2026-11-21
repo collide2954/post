@@ -52,6 +52,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "address"
+path = "fuzz_targets/address.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "byte_text"
 path = "fuzz_targets/byte_text.rs"
 test = false

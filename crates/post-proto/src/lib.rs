@@ -1,3 +1,4 @@
+mod address;
 mod bytes;
 mod code;
 mod codec;
@@ -7,6 +8,7 @@ mod schema;
 mod text;
 mod time;
 
+pub use address::{Address, AddressError, Host};
 pub use bytes::{BytesError, Key, Nonce, Signature};
 pub use code::{Code, CodeError};
 pub use codec::{DecodeError, MAX_LINE_BYTES};
