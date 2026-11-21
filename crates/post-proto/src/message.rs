@@ -116,6 +116,16 @@ pub enum ErrorCode {
     TextTooLong,
 }
 
+/// The role of an account on a server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    /// The account owns the server.
+    Owner,
+    /// The account is a normal member.
+    Member,
+}
+
 impl ClientMessage {
     #[must_use]
     pub fn encode(&self) -> String {
@@ -168,11 +178,20 @@ impl ErrorCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClientMessage, ErrorCode, PROTOCOL_VERSION, ServerMessage};
+    use super::{ClientMessage, ErrorCode, PROTOCOL_VERSION, Role, ServerMessage};
     use crate::{DecodeError, MAX_LINE_BYTES, Name, Timestamp};
 
     fn name(text: &str) -> Name {
         Name::parse(text).expect(text)
+    }
+
+    #[test]
+    fn writes_a_role_as_a_lower_case_word() {
+        for (role, json) in [(Role::Owner, "\"owner\""), (Role::Member, "\"member\"")] {
+            assert_eq!(serde_json::to_string(&role).expect("valid"), json);
+            assert_eq!(serde_json::from_str::<Role>(json).expect("valid"), role);
+        }
+        assert!(serde_json::from_str::<Role>("\"Owner\"").is_err());
     }
 
     fn time(text: &str) -> Timestamp {
