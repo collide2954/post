@@ -1,7 +1,7 @@
 # The server refuses messages. Each error code shows one time.
 # "C:" is a line from the client. "S:" is a line from the server.
 
-# The line is not a valid message.
+# The first message is not a hello message.
 C: {"type":"send","channel":"lobby","text":"Hello"}
 S: {"type":"error","code":"hello-required","text":"The first message must be a hello message."}
 
