@@ -42,9 +42,12 @@ A hole is code or an assumption that has no proof. Each hole is in this list.
 
 | Hole | State |
 |---|---|
-| The rules for names, text, codes, and addresses in the protocol crate. | Open |
+| The rule for the text of a message. The white space and the count of characters come from the standard library. | Open |
+| The rules for addresses, and the text form of keys, random values, and signatures. | Open |
+| The text form of the seed file. | Open |
 | The rules of the server for accounts, handles, and invitations. | Open |
 | The steps of the sign-in in the server and in the client. | Open |
+| The readers of the client for invite links, server addresses, and profile names. | Open |
 
 ### Holes that stay
 

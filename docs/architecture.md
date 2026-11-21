@@ -34,12 +34,15 @@ The sender sees the message only when it comes back from the server. Thus all us
 - `name` and `text` hold the rules for a name and for the text of a message.
 - `address` holds the form of a server address that the client and the server share.
 - `bytes`, `code`, and `part` hold the text forms of keys, signatures, invitation codes, and the words for parts of the protocol.
-- `time` holds the time type. It writes and reads the one time form of the protocol. Verus proves its date arithmetic (see the [verification](verification.md) document).
+- `time` holds the time type. It writes and reads the one time form of the protocol.
+- `ascii` holds the classes of characters that the rules use.
 - `message` holds the message types. The doc comments on these types go into the JSON Schemas.
 - `codec` writes a message as one line and reads a line.
 - `schema` makes the JSON Schemas from the message types.
 
 A test compares the schemas and the example conversations in `docs/protocol` with the code. The check fails if they do not agree.
+
+Verus proves the rules of `name`, `code`, `part`, and `time`. The [verification](verification.md) document tells what each proof shows.
 
 ## The cryptography crate
 
@@ -47,9 +50,13 @@ A test compares the schemas and the example conversations in `docs/protocol` wit
 
 - `seed` holds the secret seed of a profile. It calculates the account key for a server.
 - `keys` holds the server key and the account key. It makes and examines the proofs of the sign-in.
+- `transcript` writes the bytes that a proof of the sign-in signs.
+- `hex` writes and reads the hexadecimal text of the seed.
 - `random` makes random values and invitation codes.
 
 A test examines the proofs in the example conversations of the protocol specification.
+
+Verus proves `transcript`, `hex`, and the generator of invitation codes in `random` (see the [verification](verification.md) document).
 
 ## The server crate
 

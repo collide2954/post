@@ -135,6 +135,13 @@ Post does not contain its own cryptographic algorithms (D-075). It uses these pa
 
 The sign-in procedure is a design of the project. It uses only signatures, with a different label for each purpose. The [protocol specification](protocol/README.md) gives the exact bytes.
 
+Verus proves two properties of these bytes (D-177):
+
+- Two signed messages of the same type are equal only if the address, the keys, and the random values in them are equal.
+- A message for the signature of the server is never equal to a message for the signature of the account.
+
+The security of the procedure against an attacker has no formal proof. The [verification](verification.md) document gives the limits.
+
 ## Conditions
 
 The protection depends on these conditions:
