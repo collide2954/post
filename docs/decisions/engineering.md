@@ -63,9 +63,11 @@ These records tell you how we build Post. Read the [guide](README.md) first.
 | 0.12 | Voice: transport, relay, and sound path |
 | 0.13 | Voice: interface, moderation, and sealed voice |
 | 0.14 | Bots with slash commands, webhooks, link previews |
-| 0.15 | Public web view, custom themes, key bindings |
+| 0.15 | Custom themes, key bindings |
 | 0.16 | Automatic certificates, proxy, packages, server directory, operator tools |
 | 1.0 | Final corrections, code signature, release |
+
+The public web view is an open decision (D-032). If the project selects it, it goes into version 0.15.
 
 **Reason.** The base comes first. Voice is a primary function and the largest risk, thus it comes directly after the text functions and the sealed chats. If time becomes short, a smaller function moves, not voice.
 

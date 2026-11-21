@@ -49,12 +49,14 @@ Community:
 
 - Roles, moderation tools, reports, and a moderation log.
 - Administration in the application, server settings, and operator tools.
-- Bots with slash commands, webhooks, the public web view, and the server directory.
+- Bots with slash commands, webhooks, and the server directory.
 
 Application:
 
 - Split panes, application profiles, custom themes, key bindings, and the protocol console.
 - English and Latin American Spanish text.
+
+One decision about the scope is open: the public web view (D-032).
 
 **Reason.** The first scope was a small core. Two reviews of function options on 2026-11-20 added the other functions. Each function has its own record.
 
@@ -362,14 +364,13 @@ Post has no read receipts.
 
 ### D-032 Public web view
 
-**Decision.** A channel owner can publish a public channel as read-only web pages. The function is off until the owner turns it on. A published channel shows the label "public on the web".
+**Decision.** This decision is open. The project examines the public web view again at a later time, before the work on version 0.15 starts. Until then, the function is not in the scope of version 1.0 (D-003).
 
-**Reason.** Answers in an open project stay easy to find, also for a search engine and for a person without the application.
+The function is this: a channel owner can publish a public channel as read-only web pages. The function is off until the owner turns it on. A published channel shows the label "public on the web".
 
-**Not selected.**
+**Reason.** The function helps an open project, because answers stay easy to find. But it adds web pages to the server that we must protect. The project takes more time for this decision.
 
-- The web view after version 1.0.
-- No web view.
+**History.** On 2026-11-20, this record first put the public web view into version 1.0. On the same day, the project made the decision open again.
 
 ### D-033 No IRC gateway
 
@@ -396,7 +397,7 @@ Post has no read receipts.
 - Threads, polls, custom server emoji, and spoiler text.
 - Recorded voice messages.
 - Spell check.
-- A web client. Chat in a browser is not possible, and the public web view (D-032) is read-only.
+- A web client. Chat in a browser is not possible.
 - A mobile application. The protocol must not depend on a desktop computer, and the public specification lets other people build a mobile client.
 - Federation between servers.
 

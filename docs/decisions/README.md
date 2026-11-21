@@ -14,6 +14,8 @@ Each record has an identifier (for example D-012) and a title. A record has thes
 - **Open point** gives a fact that we must examine. Some records do not have this part.
 - **History** tells you about an earlier form of the decision. Some records do not have this part.
 
+If a decision is open, the **Decision** part says so.
+
 All records have the date 2026-11-20, unless a record gives a different date.
 
 ## How to change a decision

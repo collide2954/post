@@ -152,7 +152,7 @@ Each limit has a safe default. The same limits apply to all members.
 
 ### D-135 Function switches
 
-**Decision.** An operator can turn off each of these functions for a server: voice, file upload, link previews, webhooks, and the public web view. The application hides a function that is off.
+**Decision.** An operator can turn off each of these functions for a server: voice, file upload, link previews, and webhooks. The application hides a function that is off.
 
 **Reason.** A small server operates only the functions that it can protect and pay for.
 
