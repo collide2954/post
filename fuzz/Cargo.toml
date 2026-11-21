@@ -13,6 +13,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4.13"
 post-client = { path = "../crates/post-client" }
+post-crypto = { path = "../crates/post-crypto" }
 post-proto = { path = "../crates/post-proto" }
 
 [[bin]]
@@ -46,6 +47,20 @@ bench = false
 [[bin]]
 name = "server_address"
 path = "fuzz_targets/server_address.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "byte_text"
+path = "fuzz_targets/byte_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "seed"
+path = "fuzz_targets/seed.rs"
 test = false
 doc = false
 bench = false
