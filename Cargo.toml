@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "tools/site"]
 exclude = ["fuzz"]
 
 [workspace.package]
@@ -25,6 +25,7 @@ post-client = { path = "crates/post-client" }
 post-crypto = { path = "crates/post-crypto" }
 post-proto = { path = "crates/post-proto" }
 post-server = { path = "crates/post-server" }
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 rusqlite = { version = "0.43.0", default-features = false, features = ["bundled", "cache"] }
 schemars = "1.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
