@@ -2761,6 +2761,7 @@ dependencies = [
 name = "post-proto"
 version = "0.1.1"
 dependencies = [
+ "base64",
  "schemars",
  "serde",
  "serde_json",

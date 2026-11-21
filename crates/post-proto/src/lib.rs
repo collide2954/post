@@ -1,3 +1,4 @@
+mod bytes;
 mod codec;
 mod message;
 mod name;
@@ -5,6 +6,7 @@ mod schema;
 mod text;
 mod time;
 
+pub use bytes::{BytesError, Key, Nonce, Signature};
 pub use codec::{DecodeError, MAX_LINE_BYTES};
 pub use message::{ClientMessage, DEFAULT_PORT, ErrorCode, LOBBY, PROTOCOL_VERSION, ServerMessage};
 pub use name::{Name, NameError};

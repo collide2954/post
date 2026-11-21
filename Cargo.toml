@@ -12,6 +12,7 @@ publish = false
 
 [workspace.dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
+base64 = "0.22.1"
 fluent-bundle = "0.16.0"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 iced = { version = "0.14.0", default-features = false, features = ["advanced-shaping", "crisp", "linux-theme-detection", "tiny-skia", "tokio", "wayland", "web-colors", "wgpu", "x11"] }
