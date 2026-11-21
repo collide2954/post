@@ -202,3 +202,29 @@ The documents must tell the reader that no independent audit exists. They must a
 
 - Sealed chats that an operator cannot turn off.
 - A switch for sealed channels only.
+
+### D-163 Server key
+
+**Date.** 2026-11-21.
+
+**Decision.** Each server makes its own key pair at the first start and keeps it with its data. The application calculates the account key from two values: the seed of the profile and the public key of the server (D-063).
+
+At the start of a connection, the server proves that it has its key. The proof contains the address that the application used. Then the application proves that it has the account key. The server must know its public addresses, and the operator writes them in the configuration file.
+
+**Reason.** An account belongs to the server and its data, not to a domain name. A server can get a new domain name or a new port, or it can have two addresses, and all accounts stay. A false server cannot use the proof of a different server, because the proof contains the address.
+
+**Not selected.**
+
+- An account key from the seed and the server address. This design is the simplest, and the server has to know nothing. But a new address loses all accounts, and one server with two addresses gives a user two accounts.
+
+### D-169 Seed file
+
+**Date.** 2026-11-21.
+
+**Decision.** In versions 0.2 to 0.10, the application keeps the seed in a file in the profile directory. Only the user account of the operating system can read the file. The seed has no other protection in these versions. The README and the release notes say this. Version 0.11 moves the seed into the keychain (D-065).
+
+**Reason.** The roadmap puts the keychain in version 0.11 (D-100). The protection is equal to that of an SSH key without a passphrase, and the 0.x versions are for tests.
+
+**Not selected.**
+
+- The keychain in version 0.2. The seed then has protection from the first day, but version 0.2 becomes larger.

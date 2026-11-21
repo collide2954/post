@@ -50,21 +50,21 @@ These records tell you how we build Post. Read the [guide](README.md) first.
 | Version | Content |
 |---|---|
 | 0.1 | Slice: two users chat in one channel |
-| 0.2 | Identity, handles, invitations, TLS, application profiles, protocol console |
+| 0.2 | Identity, handles, handle change, invitations, TLS, application profiles, first settings screen, text size, protocol console |
 | 0.3 | Channels, members, presence, split panes, sidebar favorites |
 | 0.4 | History, unread counts, read position, drafts |
 | 0.5 | Direct messages |
 | 0.6 | Replies, reactions, edit, delete, mentions, keyword highlights, mentions view, text format |
 | 0.7 | Files and images |
 | 0.8 | Search, notifications, message links, saved messages, export |
-| 0.9 | Moderation tools, administration in the application, server settings and limits |
+| 0.9 | Moderation tools, administration in the application, server settings and limits, join policies |
 | 0.10 | Sealed chats |
 | 0.11 | Recovery phrase, device link, keychain, passphrase, application lock, account proof |
 | 0.12 | Voice: transport, relay, and sound path |
 | 0.13 | Voice: interface, moderation, and sealed voice |
 | 0.14 | Bots with slash commands, webhooks, link previews |
-| 0.15 | Custom themes, key bindings |
-| 0.16 | Automatic certificates, proxy, packages, server directory, operator tools |
+| 0.15 | Custom themes, key bindings, appearance settings |
+| 0.16 | Automatic certificates, proxy, packages, links that open Post, server directory, operator tools |
 | 1.0 | Final corrections, code signature, release |
 
 The public web view is an open decision (D-032). If the project selects it, it goes into version 0.15.
@@ -75,6 +75,8 @@ The public web view is an open decision (D-032). If the project selects it, it g
 
 - The smaller server functions before voice.
 - A thin voice slice directly after direct messages.
+
+**History.** On 2026-11-21, the question round for version 0.2 gave a version to functions that had none (D-167, D-173). The handle change, the first settings screen, and the text size went into version 0.2. The join policies went into version 0.9, the other appearance settings into version 0.15, and the links that open Post into version 0.16.
 
 ### D-101 Tests first
 
@@ -264,3 +266,67 @@ All documents obey ASD-STE100 Simplified Technical English. A change to the code
 **Reason.** The names are short and clear.
 
 **Open point.** Some systems contain a Perl tool with the name `POST`. We must examine a possible conflict on macOS before the first macOS package.
+
+### D-168 Libraries for keys, TLS, and storage
+
+**Date.** 2026-11-21.
+
+**Decision.** Post uses these libraries:
+
+- `rustls` gives TLS to the server and to the application. It uses its default provider, `aws-lc-rs`. This provider adds a post-quantum key exchange.
+- `rustls-platform-verifier` lets the application examine a certificate with the certificate check of the operating system.
+- `rcgen` makes the own certificate of the server (D-164).
+- `ed25519-dalek` and `hkdf` from the RustCrypto project make and examine the keys of accounts and servers.
+- `rusqlite` gives the server its SQLite storage (D-051). SQLite is a part of the server program.
+
+**Reason.** Experts examined these libraries, and many projects use them (D-075). The standard provider of OpenMLS uses the same RustCrypto family (D-068). The certificate check of the operating system also accepts a certificate authority that a company installed.
+
+**Not selected.**
+
+- `ring` for TLS and for the keys. It has fewer crates and a simpler build, but TLS then has no post-quantum key exchange.
+- `sqlx` for storage. It brings many more crates. SQLite has one writer, thus async queries help little.
+
+### D-170 Performance budgets
+
+**Date.** 2026-11-21.
+
+**Decision.** These budgets apply (D-105):
+
+| Subject | Budget |
+|---|---|
+| Start of the application | The window shows in 300 ms or less after a warm start. |
+| Memory of the application | The application uses 150 MB or less when idle. |
+| Processor time of the application | The application uses 1% of one processor core or less when idle. |
+| Timeline, from version 0.4 | A frame takes 16 ms or less with 100,000 messages. |
+| Message delivery | The server sends a message to 1,000 members of a channel in 50 ms or less. |
+| Server memory | 10,000 idle connections use 1 GB or less. |
+
+The reference computer is a laptop with an Intel Core i5-8365U processor and built-in graphics. Before each minor version, we measure on the reference computer and record the results in `docs/performance.md`. The nightly checks run the benchmarks that need no window.
+
+**Reason.** The budgets are near the measured values of version 0.1: a window in 50 ms to 80 ms, 120 MB of memory, and less than 1% of one core. Thus a decrease in performance shows early. A reference computer of average speed gives stable numbers.
+
+**Not selected.**
+
+- Strict budgets of 150 ms and 80 MB. The GPU renderer of the toolkit uses more than 80 MB today.
+- Benchmarks with no budgets until version 0.4.
+
+### D-173 Content of version 0.2
+
+**Date.** 2026-11-21.
+
+**Decision.** Version 0.2 contains the functions that the roadmap gives (D-100). These rules also apply:
+
+- The handle change (D-024) is in version 0.2.
+- The first Settings screen and the text size are in version 0.2 (D-167).
+- A server has only the join policy "invitation". The other two policies (D-055) come in version 0.9 with the server settings.
+- In a browser, the page of an invite link shows the link and a Copy button. It tells the person to paste the link into the application, and it has a link to the downloads. The page has English and Latin American Spanish text.
+- The button "Open in Post" (D-050) comes with the packages in version 0.16. Only an installed package can register the application for links on all three systems.
+
+**Reason.** A function that comes early is a part of each later function from its first day. A function that depends on a later version waits for that version.
+
+**Not selected.**
+
+- The handle change in version 0.4 or in version 0.9.
+- Open sign-up in version 0.2, with one line in the configuration file.
+- No page for an invite link before version 0.16.
+- A registration for links in version 0.2. It is not possible on macOS without a package.

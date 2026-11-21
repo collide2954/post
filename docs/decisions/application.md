@@ -200,9 +200,16 @@ Screen reader support depends on the iced toolkit. We add it when the toolkit ma
 
 ### D-094 Protocol console
 
-**Decision.** A developer setting opens a console. The console shows the JSON lines that the application sends and receives. It does not show the content of sealed chats. The setting is off by default.
+**Decision.** A developer setting opens a console. The console is a panel at the bottom of the window. It shows the JSON lines that the application sends and receives, each with its time and its direction. A field in the console sends a JSON line that the developer types, in the connection that is already open. The server examines this line as it examines each line. The console does not show the content of sealed chats. The setting is off by default.
 
-**Reason.** The protocol is easy to learn, and a programmer of a bot or a client can find errors.
+**Reason.** The protocol is easy to learn, and a programmer of a bot or a client can find errors. A sign-in needs a signature from the account key (D-163), thus a person cannot try the protocol with a simple tool.
+
+**Not selected.**
+
+- A console that only shows the lines.
+- A console in a separate window.
+
+**History.** At first, the console only showed the lines. On 2026-11-21, the project added the field that sends a line.
 
 ### D-095 Icon
 
@@ -296,3 +303,53 @@ Screen reader support depends on the iced toolkit. We add it when the toolkit ma
 
 - The convention of the operating system. Separate code for each system is necessary.
 - The 24-hour format with no setting.
+
+### D-165 Profile selection
+
+**Date.** 2026-11-21.
+
+**Decision.** One window shows one profile (D-147). The application makes the first profile silently. At the start, it opens the profile that was last in use. The command `post --profile <name>` opens a specific profile, thus two windows can show two profiles at the same time.
+
+A Profiles screen makes, renames, deletes, and switches profiles. Before the application deletes a profile, it tells the user what the user loses, and the user must type the name of the profile. A user cannot delete the profile that is open.
+
+**Reason.** A user who wants one profile never sees the function. The parts of a life stay fully apart. A deleted seed cannot come back, thus a deletion must not occur by mistake.
+
+**Not selected.**
+
+- All profiles in one window, with a label on each server.
+- A selection on the command line only.
+- One confirmation question before a deletion.
+- No deletion in the application before the recovery phrase exists.
+
+### D-167 First settings screen
+
+**Date.** 2026-11-21.
+
+**Decision.** Version 0.2 contains the settings file and the first Settings screen (D-087). Each profile has its own settings file (D-147). The screen has these settings:
+
+- The language (D-092).
+- The time format (D-161).
+- The text size, from 80% to 200% (D-091).
+- The protocol console (D-094).
+
+Each later version adds its own settings. The other appearance settings come in version 0.15: the distance between lines (D-078), the handle colors (D-152), and the accent color (D-082).
+
+**Reason.** Each function must have a button (D-086). The toolkit can scale the full interface, thus the text size costs little, and the tests of each later screen can use it.
+
+**Not selected.**
+
+- A settings file with no screen in version 0.2.
+- All appearance settings in version 0.2.
+- All appearance settings in version 0.15.
+
+### D-171 Servers screen
+
+**Date.** 2026-11-21.
+
+**Decision.** Until the sidebar comes in version 0.3 (D-079), the window shows one server at a time. At the start, the application connects to the server that was last in use and opens its chat. A Servers screen lists the servers of the profile. On this screen, the user adds a server with an invite link or an address, and removes a server. A new profile starts on this screen.
+
+**Reason.** A user who comes back sees the chat immediately.
+
+**Not selected.**
+
+- The Servers screen at each start.

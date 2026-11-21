@@ -34,10 +34,10 @@ A new record gets the next free number. Do not use a number again.
 | [product.md](product.md) | What Post does for a user | D-001 to D-036, D-122 to D-130 |
 | [voice.md](voice.md) | Voice channels | D-037 to D-044, D-131, D-132 |
 | [protocol.md](protocol.md) | The Post protocol | D-045 to D-050, D-155, D-156 |
-| [server.md](server.md) | The server and its operation | D-051 to D-060, D-133 to D-146 |
-| [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076, D-147 to D-149 |
-| [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154, D-160, D-161 |
-| [engineering.md](engineering.md) | How we build Post | D-097 to D-112, D-157 to D-159 |
+| [server.md](server.md) | The server and its operation | D-051 to D-060, D-133 to D-146, D-164, D-166, D-172 |
+| [identity-and-security.md](identity-and-security.md) | Accounts, keys, and encryption | D-061 to D-076, D-147 to D-149, D-163, D-169 |
+| [application.md](application.md) | The desktop application | D-077 to D-096, D-150 to D-154, D-160, D-161, D-165, D-167, D-171 |
+| [engineering.md](engineering.md) | How we build Post | D-097 to D-112, D-157 to D-159, D-168, D-170, D-173 |
 | [distribution-and-community.md](distribution-and-community.md) | Releases and the project community | D-113 to D-121, D-162 |
 
 ## Index
@@ -140,6 +140,9 @@ A new record gets the next free number. Do not use a number again.
 - D-144 Lockdown switch
 - D-145 Server status view
 - D-146 Operator tools
+- D-164 Own certificate
+- D-166 Invitation limits
+- D-172 New owner link
 
 ### Identity and security
 
@@ -162,6 +165,8 @@ A new record gets the next free number. Do not use a number again.
 - D-147 Application profiles
 - D-148 Account proof
 - D-149 Operator control of sealed chats
+- D-163 Server key
+- D-169 Seed file
 
 ### Application
 
@@ -192,6 +197,9 @@ A new record gets the next free number. Do not use a number again.
 - D-154 Links
 - D-160 Window of the first slice
 - D-161 Time format
+- D-165 Profile selection
+- D-167 First settings screen
+- D-171 Servers screen
 
 ### Engineering
 
@@ -214,6 +222,9 @@ A new record gets the next free number. Do not use a number again.
 - D-157 Network libraries
 - D-158 Details of the first slice
 - D-159 Program names
+- D-168 Libraries for keys, TLS, and storage
+- D-170 Performance budgets
+- D-173 Content of version 0.2
 
 ### Distribution and community
 

@@ -261,3 +261,40 @@ Each limit has a safe default. The same limits apply to all members.
 - An operator setting can make the handle of an account free after a set time without use, as IRC networks do.
 
 **Reason.** A self-hosted server must be easy to keep safe. The data copy helps an operator who must obey a privacy law.
+
+### D-164 Own certificate
+
+**Date.** 2026-11-21.
+
+**Decision.** If the operator gives the server no certificate files, the server makes its own certificate at the first start. The application shows the fingerprint of this certificate one time and asks the user to accept it (D-073). Certificate files replace the own certificate at any time. The automatic certificate from Let's Encrypt (D-053) comes in version 0.16.
+
+**Reason.** A server at home or in a private network starts with no certificate steps, and TLS stays on.
+
+**Not selected.**
+
+- A server that listens only on the local computer until the operator gives it certificate files.
+
+### D-166 Invitation limits
+
+**Date.** 2026-11-21.
+
+**Decision.** In the application, a new invitation stops after 7 days and has no limit of uses. The person who makes the invitation can select a different end time and a limit of uses. A person who can make invitations can also cancel each invitation at any time.
+
+**Reason.** A link that leaks does not stay open for a long time. A community can still use one link for many people.
+
+**Not selected.**
+
+- One use for each link by default.
+- No end time by default.
+
+### D-172 New owner link
+
+**Date.** 2026-11-21.
+
+**Decision.** The command `post-server owner-link` makes a new owner link that works one time (D-054). The person who opens the link in the application becomes the server owner, with a new account or with an account that already exists. The earlier server owner becomes a normal member.
+
+**Reason.** A server owner can lose the key, and no recovery phrase exists before version 0.11. Only a person with access to the server computer can run the command, and that person already controls the server.
+
+**Not selected.**
+
+- No such command before the operator tools in version 0.16. The operator must then delete the server data and start again.
