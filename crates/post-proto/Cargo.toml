@@ -15,3 +15,7 @@ base64.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+vstd.workspace = true
+
+[package.metadata.verus]
+verify = true
