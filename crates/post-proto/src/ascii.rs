@@ -6,6 +6,10 @@ pub open spec fn spec_is_lower(byte: u8) -> bool {
     b'a' <= byte <= b'z'
 }
 
+pub open spec fn spec_is_upper(byte: u8) -> bool {
+    b'A' <= byte <= b'Z'
+}
+
 pub open spec fn spec_is_digit(byte: u8) -> bool {
     b'0' <= byte <= b'9'
 }
@@ -17,6 +21,15 @@ pub fn is_lower(byte: u8) -> (lower: bool)
         lower == spec_is_lower(byte),
 {
     (b'a'..=b'z').contains(&byte)
+}
+
+#[expect(clippy::manual_is_ascii_check, reason = "Verus has no specification for is_ascii_uppercase")]
+#[verifier::when_used_as_spec(spec_is_upper)]
+pub fn is_upper(byte: u8) -> (upper: bool)
+    ensures
+        upper == spec_is_upper(byte),
+{
+    (b'A'..=b'Z').contains(&byte)
 }
 
 #[expect(clippy::manual_is_ascii_check, reason = "Verus has no specification for is_ascii_digit")]

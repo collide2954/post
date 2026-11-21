@@ -28,6 +28,7 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 | The text form of a time | `crates/post-proto/src/time/text.rs` | The specification gives the 24 characters of each time. The writer makes exactly these characters. The reader accepts a text only if it is the text of a time, and it gives that time. Thus the reader gives back each time that the writer writes, and it refuses all other texts. |
 | The time type | `crates/post-proto/src/time.rs` | Each value that the proved code makes is a time from 1970-01-01 to 9999-12-31. |
 | The name of a user | `crates/post-proto/src/name.rs` | The rule is 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore. The reader accepts exactly the texts that obey the rule. For each other text, it gives the error that the specification gives. Each value that the proved code makes obeys the rule. |
+| The code of an invitation | `crates/post-proto/src/code.rs` | The rule is 12 characters, each a letter or a digit. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
 | The word for a part of the protocol | `crates/post-proto/src/part.rs` | The rule is 2 to 20 characters, each a lower-case letter or a hyphen, with no hyphen at the start or the end. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
 
 ## Holes

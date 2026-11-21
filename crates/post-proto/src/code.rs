@@ -4,8 +4,26 @@ use std::fmt;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vstd::prelude::*;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
+#[cfg(verus_keep_ghost)]
+use vstd::utf8::encode_utf8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+use crate::ascii::{is_digit, is_lower, is_upper};
+
+verus! {
+
+pub open spec fn is_code_character(byte: u8) -> bool {
+    is_upper(byte) || is_lower(byte) || is_digit(byte)
+}
+
+pub open spec fn is_code(bytes: Seq<u8>) -> bool {
+    &&& bytes.len() == 12
+    &&& forall|i: int| 0 <= i < bytes.len() ==> is_code_character(#[trigger] bytes[i])
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Code(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,11 +31,22 @@ pub struct CodeError;
 
 impl Code {
     pub const LENGTH: usize = 12;
-    pub const ALPHABET: &[u8; 62] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-    pub fn parse(text: &str) -> Result<Self, CodeError> {
-        if text.len() == Self::LENGTH && text.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+    #[verifier::type_invariant]
+    spec fn is_a_code(self) -> bool {
+        is_code(encode_utf8(self.0@))
+    }
+
+    pub closed spec fn view(self) -> Seq<char> {
+        self.0@
+    }
+
+    pub fn parse(text: &str) -> (code: Result<Self, CodeError>)
+        ensures
+            code is Ok <==> is_code(text.spec_bytes()),
+            code matches Ok(code) ==> code@ == text@,
+    {
+        if has_the_form(text.as_bytes()) {
             Ok(Self(text.to_owned()))
         } else {
             Err(CodeError)
@@ -25,11 +54,59 @@ impl Code {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn as_str(&self) -> (text: &str)
+        ensures
+            text@ == self@,
+            is_code(text.spec_bytes()),
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        self.0.as_str()
     }
 }
 
+impl Clone for Code {
+    fn clone(&self) -> (code: Self)
+        ensures
+            code@ == self@,
+    {
+        proof {
+            use_type_invariant(self);
+        }
+        Self(self.0.clone())
+    }
+}
+
+fn has_the_form(bytes: &[u8]) -> (form: bool)
+    ensures
+        form == is_code(bytes@),
+{
+    if bytes.len() != Code::LENGTH {
+        return false;
+    }
+    let mut index = 0;
+    while index < bytes.len()
+        invariant
+            index <= bytes.len(),
+            forall|i: int| 0 <= i < index ==> is_code_character(#[trigger] bytes@[i]),
+        decreases bytes.len() - index,
+    {
+        let byte = bytes[index];
+        if !(is_upper(byte) || is_lower(byte) || is_digit(byte)) {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+} // verus!
+
+impl Code {
+    pub const ALPHABET: &[u8; 62] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+}
 impl fmt::Display for Code {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
