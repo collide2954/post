@@ -24,4 +24,7 @@ sys-locale.workspace = true
 unic-langid.workspace = true
 
 [dev-dependencies]
+futures-util.workspace = true
 iced_test.workspace = true
+post-server.workspace = true
+tokio.workspace = true

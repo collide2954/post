@@ -63,12 +63,14 @@ The application uses the iced toolkit (D-077).
 - `palette` holds the colors of light mode and dark mode. A test examines the contrast of each color.
 - `i18n` holds the texts of the interface. The catalogs for English and Latin American Spanish are in `crates/post-app/i18n`.
 - `view` makes the widgets from the state. It contains no decisions.
-- `main` starts the toolkit and connects the parts.
+- `shell` connects the state to the toolkit: the start, the updates, and the subscriptions.
+- `main` selects the language and starts the shell.
 
 ## Tests
 
 - Each module has unit tests. We write a test before the code that it examines (D-101).
 - The server and the client have tests that use a real WebSocket connection on the local computer.
 - The application has tests that operate the interface without a window. They type text and select buttons.
+- One test runs the complete application without a window. It connects to a real server and exchanges text with a second user.
 - The automatic checks measure the coverage of each crate (D-104). The files `view.rs` and `main.rs` do not count.
 - Mutation tests examine the protocol crate each night.

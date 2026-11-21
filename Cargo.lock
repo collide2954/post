@@ -2734,12 +2734,15 @@ name = "post-app"
 version = "0.0.5"
 dependencies = [
  "fluent-bundle",
+ "futures-util",
  "iced",
  "iced_test",
  "jiff",
  "post-client",
  "post-proto",
+ "post-server",
  "sys-locale",
+ "tokio",
  "unic-langid",
 ]
 
