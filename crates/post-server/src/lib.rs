@@ -1,4 +1,5 @@
 mod cli;
+pub mod config;
 mod hub;
 mod server;
 mod sessions;
