@@ -1,32 +1,137 @@
-use std::fmt::Write as _;
+use vstd::prelude::*;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
 
-pub fn push(text: &mut String, bytes: &[u8]) {
-    for byte in bytes {
-        write!(text, "{byte:02x}").expect("a string accepts text");
+verus! {
+
+pub open spec fn hex_digit(value: int) -> u8 {
+    if value < 10 {
+        (b'0' + value) as u8
+    } else {
+        (b'a' + value - 10) as u8
     }
 }
 
-pub fn decode<const N: usize>(text: &str) -> Option<[u8; N]> {
-    let digits = text.as_bytes();
-    if digits.len() != N * 2 {
-        return None;
-    }
-    let mut bytes = [0; N];
-    let (pairs, _) = digits.as_chunks::<2>();
-    for (byte, [high, low]) in bytes.iter_mut().zip(pairs) {
-        *byte = digit(*high)? * 16 + digit(*low)?;
-    }
-    Some(bytes)
+pub open spec fn hex_text(bytes: Seq<u8>) -> Seq<u8> {
+    Seq::new(
+        2 * bytes.len(),
+        |i: int| hex_digit(if i % 2 == 0 { bytes[i / 2] as int / 16 } else { bytes[i / 2] as int % 16 }),
+    )
 }
 
-fn digit(character: u8) -> Option<u8> {
-    match character {
-        b'0'..=b'9' => Some(character - b'0'),
-        b'a'..=b'f' => Some(character - b'a' + 10),
+pub open spec fn hex_characters(bytes: Seq<u8>) -> Seq<char> {
+    Seq::new(2 * bytes.len(), |i: int| hex_text(bytes)[i] as char)
+}
+
+pub proof fn lemma_a_hex_text_gives_its_bytes(bytes: Seq<u8>, other: Seq<u8>)
+    requires
+        hex_text(bytes) == hex_text(other),
+    ensures
+        bytes == other,
+{
+    assert(bytes.len() == other.len()) by {
+        assert(hex_text(bytes).len() == 2 * bytes.len());
+        assert(hex_text(other).len() == 2 * other.len());
+    }
+    assert forall|i: int| 0 <= i < bytes.len() implies bytes[i] == other[i] by {
+        let byte = bytes[i] as int;
+        let other_byte = other[i] as int;
+        assert(hex_text(bytes)[2 * i] == hex_digit(byte / 16));
+        assert(hex_text(other)[2 * i] == hex_digit(other_byte / 16));
+        assert(hex_text(bytes)[2 * i + 1] == hex_digit(byte % 16));
+        assert(hex_text(other)[2 * i + 1] == hex_digit(other_byte % 16));
+        assert(byte / 16 == other_byte / 16 && byte % 16 == other_byte % 16);
+    }
+    assert(bytes =~= other);
+}
+
+fn digit(value: u8) -> (digit: u8)
+    requires
+        value < 16,
+    ensures
+        digit == hex_digit(value as int),
+{
+    if value < 10 {
+        b'0' + value
+    } else {
+        b'a' + (value - 10)
+    }
+}
+
+fn value(digit: u8) -> (value: Option<u8>)
+    ensures
+        value matches Some(value) ==> value < 16 && digit == hex_digit(value as int),
+        value is None ==> forall|value: int| 0 <= value < 16 ==> digit != #[trigger] hex_digit(value),
+{
+    match digit {
+        b'0'..=b'9' => Some(digit - b'0'),
+        b'a'..=b'f' => Some(digit - b'a' + 10),
         _ => None,
     }
 }
 
+pub fn push(text: &mut String, bytes: &[u8])
+    ensures
+        final(text)@ == old(text)@ + hex_characters(bytes@),
+{
+    let mut index = 0;
+    while index < bytes.len()
+        invariant
+            index <= bytes.len(),
+            text@ == old(text)@ + hex_characters(bytes@.take(index as int)),
+        decreases bytes.len() - index,
+    {
+        let byte = bytes[index];
+        text.push(digit(byte / 16) as char);
+        text.push(digit(byte % 16) as char);
+        index += 1;
+        assert(text@ =~= old(text)@ + hex_characters(bytes@.take(index as int)));
+    }
+    assert(bytes@.take(index as int) =~= bytes@);
+}
+
+pub fn decode<const N: usize>(text: &str) -> (bytes: Option<[u8; N]>)
+    ensures
+        bytes matches Some(bytes) ==> text.spec_bytes() == hex_text(bytes@),
+        bytes is None ==> forall|bytes: Seq<u8>|
+            bytes.len() == N ==> text.spec_bytes() != #[trigger] hex_text(bytes),
+{
+    let digits = text.as_bytes();
+    if !digits.len().is_multiple_of(2) || digits.len() / 2 != N {
+        return None;
+    }
+    let mut bytes = [0; N];
+    let mut index = 0;
+    while index < N
+        invariant
+            digits@ == text.spec_bytes(),
+            digits@.len() == 2 * N <= usize::MAX,
+            index <= N,
+            forall|i: int|
+                0 <= i < index ==> digits@[2 * i] == hex_digit(#[trigger] bytes@[i] as int / 16)
+                    && digits@[2 * i + 1] == hex_digit(bytes@[i] as int % 16),
+        decreases N - index,
+    {
+        let high = value(digits[2 * index]);
+        let low = value(digits[2 * index + 1]);
+        if let (Some(high), Some(low)) = (high, low) {
+            bytes[index] = high * 16 + low;
+        } else {
+            assert forall|other: Seq<u8>| other.len() == N implies digits@ != #[trigger] hex_text(
+                other,
+            ) by {
+                assert(hex_text(other)[2 * index] == hex_digit(other[index as int] as int / 16));
+                assert(hex_text(other)[2 * index + 1] == hex_digit(other[index as int] as int % 16));
+            }
+            return None;
+        }
+        index += 1;
+    }
+    assert(digits@ =~= hex_text(bytes@));
+    Some(bytes)
+}
+
+} // verus!
 #[cfg(test)]
 mod tests {
     use super::{decode, push};

@@ -31,6 +31,7 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 | The code of an invitation | `crates/post-proto/src/code.rs` | The rule is 12 characters, each a letter or a digit. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
 | The word for a part of the protocol | `crates/post-proto/src/part.rs` | The rule is 2 to 20 characters, each a lower-case letter or a hyphen, with no hyphen at the start or the end. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
 | The messages that the sign-in proofs sign | `crates/post-crypto/src/transcript.rs` | The writer makes exactly the bytes that the specification gives. A message gives its parts: two messages of the same type are equal only if all their parts are equal. A message of the server proof is never equal to a message of the account proof. |
+| The hexadecimal code of the seed | `crates/post-crypto/src/hex.rs` | The writer makes exactly the two characters that the specification gives for each byte. The reader accepts a text only if it is the text of some bytes, and it gives these bytes. Two different sequences of bytes never give the same text. |
 
 ## Holes
 
