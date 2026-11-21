@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 fluent-bundle.workspace = true
+jiff.workspace = true
 post-client.workspace = true
 post-proto.workspace = true
 unic-langid.workspace = true
