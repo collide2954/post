@@ -50,21 +50,21 @@ These records tell you how we build Post. Read the [guide](README.md) first.
 | Version | Content |
 |---|---|
 | 0.1 | Slice: two users chat in one channel |
-| 0.2 | Identity, handles, invitations, TLS, protocol console |
-| 0.3 | Channels, members, presence, split panes |
-| 0.4 | History, unread counts, read position |
+| 0.2 | Identity, handles, invitations, TLS, application profiles, protocol console |
+| 0.3 | Channels, members, presence, split panes, sidebar favorites |
+| 0.4 | History, unread counts, read position, drafts |
 | 0.5 | Direct messages |
-| 0.6 | Replies, reactions, edit, delete, mentions, keyword highlights, text format |
+| 0.6 | Replies, reactions, edit, delete, mentions, keyword highlights, mentions view, text format |
 | 0.7 | Files and images |
-| 0.8 | Search, notifications, message links, saved messages |
-| 0.9 | Moderation, and administration in the application |
+| 0.8 | Search, notifications, message links, saved messages, export |
+| 0.9 | Moderation tools, administration in the application, server settings and limits |
 | 0.10 | Sealed chats |
-| 0.11 | Recovery phrase, device link, keychain, passphrase, application lock |
+| 0.11 | Recovery phrase, device link, keychain, passphrase, application lock, account proof |
 | 0.12 | Voice: transport, relay, and sound path |
 | 0.13 | Voice: interface, moderation, and sealed voice |
-| 0.14 | Link previews, webhooks, custom themes |
-| 0.15 | Public web view |
-| 0.16 | Automatic certificates, proxy, packages, server directory |
+| 0.14 | Bots with slash commands, webhooks, link previews |
+| 0.15 | Public web view, custom themes, key bindings |
+| 0.16 | Automatic certificates, proxy, packages, server directory, operator tools |
 | 1.0 | Final corrections, code signature, release |
 
 **Reason.** The base comes first. Voice is a primary function and the largest risk, thus it comes directly after the text functions and the sealed chats. If time becomes short, a smaller function moves, not voice.
