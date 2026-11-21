@@ -5,9 +5,7 @@ use post_proto::{Key, Nonce, Signature};
 use zeroize::Zeroizing;
 
 use crate::random;
-
-const SERVER_PROOF: &[u8] = b"post-server-proof-0\0";
-const ACCOUNT_PROOF: &[u8] = b"post-account-proof-0\0";
+use crate::transcript::{write_account_transcript, write_server_transcript};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Exchange<'a> {
@@ -23,35 +21,25 @@ pub struct AccountKey(SigningKey);
 impl Exchange<'_> {
     #[must_use]
     pub fn server_proof_is_valid(&self, server: &Key, proof: &Signature) -> bool {
-        is_valid(server, &self.server_message(), proof)
+        is_valid(server, &self.server_transcript(), proof)
     }
 
     #[must_use]
     pub fn account_proof_is_valid(&self, account: &Key, server: &Key, proof: &Signature) -> bool {
-        is_valid(account, &self.account_message(server), proof)
+        is_valid(account, &self.account_transcript(server), proof)
     }
 
-    fn server_message(&self) -> Vec<u8> {
-        let parts: [&[u8]; 5] = [
-            SERVER_PROOF,
-            self.address.as_bytes(),
-            &[0],
-            self.client.as_bytes(),
-            self.server.as_bytes(),
-        ];
-        parts.concat()
+    fn server_transcript(&self) -> Vec<u8> {
+        write_server_transcript(self.address, self.client.as_bytes(), self.server.as_bytes())
     }
 
-    fn account_message(&self, server: &Key) -> Vec<u8> {
-        let parts: [&[u8]; 6] = [
-            ACCOUNT_PROOF,
-            self.address.as_bytes(),
-            &[0],
+    fn account_transcript(&self, server: &Key) -> Vec<u8> {
+        write_account_transcript(
+            self.address,
             server.as_bytes(),
             self.client.as_bytes(),
             self.server.as_bytes(),
-        ];
-        parts.concat()
+        )
     }
 }
 
@@ -94,7 +82,7 @@ impl ServerKey {
 
     #[must_use]
     pub fn prove(&self, exchange: &Exchange<'_>) -> Signature {
-        sign(&self.0, &exchange.server_message())
+        sign(&self.0, &exchange.server_transcript())
     }
 }
 
@@ -110,7 +98,7 @@ impl AccountKey {
 
     #[must_use]
     pub fn prove(&self, server: &Key, exchange: &Exchange<'_>) -> Signature {
-        sign(&self.0, &exchange.account_message(server))
+        sign(&self.0, &exchange.account_transcript(server))
     }
 }
 

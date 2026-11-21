@@ -16,4 +16,8 @@ getrandom.workspace = true
 hkdf.workspace = true
 post-proto.workspace = true
 sha2.workspace = true
+vstd.workspace = true
 zeroize.workspace = true
+
+[package.metadata.verus]
+verify = true

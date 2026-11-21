@@ -2901,6 +2901,7 @@ dependencies = [
  "hkdf",
  "post-proto",
  "sha2 0.11.1",
+ "vstd",
  "zeroize",
 ]
 

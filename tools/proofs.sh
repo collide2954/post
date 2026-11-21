@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-crates="post-proto"
+crates="post-proto post-crypto"
 
 if ! command -v cargo-verus >/dev/null 2>&1; then
     for directory in "$POST_VERUS" "$HOME"/tools/verus/verus-*; do
