@@ -29,7 +29,7 @@ A client opens a WebSocket connection to the path `/` of the server.
 Each message is one JSON object on one line.
 
 - The object is flat. The `type` field gives the kind of message.
-- A line has a maximum of 65,536 bytes.
+- A line has a maximum of 65,536 bytes. The server closes a connection that sends a longer line.
 - A line contains no line break. JSON writes a line break in a text as `\n`.
 - A message has only the fields that this document gives. The receiver refuses an object with a different field.
 
