@@ -331,3 +331,41 @@ The reference computer is a laptop with an Intel Core i5-8365U processor and bui
 - Open sign-up in version 0.2, with one line in the configuration file.
 - No page for an invite link before version 0.16.
 - A registration for links in version 0.2. It is not possible on macOS without a package.
+
+### D-174 Details of version 0.2
+
+**Date.** 2026-11-21.
+
+**Decision.** These rules apply to version 0.2.
+
+Keys and sign-in (D-163):
+
+- A key is an Ed25519 key. The seed has 32 random bytes. HKDF with SHA-256 calculates an account key from the seed and the public server key.
+- The protocol writes keys, signatures, and random values as base64url text. The text has no `=` characters at its end.
+- A sign-in has four messages: `hello`, `challenge`, `identify` or `register`, and `welcome`. The protocol specification gives them.
+- One account can have more than one connection at the same time.
+
+Addresses:
+
+- An address without a port means port 443 with TLS (D-047).
+- An address of the local computer without a port means port 7678 without TLS, for development (D-073). The prefix `https://` selects TLS for such an address.
+
+Server:
+
+- Without a configuration file, the server operates in development mode. It listens only on the local computer, without TLS.
+- The configuration file has the name `post-server.toml`. It gives the public addresses, the listen addresses, the data directory, and the TLS mode. The TLS modes are the own certificate, certificate files, and a reverse proxy.
+- The server accepts only TLS 1.3. The own certificate is valid for 10 years. The application identifies a private certificate by its SHA-256 fingerprint.
+- The code of an invitation has 12 random letters and digits. An owner link is an invitation that makes its user the server owner.
+- Only the server owner makes invitations. Operators and the setting for members (D-056) come in version 0.9.
+- The limits of the handle change (D-024) are fixed. The operator settings for them come in version 0.9.
+- A line in the timeline for a person who joins or leaves still shows the start or the end of a connection. Channels and members come in version 0.3.
+- The server stores accounts, handles, and invitations. It stores no messages before version 0.4.
+
+Application:
+
+- The profiles are in the data directory of the user: `%APPDATA%\Post` on Windows, `~/Library/Application Support/Post` on macOS, and the XDG directories on Linux. The environment variable `POST_HOME` selects a different directory.
+- A profile name has 1 to 30 characters. The first profile has the name "main", or "principal" in Spanish.
+- When the application changes a value in the settings file, it keeps the comments and the sequence of the file.
+- The F12 key shows and hides the protocol console when the developer setting is on.
+
+**Reason.** Each rule is the final rule, or it is clearly temporary. The rules keep the version as small as the decisions permit.
