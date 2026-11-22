@@ -101,7 +101,7 @@ The application uses the iced toolkit (D-077).
 - `timeline` holds the rules that prepare a timeline entry for the window: the local time in the format that the settings give, the local date, and the groups of messages.
 - `palette` holds the colors of light mode and dark mode. A test examines the contrast of each color.
 - `i18n` holds the texts of the interface. The catalogs for English and Latin American Spanish are in `crates/post-app/i18n`.
-- `view` makes the widgets from the state. It contains no decisions.
+- `view` makes the widgets from the state. It contains no decisions. It has one module for each screen, and the module `widgets` holds the parts that the screens share.
 - `shell` connects the state to the toolkit: the start, the updates, and the subscriptions. It opens the profile, gives the seed to the connection, writes the known servers, and puts an invite link in the clipboard. It also writes the settings file, and it tells the state when the text of that file changes.
 - `main` selects the language, finds the directories of the user, and starts the shell.
 
