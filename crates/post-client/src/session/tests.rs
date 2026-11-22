@@ -1,10 +1,11 @@
 use std::num::NonZeroU32;
 
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Invitation, Name, Role, ServerMessage, TextError, Timestamp,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, ListedChannel, Name,
+    Role, ServerMessage, TextError, Timestamp,
 };
 
-use super::{Entry, Session};
+use super::{Channel, Entry, Session};
 
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
@@ -367,4 +368,357 @@ fn starts_the_numbers_again_after_the_largest_number() {
             ..
         })
     ));
+}
+
+fn channel(text: &str) -> ChannelName {
+    ChannelName::parse(text).expect(text)
+}
+
+fn state(title: &str, kind: ChannelKind, topic: &str, owner: &str) -> ServerMessage {
+    ServerMessage::Channel {
+        reference: None,
+        channel: channel(title),
+        kind,
+        topic: topic.to_owned(),
+        owner: name(owner),
+        created: time(0),
+    }
+}
+
+fn session_with(channels: &[&str]) -> Session {
+    let mut session = Session::new(name("ana"));
+    for title in channels {
+        session.apply(state(title, ChannelKind::Public, "", "ana"));
+    }
+    session
+}
+
+fn entries<'a>(session: &'a Session, title: &str) -> &'a [Entry] {
+    session
+        .channel(&channel(title))
+        .expect("a channel of the user")
+        .entries()
+}
+
+#[test]
+fn starts_with_no_channels() {
+    let session = Session::new(name("ana"));
+
+    assert_eq!(session.channels().count(), 0);
+    assert!(session.channel(&channel("general")).is_none());
+    assert!(!session.is_ready());
+    assert_eq!(session.listed(), None);
+}
+
+#[test]
+fn keeps_the_state_of_each_channel_of_the_user_in_the_sequence_of_the_names() {
+    let mut session = Session::new(name("ana"));
+
+    session.apply(state("general", ChannelKind::Public, "Plans", "ben"));
+    session.apply(state("dev", ChannelKind::Private, "", "ana"));
+    assert!(!session.is_ready());
+    session.apply(ServerMessage::Ready {});
+
+    assert!(session.is_ready());
+    let names: Vec<&str> = session.channels().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(names, ["dev", "general"]);
+    let general = session
+        .channel(&channel("general"))
+        .expect("a channel of the user");
+    assert_eq!(general.kind(), ChannelKind::Public);
+    assert_eq!(general.topic(), "Plans");
+    assert_eq!(general.owner(), &name("ben"));
+    assert_eq!(general.created(), time(0));
+    assert_eq!(general.entries(), []);
+    let dev = session.channel(&channel("dev"));
+    assert_eq!(dev.map(Channel::kind), Some(ChannelKind::Private));
+    assert_eq!(session.entries(), []);
+}
+
+#[test]
+fn records_what_occurs_in_each_channel_in_its_own_timeline() {
+    let mut session = session_with(&["general", "dev"]);
+
+    session.apply(join("general", "ben", 1));
+    session.apply(message("general", "ben", 2, "Hi"));
+    session.apply(message("dev", "ana", 3, "Notes"));
+    session.apply(leave("general", "ben", 4));
+    session.apply(message("lobby", "cy", 5, "Hello"));
+
+    assert_eq!(
+        entries(&session, "general"),
+        [
+            Entry::Joined {
+                time: time(1),
+                name: name("ben"),
+            },
+            Entry::Message {
+                time: time(2),
+                from: name("ben"),
+                text: "Hi".to_owned(),
+            },
+            Entry::Left {
+                time: time(4),
+                name: name("ben"),
+            },
+        ]
+    );
+    assert_eq!(
+        entries(&session, "dev"),
+        [Entry::Message {
+            time: time(3),
+            from: name("ana"),
+            text: "Notes".to_owned(),
+        }]
+    );
+    assert_eq!(session.entries().len(), 1);
+}
+
+#[test]
+fn keeps_the_timeline_when_the_server_sends_the_state_of_a_channel_again() {
+    let mut session = session_with(&["general"]);
+    session.apply(message("general", "ana", 1, "Hello"));
+
+    session.apply(state("general", ChannelKind::Private, "New topic", "ben"));
+
+    let general = session
+        .channel(&channel("general"))
+        .expect("a channel of the user");
+    assert_eq!(general.kind(), ChannelKind::Private);
+    assert_eq!(general.topic(), "New topic");
+    assert_eq!(general.owner(), &name("ben"));
+    assert_eq!(general.entries().len(), 1);
+    assert_eq!(session.channels().count(), 1);
+}
+
+#[test]
+fn forgets_a_channel_when_the_user_leaves_it() {
+    let mut session = session_with(&["general", "dev"]);
+    session.apply(message("general", "ana", 1, "Hello"));
+
+    session.apply(leave("general", "ana", 2));
+
+    assert!(session.channel(&channel("general")).is_none());
+    assert_eq!(session.channels().count(), 1);
+    session.apply(message("general", "ben", 3, "Hi"));
+    assert!(session.channel(&channel("general")).is_none());
+    assert_eq!(entries(&session, "dev"), []);
+    assert_eq!(session.entries(), []);
+}
+
+#[test]
+fn records_that_the_user_went_out_of_the_temporary_lobby() {
+    let mut session = session_with(&["general"]);
+
+    session.apply(leave("lobby", "ana", 1));
+
+    assert_eq!(
+        session.entries(),
+        [Entry::Left {
+            time: time(1),
+            name: name("ana"),
+        }]
+    );
+    assert_eq!(session.channels().count(), 1);
+}
+
+#[test]
+fn makes_each_channel_request_with_a_new_number() {
+    let mut session = Session::new(name("ana"));
+    let general = channel("general");
+
+    assert_eq!(
+        session.create_channel(&general, ChannelKind::Private),
+        ClientMessage::ChannelCreate {
+            reference: Some(1),
+            channel: "general".to_owned(),
+            kind: ChannelKind::Private,
+        }
+    );
+    assert_eq!(
+        session.join(&general),
+        ClientMessage::Join {
+            reference: Some(2),
+            channel: "general".to_owned(),
+        }
+    );
+    assert_eq!(
+        session.leave(&general),
+        ClientMessage::Leave {
+            reference: Some(3),
+            channel: "general".to_owned(),
+        }
+    );
+    assert_eq!(
+        session.ask_for_channels(),
+        ClientMessage::Channels { reference: Some(4) }
+    );
+    assert_eq!(
+        session.compose_to(&general, "Hello"),
+        Ok(ClientMessage::Send {
+            reference: Some(5),
+            channel: "general".to_owned(),
+            text: "Hello".to_owned(),
+        })
+    );
+    assert_eq!(session.compose_to(&general, "  "), Err(TextError::Empty));
+    assert_eq!(
+        session.compose_to(&general, &"x".repeat(4001)),
+        Err(TextError::TooLong)
+    );
+}
+
+#[test]
+fn forgets_the_error_when_the_user_makes_a_channel_request() {
+    let general = channel("general");
+    let requests: [fn(&mut Session, &ChannelName) -> ClientMessage; 4] = [
+        |session, name| session.create_channel(name, ChannelKind::Public),
+        |session, name| session.join(name),
+        |session, name| session.leave(name),
+        |session, _| session.ask_for_channels(),
+    ];
+
+    for request in requests {
+        let mut session = Session::new(name("ana"));
+        session.apply(ServerMessage::error(Some(1), ErrorCode::NameTaken));
+
+        let _message = request(&mut session, &general);
+
+        assert_eq!(session.problem(), None);
+    }
+}
+
+fn listed(title: &str, members: u32) -> ListedChannel {
+    ListedChannel {
+        channel: channel(title),
+        kind: ChannelKind::Public,
+        topic: String::new(),
+        members,
+    }
+}
+
+fn part(reference: u32, list: Vec<ListedChannel>, more: bool) -> ServerMessage {
+    ServerMessage::Channels {
+        reference: Some(reference),
+        list,
+        more,
+    }
+}
+
+#[test]
+fn collects_the_parts_of_the_channel_list() {
+    let mut session = Session::new(name("ana"));
+    let _request = session.ask_for_channels();
+
+    session.apply(part(1, vec![listed("dev", 1), listed("general", 2)], true));
+    assert_eq!(session.listed(), None);
+    session.apply(part(1, vec![listed("talk", 3)], false));
+
+    assert_eq!(
+        session.listed(),
+        Some([listed("dev", 1), listed("general", 2), listed("talk", 3)].as_slice())
+    );
+}
+
+#[test]
+fn shows_the_earlier_channel_list_until_a_new_list_is_complete() {
+    let mut session = Session::new(name("ana"));
+    let _request = session.ask_for_channels();
+    session.apply(part(1, vec![listed("dev", 1)], false));
+
+    let _request = session.ask_for_channels();
+    session.apply(part(2, vec![listed("general", 2)], true));
+    assert_eq!(session.listed(), Some([listed("dev", 1)].as_slice()));
+    session.apply(part(2, Vec::new(), false));
+
+    assert_eq!(session.listed(), Some([listed("general", 2)].as_slice()));
+}
+
+#[test]
+fn ignores_a_part_of_a_channel_list_that_is_not_the_answer_to_the_last_request() {
+    let mut session = Session::new(name("ana"));
+
+    session.apply(part(1, vec![listed("dev", 1)], false));
+    assert_eq!(session.listed(), None);
+
+    let _first = session.ask_for_channels();
+    session.apply(part(1, vec![listed("dev", 1)], true));
+    let _second = session.ask_for_channels();
+    session.apply(part(1, vec![listed("old", 1)], false));
+    assert_eq!(session.listed(), None);
+    session.apply(ServerMessage::Channels {
+        reference: None,
+        list: vec![listed("no-number", 1)],
+        more: false,
+    });
+    assert_eq!(session.listed(), None);
+
+    session.apply(part(2, vec![listed("general", 2)], false));
+    assert_eq!(session.listed(), Some([listed("general", 2)].as_slice()));
+    session.apply(part(2, vec![listed("late", 1)], false));
+    assert_eq!(session.listed(), Some([listed("general", 2)].as_slice()));
+}
+
+#[test]
+fn shows_the_new_name_of_a_user_in_each_channel_that_shows_the_user() {
+    let mut session = Session::new(name("ana"));
+    session.apply(state("general", ChannelKind::Public, "", "ben"));
+    session.apply(state("dev", ChannelKind::Public, "", "ana"));
+    session.apply(state("quiet", ChannelKind::Public, "", "ana"));
+    session.apply(message("dev", "ben", 1, "Hi"));
+
+    session.apply(rename("ben", "benito", 2));
+
+    let renamed = Entry::Renamed {
+        time: time(2),
+        old: name("ben"),
+        new: name("benito"),
+    };
+    let general = session
+        .channel(&channel("general"))
+        .expect("a channel of the user");
+    assert_eq!(general.owner(), &name("benito"));
+    assert_eq!(general.entries(), std::slice::from_ref(&renamed));
+    assert_eq!(
+        entries(&session, "dev"),
+        [
+            Entry::Message {
+                time: time(1),
+                from: name("benito"),
+                text: "Hi".to_owned(),
+            },
+            renamed.clone(),
+        ]
+    );
+    assert_eq!(entries(&session, "quiet"), []);
+    assert_eq!(session.entries(), [renamed]);
+
+    session.apply(rename("benito", "beni", 3));
+    assert_eq!(entries(&session, "dev").len(), 3);
+    assert_eq!(entries(&session, "quiet"), []);
+}
+
+#[test]
+fn takes_the_new_name_of_its_own_account_in_each_channel() {
+    let mut session = session_with(&["general"]);
+    session.apply(join("general", "ana", 1));
+
+    session.apply(rename("ana", "anna", 2));
+
+    assert_eq!(session.name(), &name("anna"));
+    let general = session
+        .channel(&channel("general"))
+        .expect("a channel of the user");
+    assert_eq!(general.owner(), &name("anna"));
+    assert_eq!(
+        general.entries()[0],
+        Entry::Joined {
+            time: time(1),
+            name: name("anna"),
+        }
+    );
+    session.apply(leave("general", "ana", 3));
+    assert_eq!(session.channels().count(), 1);
+    session.apply(leave("general", "anna", 4));
+    assert_eq!(session.channels().count(), 0);
 }

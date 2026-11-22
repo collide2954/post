@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Invitation, LOBBY, Name, ServerMessage, TextError, Timestamp,
-    check_text,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, LOBBY, ListedChannel,
+    Name, ServerMessage, TextError, Timestamp, check_text,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,13 +28,74 @@ pub enum Entry {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Channel {
+    kind: ChannelKind,
+    topic: String,
+    owner: Name,
+    created: Timestamp,
+    entries: Vec<Entry>,
+}
+
 #[derive(Debug)]
 pub struct Session {
     name: Name,
     entries: Vec<Entry>,
+    channels: BTreeMap<ChannelName, Channel>,
+    is_ready: bool,
+    listed: Option<Vec<ListedChannel>>,
+    listing: Option<(u32, Vec<ListedChannel>)>,
     problem: Option<ErrorCode>,
     invitations: Option<Vec<Invitation>>,
     next_reference: u32,
+}
+
+impl Channel {
+    #[must_use]
+    pub fn kind(&self) -> ChannelKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub fn topic(&self) -> &str {
+        &self.topic
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> &Name {
+        &self.owner
+    }
+
+    #[must_use]
+    pub fn created(&self) -> Timestamp {
+        self.created
+    }
+
+    #[must_use]
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
+    fn mentions(&self, name: &Name) -> bool {
+        self.owner == *name || self.entries.iter().any(|entry| entry.mentions(name))
+    }
+
+    fn renamed(&mut self, old: &Name, new: &Name) {
+        if self.owner == *old {
+            self.owner = new.clone();
+        }
+        rename_in(&mut self.entries, old, new);
+    }
+}
+
+impl Entry {
+    fn mentions(&self, who: &Name) -> bool {
+        match self {
+            Self::Message { from, .. } => from == who,
+            Self::Joined { name, .. } | Self::Left { name, .. } => name == who,
+            Self::Renamed { .. } => false,
+        }
+    }
 }
 
 impl Session {
@@ -46,6 +108,10 @@ impl Session {
         Self {
             name,
             entries: Vec::new(),
+            channels: BTreeMap::new(),
+            is_ready: false,
+            listed: None,
+            listing: None,
             problem: None,
             invitations: None,
             next_reference,
@@ -60,6 +126,25 @@ impl Session {
     #[must_use]
     pub fn entries(&self) -> &[Entry] {
         &self.entries
+    }
+
+    pub fn channels(&self) -> impl Iterator<Item = (&ChannelName, &Channel)> {
+        self.channels.iter()
+    }
+
+    #[must_use]
+    pub fn channel(&self, name: &ChannelName) -> Option<&Channel> {
+        self.channels.get(name)
+    }
+
+    #[must_use]
+    pub fn is_ready(&self) -> bool {
+        self.is_ready
+    }
+
+    #[must_use]
+    pub fn listed(&self) -> Option<&[ListedChannel]> {
+        self.listed.as_deref()
     }
 
     #[must_use]
@@ -77,12 +162,54 @@ impl Session {
     }
 
     pub fn compose(&mut self, text: &str) -> Result<ClientMessage, TextError> {
+        self.compose_for(LOBBY, text)
+    }
+
+    pub fn compose_to(
+        &mut self,
+        channel: &ChannelName,
+        text: &str,
+    ) -> Result<ClientMessage, TextError> {
+        self.compose_for(channel.as_str(), text)
+    }
+
+    fn compose_for(&mut self, channel: &str, text: &str) -> Result<ClientMessage, TextError> {
         check_text(text)?;
         Ok(ClientMessage::Send {
             reference: Some(self.request()),
-            channel: LOBBY.to_owned(),
+            channel: channel.to_owned(),
             text: text.to_owned(),
         })
+    }
+
+    pub fn create_channel(&mut self, name: &ChannelName, kind: ChannelKind) -> ClientMessage {
+        ClientMessage::ChannelCreate {
+            reference: Some(self.request()),
+            channel: name.as_str().to_owned(),
+            kind,
+        }
+    }
+
+    pub fn join(&mut self, name: &ChannelName) -> ClientMessage {
+        ClientMessage::Join {
+            reference: Some(self.request()),
+            channel: name.as_str().to_owned(),
+        }
+    }
+
+    pub fn leave(&mut self, name: &ChannelName) -> ClientMessage {
+        ClientMessage::Leave {
+            reference: Some(self.request()),
+            channel: name.as_str().to_owned(),
+        }
+    }
+
+    pub fn ask_for_channels(&mut self) -> ClientMessage {
+        let reference = self.request();
+        self.listing = Some((reference, Vec::new()));
+        ClientMessage::Channels {
+            reference: Some(reference),
+        }
     }
 
     pub fn invite(
@@ -117,23 +244,6 @@ impl Session {
         }
     }
 
-    fn renamed(&mut self, old: Name, new: Name, time: Timestamp) {
-        if self.name == old {
-            self.name = new.clone();
-        }
-        for entry in &mut self.entries {
-            let name = match entry {
-                Entry::Message { from, .. } => from,
-                Entry::Joined { name, .. } | Entry::Left { name, .. } => name,
-                Entry::Renamed { .. } => continue,
-            };
-            if *name == old {
-                *name = new.clone();
-            }
-        }
-        self.entries.push(Entry::Renamed { time, old, new });
-    }
-
     fn request(&mut self) -> u32 {
         let reference = self.next_reference;
         self.next_reference = reference.wrapping_add(1);
@@ -149,29 +259,117 @@ impl Session {
                 time,
                 text,
                 ..
-            } if channel == LOBBY => self.entries.push(Entry::Message { time, from, text }),
+            } => self.record(&channel, Entry::Message { time, from, text }),
             ServerMessage::Join {
                 channel,
                 name,
                 time,
-            } if channel == LOBBY => self.entries.push(Entry::Joined { time, name }),
+            } => self.record(&channel, Entry::Joined { time, name }),
             ServerMessage::Leave {
                 channel,
                 name,
                 time,
                 ..
-            } if channel == LOBBY => self.entries.push(Entry::Left { time, name }),
+            } => self.left(&channel, name, time),
+            ServerMessage::Channel {
+                channel,
+                kind,
+                topic,
+                owner,
+                created,
+                ..
+            } => {
+                let state = self.channels.entry(channel).or_insert_with(|| Channel {
+                    kind,
+                    topic: String::new(),
+                    owner: owner.clone(),
+                    created,
+                    entries: Vec::new(),
+                });
+                state.kind = kind;
+                state.topic = topic;
+                state.owner = owner;
+                state.created = created;
+            }
+            ServerMessage::Ready {} => self.is_ready = true,
+            ServerMessage::Channels {
+                reference,
+                list,
+                more,
+            } => self.listed_part(reference, list, more),
             ServerMessage::Invitations { list, .. } => self.invitations = Some(list),
             ServerMessage::Rename { old, new, time, .. } => self.renamed(old, new, time),
             ServerMessage::Error { code, .. } => self.problem = Some(code),
-            ServerMessage::Message { .. }
-            | ServerMessage::Join { .. }
-            | ServerMessage::Leave { .. }
-            | ServerMessage::Welcome { .. }
-            | ServerMessage::Channel { .. }
-            | ServerMessage::Channels { .. }
-            | ServerMessage::Ready {}
-            | ServerMessage::Challenge { .. } => {}
+            ServerMessage::Welcome { .. } | ServerMessage::Challenge { .. } => {}
+        }
+    }
+
+    fn listed_part(&mut self, reference: Option<u32>, list: Vec<ListedChannel>, more: bool) {
+        let Some((wanted, listing)) = &mut self.listing else {
+            return;
+        };
+        if reference != Some(*wanted) {
+            return;
+        }
+        listing.extend(list);
+        if !more {
+            self.listed = self.listing.take().map(|(_, complete)| complete);
+        }
+    }
+
+    fn timeline(&mut self, channel: &str) -> Option<&mut Vec<Entry>> {
+        if channel == LOBBY {
+            return Some(&mut self.entries);
+        }
+        let name = ChannelName::parse(channel).ok()?;
+        self.channels.get_mut(&name).map(|state| &mut state.entries)
+    }
+
+    fn record(&mut self, channel: &str, entry: Entry) {
+        if let Some(entries) = self.timeline(channel) {
+            entries.push(entry);
+        }
+    }
+
+    fn left(&mut self, channel: &str, name: Name, time: Timestamp) {
+        if channel != LOBBY
+            && name == self.name
+            && let Ok(channel) = ChannelName::parse(channel)
+        {
+            self.channels.remove(&channel);
+            return;
+        }
+        self.record(channel, Entry::Left { time, name });
+    }
+
+    fn renamed(&mut self, old: Name, new: Name, time: Timestamp) {
+        if self.name == old {
+            self.name = new.clone();
+        }
+        rename_in(&mut self.entries, &old, &new);
+        for channel in self.channels.values_mut() {
+            if channel.mentions(&old) {
+                channel.renamed(&old, &new);
+                channel.entries.push(Entry::Renamed {
+                    time,
+                    old: old.clone(),
+                    new: new.clone(),
+                });
+            }
+        }
+        self.entries.push(Entry::Renamed { time, old, new });
+    }
+}
+
+fn rename_in(entries: &mut [Entry], old: &Name, new: &Name) {
+    for entry in entries {
+        let name = match entry {
+            Entry::Message { from, .. } => from,
+            Entry::Joined { name, .. } | Entry::Left { name, .. } => name,
+            Entry::Renamed { .. } => continue,
+        };
+        if name == old {
+            *name = new.clone();
         }
     }
 }

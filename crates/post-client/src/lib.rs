@@ -15,4 +15,4 @@ pub use post_crypto::{Fingerprint, Seed};
 pub use profile::{
     KnownServer, NameProblem, Profile, ProfileEntry, ProfileError, ProfileId, Profiles,
 };
-pub use session::{Entry, Session};
+pub use session::{Channel, Entry, Session};
