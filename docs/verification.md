@@ -16,7 +16,7 @@ Post as a whole is not verified. Only the parts in this document have a proof.
 2. Put the directory of the release in `~/tools/verus`, or put it in your `PATH`.
 3. Run `sh tools/proofs.sh`.
 
-The commit hook runs the proofs if the computer has Verus. The automatic checks run them on each push.
+The commit hook runs the proofs when a commit changes a proved crate, if the computer has Verus. The automatic checks run all proofs on each push.
 
 Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release that the file `rust-toolchain.toml` gives, and it does not use Verus.
 
