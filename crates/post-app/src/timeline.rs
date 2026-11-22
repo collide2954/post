@@ -1,3 +1,4 @@
+use jiff::civil::DateTime;
 use jiff::tz::TimeZone;
 use post_client::Entry;
 use post_proto::Timestamp;
@@ -6,16 +7,33 @@ const UNKNOWN_TIME: &str = "--:--";
 
 #[must_use]
 pub fn clock(time: Timestamp, zone: &TimeZone) -> String {
-    i64::try_from(time.unix_millis())
-        .ok()
-        .and_then(|millis| jiff::Timestamp::from_millisecond(millis).ok())
-        .map_or_else(
-            || UNKNOWN_TIME.to_owned(),
-            |instant| {
-                let local = zone.to_datetime(instant);
-                format!("{:02}:{:02}", local.hour(), local.minute())
-            },
-        )
+    local(time, zone).map_or_else(
+        || UNKNOWN_TIME.to_owned(),
+        |local| format!("{:02}:{:02}", local.hour(), local.minute()),
+    )
+}
+
+#[must_use]
+pub fn date_and_clock(time: Timestamp, zone: &TimeZone) -> String {
+    local(time, zone).map_or_else(
+        || UNKNOWN_TIME.to_owned(),
+        |local| {
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}",
+                local.year(),
+                local.month(),
+                local.day(),
+                local.hour(),
+                local.minute()
+            )
+        },
+    )
+}
+
+fn local(time: Timestamp, zone: &TimeZone) -> Option<DateTime> {
+    let millis = i64::try_from(time.unix_millis()).ok()?;
+    let instant = jiff::Timestamp::from_millisecond(millis).ok()?;
+    Some(zone.to_datetime(instant))
 }
 
 #[must_use]
@@ -45,7 +63,7 @@ mod tests {
     use post_client::Entry;
     use post_proto::{Name, Timestamp};
 
-    use super::{clock, name_column, shows_name};
+    use super::{clock, date_and_clock, name_column, shows_name};
 
     fn time(text: &str) -> Timestamp {
         Timestamp::parse(text).expect(text)
@@ -98,6 +116,22 @@ mod tests {
     #[test]
     fn shows_dashes_for_a_time_that_the_calendar_cannot_hold() {
         assert_eq!(clock(Timestamp::MAX, &TimeZone::UTC), "--:--");
+        assert_eq!(date_and_clock(Timestamp::MAX, &TimeZone::UTC), "--:--");
+    }
+
+    #[test]
+    fn shows_the_local_date_before_the_time() {
+        let night = time("2026-11-28T23:30:00.000Z");
+
+        assert_eq!(date_and_clock(night, &TimeZone::UTC), "2026-11-28 23:30");
+        assert_eq!(
+            date_and_clock(night, &TimeZone::fixed(Offset::constant(1))),
+            "2026-11-29 00:30"
+        );
+        assert_eq!(
+            date_and_clock(time("2027-01-05T08:07:00.000Z"), &TimeZone::UTC),
+            "2027-01-05 08:07"
+        );
     }
 
     #[test]
