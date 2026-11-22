@@ -2,6 +2,23 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.2.0 - 2026-11-22
+
+Version 0.2 adds identity and the connection across a network (D-100, D-173). The versions 0.1.3 to 0.1.6 added the accounts, the invitations, the proved rules of the server, TLS, the Servers screen, the handle change in the protocol, and the page for an invite link.
+
+- Add the Invitations panel. The server owner makes, copies, and cancels invite links (D-166).
+- Add the panel for the handle change (D-024).
+- Add the settings file and the Settings page with the language, the time format, the text size, and the protocol console (D-087, D-167). The application applies a change in the file.
+- Add the Profiles page and the command `post --profile <name>` (D-165).
+- Add the protocol console. It shows each line of the connection, and it sends a line that the user types (D-094).
+- Add the measurements for the performance budgets (D-170). The document `docs/performance.md` gives the values.
+- Decrease the memory of the server for each idle connection from 137 kB to 10 kB.
+- Make the text of a message one time for all the connections that get the same message.
+
+The application keeps the seed of a profile in a file that only your user account can read. The seed has no other protection in this version (D-169).
+
+This version has one channel and no stored history. The server can read each message.
+
 ## 0.1.6 - 2026-11-22
 
 - Add TLS 1.3 to the server and to the application (D-061). A server can make its own certificate (D-164) or use certificate files.
