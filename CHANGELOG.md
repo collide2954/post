@@ -2,6 +2,13 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.5 - 2026-11-22
+
+- Let the application sign in with an account (D-163). The application makes the first profile and remembers the key of each server.
+- Add the messages `invite`, `invitations`, and `revoke` for invitations. Only the server owner can use them.
+- Remove the temporary `guest` message. Each connection now signs in with an account.
+- Prove that only the server owner cancels an invitation.
+
 ## 0.1.4 - 2026-11-22
 
 - Add the rules core of the server (D-178). Verus proves the rules for accounts, handles, and invitations, and SQLite only stores the data.

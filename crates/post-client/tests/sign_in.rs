@@ -569,7 +569,7 @@ async fn tells_that_the_server_closed_the_connection_before_the_welcome() {
 async fn connects_and_then_stops_for_a_protocol_error(address: &str) {
     let mut ana = events(address, 1, None, None);
 
-    connected(&mut ana).await;
+    let _link = connected(&mut ana).await;
     assert_eq!(disconnected(&mut ana).await, Disconnect::Protocol);
 }
 
