@@ -126,6 +126,7 @@ fn the_schemas_list_each_message_type() {
         [
             "channel-create",
             "channel-delete",
+            "channel-give",
             "channel-rename",
             "channel-topic",
             "channels",
@@ -151,6 +152,7 @@ fn the_schemas_list_each_message_type() {
             "challenge",
             "channel",
             "channel-delete",
+            "channel-give",
             "channel-rename",
             "channel-topic",
             "channels",

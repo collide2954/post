@@ -289,6 +289,7 @@ impl Session {
             | ServerMessage::Challenge { .. }
             | ServerMessage::ChannelTopic { .. }
             | ServerMessage::ChannelRename { .. }
+            | ServerMessage::ChannelGive { .. }
             | ServerMessage::ChannelDelete { .. } => {}
         }
     }

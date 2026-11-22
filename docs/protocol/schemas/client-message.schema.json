@@ -470,6 +470,39 @@
       ]
     },
     {
+      "description": "Gives a channel to a different member of the channel. Only the owner can give it.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the member who becomes the owner.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-give"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name"
+      ]
+    },
+    {
       "description": "Deletes a channel. Only the owner of the channel can delete it.",
       "type": "object",
       "properties": {

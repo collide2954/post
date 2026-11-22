@@ -259,14 +259,16 @@ fn gives_the_user_of_the_owner_link_the_owner_role() {
     assert!(account.owner);
     assert_eq!(account.created, day(0));
     assert_eq!(server.rules.name_of(owner), Some(&name("ana")));
+    assert_eq!(server.rules.id_of(&name("ana")), Some(owner));
 }
 
 #[test]
-fn does_not_know_a_key_or_an_identifier_without_an_account() {
+fn does_not_know_a_key_an_identifier_or_a_name_without_an_account() {
     let (server, _owner) = Server::with_owner();
 
     assert_eq!(server.rules.account(&key(2)), None);
     assert_eq!(server.rules.name_of(AccountId(99)), None);
+    assert_eq!(server.rules.id_of(&name("ben")), None);
 }
 
 #[test]
@@ -486,6 +488,8 @@ fn changes_a_name_and_gives_the_earlier_name() {
 
     assert_eq!(earlier, Ok(name("ana")));
     assert_eq!(server.rules.name_of(owner), Some(&name("ana-2")));
+    assert_eq!(server.rules.id_of(&name("ana-2")), Some(owner));
+    assert_eq!(server.rules.id_of(&name("ana")), None);
     let account = server.rules.account(&key(1)).expect("an account");
     assert_eq!(account.renamed, Some(day(1)));
 }

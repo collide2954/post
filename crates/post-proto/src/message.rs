@@ -151,6 +151,16 @@ pub enum ClientMessage {
         /// The new name of the channel.
         name: String,
     },
+    /// Gives a channel to a different member of the channel. Only the owner can give it.
+    ChannelGive {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+        /// The name of the member who becomes the owner.
+        name: String,
+    },
     /// Deletes a channel. Only the owner of the channel can delete it.
     ChannelDelete {
         /// A number that the answer of the server repeats.
@@ -301,6 +311,18 @@ pub enum ServerMessage {
         /// The time of the change.
         time: Timestamp,
     },
+    /// Tells that a channel has a new owner.
+    ChannelGive {
+        /// The number from the `channel-give` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The name of the new owner.
+        name: Name,
+        /// The time of the change.
+        time: Timestamp,
+    },
     /// Tells that the owner deleted a channel.
     ChannelDelete {
         /// The number from the `channel-delete` message. Only the connection that sent it gets this field.
@@ -411,6 +433,10 @@ pub enum ErrorCode {
     OwnerCannotLeave,
     /// The topic does not obey the rules for a topic.
     InvalidTopic,
+    /// The server has no user with the name.
+    NoSuchUser,
+    /// The channel has no member with the name.
+    NoSuchMember,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -453,6 +479,7 @@ impl ClientMessage {
             | Self::Channels { reference }
             | Self::ChannelTopic { reference, .. }
             | Self::ChannelRename { reference, .. }
+            | Self::ChannelGive { reference, .. }
             | Self::ChannelDelete { reference, .. } => *reference,
         }
     }
@@ -522,6 +549,8 @@ impl ErrorCode {
             Self::NotMember => "You are not a member of this channel.",
             Self::OwnerCannotLeave => "The owner of a channel cannot leave it.",
             Self::InvalidTopic => "A topic is one line of text with a maximum of 300 characters.",
+            Self::NoSuchUser => "The server has no user with this name.",
+            Self::NoSuchMember => "The user is not a member of this channel.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }

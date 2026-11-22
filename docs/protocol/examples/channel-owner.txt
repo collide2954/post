@@ -36,6 +36,18 @@ S: {"type":"channel-rename","ref":5,"channel":"general","name":"lounge","time":"
 C: {"type":"channel-rename","ref":6,"channel":"lounge","name":"garden"}
 S: {"type":"error","ref":6,"code":"too-soon","text":"The name changed a short time ago. Try again later."}
 
+# Ana gives the channel "lounge" to its member "ben". Each member of the channel gets the message.
+C: {"type":"channel-give","ref":7,"channel":"lounge","name":"ben"}
+S: {"type":"channel-give","ref":7,"channel":"lounge","name":"ben","time":"2026-11-21T14:09:00.000Z"}
+
+# The user "cy" is not a member of the channel "plans".
+C: {"type":"channel-give","ref":8,"channel":"plans","name":"cy"}
+S: {"type":"error","ref":8,"code":"no-such-member","text":"The user is not a member of this channel."}
+
+# The server has no user with the name "dan".
+C: {"type":"channel-give","ref":9,"channel":"plans","name":"dan"}
+S: {"type":"error","ref":9,"code":"no-such-user","text":"The server has no user with this name."}
+
 # Ana deletes her channel "plans". Each member of the channel gets the message.
-C: {"type":"channel-delete","ref":7,"channel":"plans"}
-S: {"type":"channel-delete","ref":7,"channel":"plans","time":"2026-11-21T14:09:00.000Z"}
+C: {"type":"channel-delete","ref":10,"channel":"plans"}
+S: {"type":"channel-delete","ref":10,"channel":"plans","time":"2026-11-21T14:11:00.000Z"}

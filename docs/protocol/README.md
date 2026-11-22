@@ -185,6 +185,7 @@ A member of the server can make a channel. That member is the owner of the chann
 - An account can be the owner of a maximum of 10 channels.
 - A channel has a topic. The topic is one line of text with a maximum of 300 characters. It can be empty. Only the owner changes the topic.
 - Only the owner changes the name of a channel. The earlier name stays reserved for the channel for 30 days. In this time, no other channel can take it.
+- The owner can give the channel to a different member of the channel. That member becomes the owner. The earlier owner stays a member.
 - Only the owner deletes a channel. The name of a deleted channel is free immediately.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
 
@@ -399,6 +400,24 @@ The server answers with a `channel-rename` message or with an `error` message. E
 
 The two times are fixed in protocol version 0.
 
+### `channel-give`
+
+The `channel-give` message gives a channel to a different member of the channel. That member becomes the owner of the channel. The earlier owner stays a member.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-give"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+| `name` | The name of the member who becomes the owner. |
+
+The server answers with a `channel-give` message or with an `error` message. Each member of the channel gets the `channel-give` message.
+
+- If the user is not the owner of the channel, the error is `not-permitted`.
+- If the server has no user with the name, the error is `no-such-user`.
+- If the user with the name is not a member of the channel, the error is `no-such-member`.
+- If the member already owns 10 channels, the error is `too-many-channels`.
+
 ### `channel-delete`
 
 The `channel-delete` message deletes a channel. The server cannot get the channel back.
@@ -587,6 +606,18 @@ The `channel-rename` message tells that a channel has a new name. The server sen
 | `name` | The new name of the channel. |
 | `time` | The time of the change. |
 
+### `channel-give`
+
+The `channel-give` message tells that a channel has a new owner. The server sends it to each member of the channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-give"` |
+| `ref` | The value from the `channel-give` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The name of the channel. |
+| `name` | The name of the new owner. |
+| `time` | The time of the change. |
+
 ### `channel-delete`
 
 The `channel-delete` message tells that the owner deleted a channel. The server sends it to each member of the channel. After this message, the channel has no members.
@@ -638,6 +669,8 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `not-member` | The user is not a member of the channel. |
 | `owner-cannot-leave` | The owner of a channel cannot leave it. |
 | `invalid-topic` | The topic does not obey the rules for a topic. |
+| `no-such-user` | The server has no user with the name. |
+| `no-such-member` | The channel has no member with the name. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations

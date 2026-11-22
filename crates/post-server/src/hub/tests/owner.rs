@@ -1,6 +1,6 @@
 use post_proto::{ChannelKind, ClientMessage, ErrorCode, ListedChannel, ServerMessage, Timestamp};
 
-use super::channels::{create, join, list, signed_in_again, with_general};
+use super::channels::{create, join, leave, list, signed_in_again, state, with_general};
 use super::{challenged, channel, error, identify, later, name, now, send, to};
 
 fn topic(reference: u32, channel: &str, topic: &str) -> String {
@@ -131,6 +131,7 @@ fn refuses_a_change_of_a_channel_before_the_sign_in() {
         topic(1, "general", "Plans"),
         rename(1, "general", "lounge"),
         delete(1, "general"),
+        give(1, "general", "ben"),
     ];
 
     for line in &lines {
@@ -151,6 +152,7 @@ fn refuses_a_change_of_a_channel_before_the_sign_in() {
 #[test]
 fn answers_with_a_server_error_when_it_cannot_store_a_change_of_a_channel() {
     let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(1, "general"), now());
     hub.store.lose_its_tables();
 
     assert_eq!(
@@ -160,6 +162,10 @@ fn answers_with_a_server_error_when_it_cannot_store_a_change_of_a_channel() {
     assert_eq!(
         hub.receive(ids[0], &rename(3, "general", "lounge"), now()),
         [to(ids[0], error(Some(3), ErrorCode::ServerError))]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &give(5, "general", "ben"), now()),
+        [to(ids[0], error(Some(5), ErrorCode::ServerError))]
     );
     assert_eq!(
         hub.receive(ids[0], &delete(4, "general"), now()),
@@ -354,4 +360,116 @@ fn refuses_to_delete_a_channel_for_a_user_who_is_not_its_owner() {
     }
     let sent = hub.receive(ids[1], &send(Some(6), "general", "Hello"), now());
     assert_eq!(sent.len(), 2);
+}
+
+fn give(reference: u32, channel: &str, name: &str) -> String {
+    ClientMessage::ChannelGive {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+        name: name.to_owned(),
+    }
+    .encode()
+}
+
+fn given(reference: Option<u32>, title: &str, to: &str) -> ServerMessage {
+    ServerMessage::ChannelGive {
+        reference,
+        channel: channel(title),
+        name: name(to),
+        time: later(),
+    }
+}
+
+#[test]
+fn the_owner_gives_a_channel_to_a_member_and_each_member_gets_the_news() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+
+    let outgoing = hub.receive(ids[0], &give(5, "general", "ben"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], given(Some(5), "general", "ben")),
+            to(ids[1], given(None, "general", "ben")),
+        ]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &topic(6, "general", "Plans"), later()),
+        [to(ids[0], error(Some(6), ErrorCode::NotPermitted))]
+    );
+    let changed = hub.receive(ids[1], &topic(7, "general", "Plans"), later());
+    assert_eq!(changed.len(), 2);
+    assert_eq!(
+        hub.receive(ids[1], &leave(8, "general"), later()),
+        [to(ids[1], error(Some(8), ErrorCode::OwnerCannotLeave))]
+    );
+    let left = hub.receive(ids[0], &leave(9, "general"), later());
+    assert_eq!(left.len(), 2);
+}
+
+#[test]
+fn gives_the_name_of_the_new_owner_in_the_state_of_the_channel() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+    hub.receive(ids[0], &give(3, "general", "ben"), now());
+
+    let id = hub.connect();
+    let server = challenged(&mut hub, id, &[]);
+    let line = identify(&hub, 1, &server, None);
+
+    assert_eq!(
+        hub.receive(id, &line, later())[1],
+        to(id, state(None, "general", ChannelKind::Public, "ben"))
+    );
+}
+
+#[test]
+fn refuses_to_give_a_channel_when_a_rule_does_not_permit_it() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &create(2, "secret", ChannelKind::Private), now());
+    hub.receive(ids[1], &join(3, "general"), now());
+
+    for (wanted, code) in [
+        ("cy", ErrorCode::NoSuchMember),
+        ("dan", ErrorCode::NoSuchUser),
+        ("Not A Name", ErrorCode::NoSuchUser),
+        ("", ErrorCode::NoSuchUser),
+    ] {
+        assert_eq!(
+            hub.receive(ids[0], &give(4, "general", wanted), now()),
+            [to(ids[0], error(Some(4), code))],
+            "{wanted}"
+        );
+    }
+    for not_the_owner in [ids[1], ids[2]] {
+        for wanted in ["ben", "dan"] {
+            assert_eq!(
+                hub.receive(not_the_owner, &give(5, "general", wanted), now()),
+                [to(not_the_owner, error(Some(5), ErrorCode::NotPermitted))]
+            );
+        }
+    }
+    for title in ["garden", "secret", "General"] {
+        assert_eq!(
+            hub.receive(ids[1], &give(6, title, "ben"), now()),
+            [to(ids[1], error(Some(6), ErrorCode::NoSuchChannel))],
+            "{title}"
+        );
+    }
+}
+
+#[test]
+fn does_not_give_a_channel_to_a_member_who_owns_ten_channels() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+    for number in 0..10 {
+        let title = format!("channel-{number}");
+        hub.receive(ids[1], &create(number, &title, ChannelKind::Public), now());
+    }
+
+    assert_eq!(
+        hub.receive(ids[0], &give(3, "general", "ben"), now()),
+        [to(ids[0], error(Some(3), ErrorCode::TooManyChannels))]
+    );
 }

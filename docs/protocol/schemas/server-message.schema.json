@@ -447,6 +447,44 @@
       ]
     },
     {
+      "description": "Tells that a channel has a new owner.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "name": {
+          "description": "The name of the new owner.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the `channel-give` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time of the change.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-give"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "time"
+      ]
+    },
+    {
       "description": "Tells that the owner deleted a channel.",
       "type": "object",
       "properties": {
@@ -666,6 +704,16 @@
           "description": "The topic does not obey the rules for a topic.",
           "type": "string",
           "const": "invalid-topic"
+        },
+        {
+          "description": "The server has no user with the name.",
+          "type": "string",
+          "const": "no-such-user"
+        },
+        {
+          "description": "The channel has no member with the name.",
+          "type": "string",
+          "const": "no-such-member"
         },
         {
           "description": "The server has a problem and cannot do the task.",

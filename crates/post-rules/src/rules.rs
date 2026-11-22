@@ -194,6 +194,26 @@ impl Rules {
         }
     }
 
+    #[must_use]
+    pub fn id_of(&self, name: &Name) -> (id: Option<AccountId>)
+        ensures
+            match id {
+                Some(id) => exists|i: int|
+                    0 <= i < self.accounts().len() && (#[trigger] self.accounts()[i]).name@ == name@
+                        && self.accounts()[i].id == id,
+                None => forall|i: int|
+                    0 <= i < self.accounts().len() ==> (#[trigger] self.accounts()[i]).name@ != name@,
+            },
+    {
+        match self.name_at(name) {
+            Some(at) => {
+                assert(self.accounts()[at as int].name@ == name@);
+                Some(self.accounts[at].id)
+            },
+            None => None,
+        }
+    }
+
     pub fn register<S: Storage>(
         &mut self,
         storage: &mut S,

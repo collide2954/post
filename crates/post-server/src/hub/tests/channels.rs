@@ -18,7 +18,12 @@ pub(super) fn create(reference: u32, channel: &str, kind: ChannelKind) -> String
     .encode()
 }
 
-fn state(reference: Option<u32>, title: &str, kind: ChannelKind, owner: &str) -> ServerMessage {
+pub(super) fn state(
+    reference: Option<u32>,
+    title: &str,
+    kind: ChannelKind,
+    owner: &str,
+) -> ServerMessage {
     ServerMessage::Channel {
         reference,
         channel: channel(title),
@@ -229,7 +234,7 @@ pub(super) fn join(reference: u32, channel: &str) -> String {
     .encode()
 }
 
-fn leave(reference: u32, channel: &str) -> String {
+pub(super) fn leave(reference: u32, channel: &str) -> String {
     ClientMessage::Leave {
         reference: Some(reference),
         channel: channel.to_owned(),

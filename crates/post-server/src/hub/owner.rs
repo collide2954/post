@@ -1,5 +1,5 @@
-use post_proto::{ChannelName, ErrorCode, ServerMessage, check_topic};
-use post_rules::{ChannelRenameError, OwnerError};
+use post_proto::{ChannelName, ErrorCode, Name, ServerMessage, check_topic};
+use post_rules::{ChannelRenameError, GiveError, OwnerError};
 
 use super::{Answer, ConnectionId, Hub, Outgoing, Request, present};
 
@@ -63,6 +63,40 @@ impl Hub {
 }
 
 impl Hub {
+    pub(super) fn give_channel(
+        &mut self,
+        request: &Request<'_>,
+        channel: &str,
+        receiver: &str,
+    ) -> Answer {
+        let member = present(request.state)?;
+        let found = self.visible(member.account, channel)?;
+        if found.owner != member.account {
+            return Err(ErrorCode::NotPermitted);
+        }
+        let id = found.id;
+        let name = Name::parse(receiver).map_err(|_| ErrorCode::NoSuchUser)?;
+        let account = self.rules.id_of(&name).ok_or(ErrorCode::NoSuchUser)?;
+        self.channels
+            .give(&mut self.store, member.account, id, account)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(|error| match error {
+                GiveError::NoSuchChannel => ErrorCode::NoSuchChannel,
+                GiveError::NotPermitted => ErrorCode::NotPermitted,
+                GiveError::NotMember => ErrorCode::NoSuchMember,
+                GiveError::TooMany => ErrorCode::TooManyChannels,
+            })?;
+        let channel = self.channels.by_id(id).ok_or(ErrorCode::ServerError)?;
+        Ok(
+            self.to_each_member_of(channel, |to| ServerMessage::ChannelGive {
+                reference: request.reference.filter(|_| to == request.from),
+                channel: channel.name.clone(),
+                name: name.clone(),
+                time: request.now,
+            }),
+        )
+    }
+
     pub(super) fn delete_channel(&mut self, request: &Request<'_>, channel: &str) -> Answer {
         let member = present(request.state)?;
         let found = self.visible(member.account, channel)?;

@@ -99,6 +99,22 @@ fn owner_requests() -> Vec<(ClientMessage, &'static str)> {
             },
             r#"{"type":"channel-delete","channel":"general"}"#,
         ),
+        (
+            ClientMessage::ChannelGive {
+                reference: Some(12),
+                channel: "general".to_owned(),
+                name: "ben".to_owned(),
+            },
+            r#"{"type":"channel-give","ref":12,"channel":"general","name":"ben"}"#,
+        ),
+        (
+            ClientMessage::ChannelGive {
+                reference: None,
+                channel: "general".to_owned(),
+                name: "Not A Name".to_owned(),
+            },
+            r#"{"type":"channel-give","channel":"general","name":"Not A Name"}"#,
+        ),
     ]
 }
 
@@ -381,6 +397,24 @@ fn owner_events() -> Vec<(ServerMessage, &'static str)> {
                 time: time("2026-11-21T14:09:00.000Z"),
             },
             r#"{"type":"channel-delete","channel":"general","time":"2026-11-21T14:09:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelGive {
+                reference: Some(12),
+                channel: channel("general"),
+                name: name("ben"),
+                time: time("2026-11-21T14:10:00.000Z"),
+            },
+            r#"{"type":"channel-give","ref":12,"channel":"general","name":"ben","time":"2026-11-21T14:10:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelGive {
+                reference: None,
+                channel: channel("general"),
+                name: name("ben"),
+                time: time("2026-11-21T14:10:00.000Z"),
+            },
+            r#"{"type":"channel-give","channel":"general","name":"ben","time":"2026-11-21T14:10:00.000Z"}"#,
         ),
     ]
 }
@@ -808,6 +842,16 @@ fn each_error_code_of_a_channel_has_a_word_form_and_a_text() {
             "A topic is one line of text with a maximum of 300 characters.",
         ),
         (
+            ErrorCode::NoSuchUser,
+            "no-such-user",
+            "The server has no user with this name.",
+        ),
+        (
+            ErrorCode::NoSuchMember,
+            "no-such-member",
+            "The user is not a member of this channel.",
+        ),
+        (
             ErrorCode::InvalidChannelName,
             "invalid-channel-name",
             "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore.",
@@ -907,6 +951,9 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"channel-delete"}"#,
         r#"{"type":"channel-delete","channel":7}"#,
         r#"{"type":"channel-delete","channel":"general","time":"2026-11-21T14:09:00.000Z"}"#,
+        r#"{"type":"channel-give","channel":"general"}"#,
+        r#"{"type":"channel-give","name":"ben"}"#,
+        r#"{"type":"channel-give","channel":"general","name":"ben","time":"2026-11-21T14:10:00.000Z"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -961,6 +1008,9 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel-rename","channel":"General","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
         r#"{"type":"channel-delete","channel":"general"}"#,
         r#"{"type":"channel-delete","channel":"General","time":"2026-11-21T14:09:00.000Z"}"#,
+        r#"{"type":"channel-give","channel":"general","name":"ben"}"#,
+        r#"{"type":"channel-give","channel":"general","name":"Ben","time":"2026-11-21T14:10:00.000Z"}"#,
+        r#"{"type":"channel-give","channel":"General","name":"ben","time":"2026-11-21T14:10:00.000Z"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),
