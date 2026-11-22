@@ -129,6 +129,8 @@ fn the_schemas_list_each_message_type() {
             "identify",
             "invitations",
             "invite",
+            "join",
+            "leave",
             "register",
             "rename",
             "revoke",

@@ -110,6 +110,22 @@ pub enum ClientMessage {
         /// The kind of the channel.
         kind: ChannelKind,
     },
+    /// Joins a channel.
+    Join {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+    },
+    /// Leaves a channel.
+    Leave {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -171,6 +187,9 @@ pub enum ServerMessage {
     },
     /// Tells that a user went out of a channel.
     Leave {
+        /// The number from the `leave` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
         /// The name of the channel, without the `#` sign.
         channel: String,
         /// The name of the user.
@@ -290,6 +309,12 @@ pub enum ErrorCode {
     InvalidChannelName,
     /// The account owns the maximum number of channels.
     TooManyChannels,
+    /// The user is already a member of the channel.
+    AlreadyMember,
+    /// The user is not a member of the channel.
+    NotMember,
+    /// The owner of a channel cannot leave it.
+    OwnerCannotLeave,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -326,7 +351,9 @@ impl ClientMessage {
             | Self::Invitations { reference }
             | Self::Revoke { reference, .. }
             | Self::Rename { reference, .. }
-            | Self::ChannelCreate { reference, .. } => *reference,
+            | Self::ChannelCreate { reference, .. }
+            | Self::Join { reference, .. }
+            | Self::Leave { reference, .. } => *reference,
         }
     }
 
@@ -391,6 +418,9 @@ impl ErrorCode {
                 "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore."
             }
             Self::TooManyChannels => "The account owns the maximum number of channels.",
+            Self::AlreadyMember => "The user is already a member of this channel.",
+            Self::NotMember => "You are not a member of this channel.",
+            Self::OwnerCannotLeave => "The owner of a channel cannot leave it.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }

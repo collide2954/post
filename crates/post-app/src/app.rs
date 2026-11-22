@@ -340,6 +340,9 @@ pub fn error_text(code: ErrorCode) -> Text {
         ErrorCode::TooSoon => Text::ErrorTooSoon,
         ErrorCode::InvalidChannelName => Text::ErrorInvalidChannelName,
         ErrorCode::TooManyChannels => Text::ErrorTooManyChannels,
+        ErrorCode::AlreadyMember => Text::ErrorAlreadyMember,
+        ErrorCode::NotMember => Text::ErrorNotMember,
+        ErrorCode::OwnerCannotLeave => Text::ErrorOwnerCannotLeave,
         ErrorCode::BadMessage
         | ErrorCode::HelloRequired
         | ErrorCode::DuplicateHello
@@ -1118,6 +1121,9 @@ mod tests {
             (ErrorCode::TooSoon, Text::ErrorTooSoon),
             (ErrorCode::InvalidChannelName, Text::ErrorInvalidChannelName),
             (ErrorCode::TooManyChannels, Text::ErrorTooManyChannels),
+            (ErrorCode::AlreadyMember, Text::ErrorAlreadyMember),
+            (ErrorCode::NotMember, Text::ErrorNotMember),
+            (ErrorCode::OwnerCannotLeave, Text::ErrorOwnerCannotLeave),
             (ErrorCode::BadMessage, Text::ErrorOther),
             (ErrorCode::HelloRequired, Text::ErrorOther),
             (ErrorCode::DuplicateHello, Text::ErrorOther),

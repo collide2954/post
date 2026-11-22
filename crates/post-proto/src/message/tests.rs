@@ -44,7 +44,41 @@ fn channel(text: &str) -> ChannelName {
 }
 
 fn client_examples() -> Vec<(ClientMessage, &'static str)> {
+    let mut examples = channel_requests();
+    examples.extend(other_requests());
+    examples
+}
+
+fn channel_requests() -> Vec<(ClientMessage, &'static str)> {
     vec![
+        (
+            ClientMessage::Join {
+                reference: Some(6),
+                channel: "general".to_owned(),
+            },
+            r#"{"type":"join","ref":6,"channel":"general"}"#,
+        ),
+        (
+            ClientMessage::Join {
+                reference: None,
+                channel: "#general".to_owned(),
+            },
+            r##"{"type":"join","channel":"#general"}"##,
+        ),
+        (
+            ClientMessage::Leave {
+                reference: Some(7),
+                channel: "general".to_owned(),
+            },
+            r#"{"type":"leave","ref":7,"channel":"general"}"#,
+        ),
+        (
+            ClientMessage::Leave {
+                reference: None,
+                channel: "general".to_owned(),
+            },
+            r#"{"type":"leave","channel":"general"}"#,
+        ),
         (
             ClientMessage::ChannelCreate {
                 reference: Some(5),
@@ -61,6 +95,11 @@ fn client_examples() -> Vec<(ClientMessage, &'static str)> {
             },
             r#"{"type":"channel-create","channel":"Not A Name","kind":"private"}"#,
         ),
+    ]
+}
+
+fn other_requests() -> Vec<(ClientMessage, &'static str)> {
+    vec![
         (
             ClientMessage::Send {
                 reference: Some(1),
@@ -172,11 +211,21 @@ fn server_examples() -> Vec<(ServerMessage, &'static str)> {
         ),
         (
             ServerMessage::Leave {
+                reference: None,
                 channel: "lobby".to_owned(),
                 name: name("ben"),
                 time: time("2026-11-21T14:03:00.000Z"),
             },
             r#"{"type":"leave","channel":"lobby","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::Leave {
+                reference: Some(7),
+                channel: "general".to_owned(),
+                name: name("ana"),
+                time: time("2026-11-21T14:03:00.000Z"),
+            },
+            r#"{"type":"leave","ref":7,"channel":"general","name":"ana","time":"2026-11-21T14:03:00.000Z"}"#,
         ),
         (
             ServerMessage::Message {
@@ -611,6 +660,21 @@ fn each_error_code_has_a_word_form_and_a_text() {
             "too-many-channels",
             "The account owns the maximum number of channels.",
         ),
+        (
+            ErrorCode::AlreadyMember,
+            "already-member",
+            "The user is already a member of this channel.",
+        ),
+        (
+            ErrorCode::NotMember,
+            "not-member",
+            "You are not a member of this channel.",
+        ),
+        (
+            ErrorCode::OwnerCannotLeave,
+            "owner-cannot-leave",
+            "The owner of a channel cannot leave it.",
+        ),
     ];
     examine_error_codes(&codes);
 }
@@ -669,6 +733,11 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"channelcreate","channel":"general","kind":"public"}"#,
         r#"{"type":"channel_create","channel":"general","kind":"public"}"#,
         r#"{"type":"ready"}"#,
+        r#"{"type":"join"}"#,
+        r#"{"type":"join","channel":7}"#,
+        r#"{"type":"join","channel":"general","name":"ben","time":"2026-11-21T14:02:05.000Z"}"#,
+        r#"{"type":"leave"}"#,
+        r#"{"type":"leave","channel":"general","name":"ben"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -701,6 +770,9 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel","channel":"general","kind":"public","topic":"","owner":"Ana","created":"2026-11-21T14:02:05.000Z"}"#,
         r#"{"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T14:02:05.000Z","members":1}"#,
         r#"{"type":"ready","ref":1}"#,
+        r#"{"type":"join","channel":"general"}"#,
+        r#"{"type":"leave","channel":"general"}"#,
+        r#"{"type":"leave","ref":"7","channel":"general","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
         r#"{"type":"channel-create","channel":"general","kind":"public"}"#,
     ] {
         assert!(

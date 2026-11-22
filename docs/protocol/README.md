@@ -181,7 +181,8 @@ An owner link is a special invitation. The server program makes it, and a client
 A member of the server can make a channel. That member is the owner of the channel and its first member.
 
 - A channel is public or private. The owner selects the kind when the owner makes the channel. The kind does not change.
-- A channel always has one owner, and the owner is a member of the channel.
+- Each member of the server can join a public channel. At this time, only the owner is a member of a private channel.
+- A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel.
 - An account can be the owner of a maximum of 10 channels.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
 
@@ -317,6 +318,36 @@ The server answers with a `channel` message or with an `error` message. Each con
 - If a channel has the name, or if the name is reserved, the error is `name-taken`.
 - If the account already owns 10 channels, the error is `too-many-channels`.
 
+### `join`
+
+The `join` message makes the user a member of a channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"join"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+
+The server answers with a `channel` message or with an `error` message. Each connection of the account gets the `channel` message. Then the server sends a `join` message to each member of the channel, also to the new member.
+
+- If the channel does not exist, the error is `no-such-channel`. A private channel that the user cannot see gives the same error.
+- If the user is already a member of the channel, the error is `already-member`.
+
+### `leave`
+
+The `leave` message stops the membership of the user in a channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"leave"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+
+The server answers with a `leave` message or with an `error` message. Each member of the channel gets the `leave` message, also the user who leaves.
+
+- If the user is not a member of the channel, the error is `not-member`.
+- If the user is the owner of the channel, the error is `owner-cannot-leave`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -355,7 +386,7 @@ One account can have more than one connection at the same time. The server sends
 The `channel` message gives the state of a channel to one of its members. The server sends it in these conditions:
 
 - After the `welcome` message, one time for each channel that the user is a member of.
-- When the user makes a channel.
+- When the user makes a channel or joins a channel.
 
 | Field | Value |
 |---|---|
@@ -379,7 +410,7 @@ A client that connects again uses this message. If a channel that the client kne
 
 ### `join`
 
-The `join` message tells that a user came into a channel.
+The `join` message tells that a user came into a channel. In a channel that is not `lobby`, the user is now a member of the channel.
 
 | Field | Value |
 |---|---|
@@ -390,11 +421,12 @@ The `join` message tells that a user came into a channel.
 
 ### `leave`
 
-The `leave` message tells that a user went out of a channel. At this time, this occurs when the last connection of the user closes.
+The `leave` message tells that a user went out of a channel. In the channel `lobby`, this occurs when the last connection of the user closes. In each other channel, the user is not a member of the channel now.
 
 | Field | Value |
 |---|---|
 | `type` | `"leave"` |
+| `ref` | The value from the `leave` message of the client, if it had one. Only the connection that sent that message gets this field. |
 | `channel` | The name of the channel. |
 | `name` | The name of the user. |
 | `time` | The time when the user went out. |
@@ -481,6 +513,9 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `too-soon` | The account changed its name a short time ago. |
 | `invalid-channel-name` | The name does not obey the rules for a channel name. |
 | `too-many-channels` | The account owns the maximum number of channels. |
+| `already-member` | The user is already a member of the channel. |
+| `not-member` | The user is not a member of the channel. |
+| `owner-cannot-leave` | The owner of a channel cannot leave it. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations
@@ -500,5 +535,5 @@ Each file in the [examples](examples) directory shows one connection.
 | [rename.txt](examples/rename.txt) | A user changes the name of the account. |
 | [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
 | [two-users.txt](examples/two-users.txt) | Two users exchange text. |
-| [channels.txt](examples/channels.txt) | A user makes channels. |
+| [channels.txt](examples/channels.txt) | A user makes a channel, joins a channel, and leaves a channel. |
 | [errors.txt](examples/errors.txt) | The server refuses other messages. |

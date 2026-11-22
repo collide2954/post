@@ -1,4 +1,4 @@
-# A user makes channels.
+# A user makes a channel, joins a channel, and leaves a channel.
 # The lines show the connection of the user "ana". She has an account on the server.
 # "C:" is a line from the client. "S:" is a line from the server.
 
@@ -24,3 +24,23 @@ S: {"type":"error","ref":3,"code":"name-taken","text":"This name is not availabl
 
 # An account that owns 10 channels gets this answer.
 S: {"type":"error","ref":14,"code":"too-many-channels","text":"The account owns the maximum number of channels."}
+
+# Ana is the owner of the channel "general", thus she cannot leave it.
+C: {"type":"leave","ref":4,"channel":"general"}
+S: {"type":"error","ref":4,"code":"owner-cannot-leave","text":"The owner of a channel cannot leave it."}
+
+# Ana joins the public channel "dev". Ben is its owner. Each member of the channel gets the join message.
+C: {"type":"join","ref":5,"channel":"dev"}
+S: {"type":"channel","ref":5,"channel":"dev","kind":"public","topic":"","owner":"ben","created":"2026-11-21T13:00:00.000Z"}
+S: {"type":"join","channel":"dev","name":"ana","time":"2026-11-21T14:03:10.000Z"}
+
+# Ana is a member of the channel now.
+C: {"type":"join","ref":6,"channel":"dev"}
+S: {"type":"error","ref":6,"code":"already-member","text":"The user is already a member of this channel."}
+
+# Ana leaves the channel. Each member of the channel gets the leave message.
+C: {"type":"leave","ref":7,"channel":"dev"}
+S: {"type":"leave","ref":7,"channel":"dev","name":"ana","time":"2026-11-21T14:04:00.000Z"}
+
+C: {"type":"leave","ref":8,"channel":"dev"}
+S: {"type":"error","ref":8,"code":"not-member","text":"You are not a member of this channel."}

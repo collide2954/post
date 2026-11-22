@@ -325,6 +325,7 @@ mod tests {
         assert_eq!(
             drain(&mut ana_lines),
             [ServerMessage::Leave {
+                reference: None,
                 channel: "lobby".to_owned(),
                 name: name("ben"),
                 time: clock(),

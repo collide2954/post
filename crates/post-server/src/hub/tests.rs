@@ -265,6 +265,7 @@ fn tells_the_other_users_when_a_user_leaves() {
     let outgoing = hub.disconnect(ids[1], later());
 
     let leave = ServerMessage::Leave {
+        reference: None,
         channel: "lobby".to_owned(),
         name: name("ben"),
         time: later(),
@@ -857,6 +858,7 @@ fn tells_the_lobby_one_time_about_a_user_with_two_connections() {
         [to(
             ben,
             ServerMessage::Leave {
+                reference: None,
                 channel: LOBBY.to_owned(),
                 name: name("ana"),
                 time: later(),
@@ -1216,6 +1218,7 @@ fn gives_the_new_name_to_each_connection_of_the_account() {
         [to(
             ids[1],
             ServerMessage::Leave {
+                reference: None,
                 channel: LOBBY.to_owned(),
                 name: name("anna"),
                 time: later(),

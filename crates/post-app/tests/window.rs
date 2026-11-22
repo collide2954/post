@@ -153,6 +153,7 @@ fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
             "Two people, one channel, and a server on this computer.",
         ),
         ServerMessage::Leave {
+            reference: None,
             channel: "lobby".to_owned(),
             name: name("ben"),
             time: time("14:05:00"),

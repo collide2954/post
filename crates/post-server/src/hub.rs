@@ -184,6 +184,7 @@ impl Hub {
         }
         self.online.remove(&member.account);
         self.to_each_member(|_| ServerMessage::Leave {
+            reference: None,
             channel: LOBBY.to_owned(),
             name: member.name.clone(),
             time: now,
@@ -228,6 +229,8 @@ impl Hub {
             ClientMessage::ChannelCreate { channel, kind, .. } => {
                 self.create_channel(request, &channel, kind)
             }
+            ClientMessage::Join { channel, .. } => self.join_channel(request, &channel),
+            ClientMessage::Leave { channel, .. } => self.leave_channel(request, &channel),
         }
     }
 

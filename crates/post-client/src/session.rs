@@ -159,6 +159,7 @@ impl Session {
                 channel,
                 name,
                 time,
+                ..
             } if channel == LOBBY => self.entries.push(Entry::Left { time, name }),
             ServerMessage::Invitations { list, .. } => self.invitations = Some(list),
             ServerMessage::Rename { old, new, time, .. } => self.renamed(old, new, time),
@@ -202,6 +203,7 @@ mod tests {
 
     fn leave(channel: &str, who: &str, second: u8) -> ServerMessage {
         ServerMessage::Leave {
+            reference: None,
             channel: channel.to_owned(),
             name: name(who),
             time: time(second),

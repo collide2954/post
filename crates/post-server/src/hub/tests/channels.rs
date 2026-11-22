@@ -241,3 +241,205 @@ fn does_not_start_with_channel_data_that_breaks_a_rule() {
 
     assert!(matches!(result, Err(StoreError::BrokenRules)));
 }
+
+fn join(reference: u32, channel: &str) -> String {
+    ClientMessage::Join {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+    }
+    .encode()
+}
+
+fn leave(reference: u32, channel: &str) -> String {
+    ClientMessage::Leave {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+    }
+    .encode()
+}
+
+fn joined(title: &str, who: &str) -> ServerMessage {
+    ServerMessage::Join {
+        channel: title.to_owned(),
+        name: name(who),
+        time: now(),
+    }
+}
+
+fn with_general() -> (Hub, Vec<ConnectionId>) {
+    let (mut hub, ids) = hub_with(&["ana", "ben", "cy"]);
+    hub.receive(ids[0], &create(1, "general", ChannelKind::Public), now());
+    (hub, ids)
+}
+
+#[test]
+fn a_user_joins_a_public_channel_and_each_member_gets_the_news() {
+    let (mut hub, ids) = with_general();
+    let second = signed_in_again(&mut hub, 2);
+
+    let outgoing = hub.receive(ids[1], &join(5, "general"), now());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(
+                ids[1],
+                state(Some(5), "general", ChannelKind::Public, "ana")
+            ),
+            to(second, state(None, "general", ChannelKind::Public, "ana")),
+            to(ids[0], joined("general", "ben")),
+            to(ids[1], joined("general", "ben")),
+            to(second, joined("general", "ben")),
+        ]
+    );
+}
+
+#[test]
+fn refuses_a_join_that_breaks_a_rule() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &create(2, "secret", ChannelKind::Private), now());
+    hub.receive(ids[1], &join(3, "general"), now());
+
+    for member in [ids[0], ids[1]] {
+        assert_eq!(
+            hub.receive(member, &join(4, "general"), now()),
+            [to(member, error(Some(4), ErrorCode::AlreadyMember))]
+        );
+    }
+    for channel in ["garden", "secret", "General", "#general", "", LOBBY] {
+        assert_eq!(
+            hub.receive(ids[2], &join(5, channel), now()),
+            [to(ids[2], error(Some(5), ErrorCode::NoSuchChannel))],
+            "{channel}"
+        );
+    }
+}
+
+#[test]
+fn a_member_leaves_a_channel_and_each_member_gets_the_news() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+    hub.receive(ids[2], &join(3, "general"), now());
+
+    let outgoing = hub.receive(ids[1], &leave(6, "general"), later());
+
+    let left = |reference| ServerMessage::Leave {
+        reference,
+        channel: "general".to_owned(),
+        name: name("ben"),
+        time: later(),
+    };
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], left(None)),
+            to(ids[1], left(Some(6))),
+            to(ids[2], left(None)),
+        ]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &leave(7, "general"), later()),
+        [to(ids[1], error(Some(7), ErrorCode::NotMember))]
+    );
+    let again = hub.receive(ids[1], &join(8, "general"), now());
+    assert_eq!(
+        again,
+        [
+            to(
+                ids[1],
+                state(Some(8), "general", ChannelKind::Public, "ana")
+            ),
+            to(ids[0], joined("general", "ben")),
+            to(ids[2], joined("general", "ben")),
+            to(ids[1], joined("general", "ben")),
+        ]
+    );
+}
+
+#[test]
+fn refuses_a_leave_that_breaks_a_rule() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &create(2, "secret", ChannelKind::Private), now());
+
+    assert_eq!(
+        hub.receive(ids[0], &leave(1, "general"), now()),
+        [to(ids[0], error(Some(1), ErrorCode::OwnerCannotLeave))]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &leave(1, "secret"), now()),
+        [to(ids[0], error(Some(1), ErrorCode::OwnerCannotLeave))]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &leave(2, "general"), now()),
+        [to(ids[1], error(Some(2), ErrorCode::NotMember))]
+    );
+    for channel in ["garden", "secret", "Not A Name", LOBBY] {
+        assert_eq!(
+            hub.receive(ids[1], &leave(3, channel), now()),
+            [to(ids[1], error(Some(3), ErrorCode::NoSuchChannel))],
+            "{channel}"
+        );
+    }
+}
+
+#[test]
+fn refuses_a_join_and_a_leave_before_the_sign_in() {
+    let (mut hub, _ids) = with_general();
+    let id = hub.connect();
+    let lines = [join(1, "general"), leave(1, "general")];
+
+    for line in &lines {
+        assert_eq!(
+            hub.receive(id, line, now()),
+            [to(id, error(Some(1), ErrorCode::HelloRequired))]
+        );
+    }
+    challenged(&mut hub, id, &[]);
+    for line in &lines {
+        assert_eq!(
+            hub.receive(id, line, now()),
+            [to(id, error(Some(1), ErrorCode::IdentifyRequired))]
+        );
+    }
+}
+
+#[test]
+fn a_user_stays_a_member_when_the_connection_closes() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+    hub.disconnect(ids[1], now());
+
+    let id = hub.connect();
+    let server = challenged(&mut hub, id, &[]);
+    let line = identify(&hub, 2, &server, None);
+    let outgoing = hub.receive(id, &line, now());
+
+    assert_eq!(
+        outgoing[..3],
+        [
+            to(id, welcome("ben", Role::Member)),
+            to(id, state(None, "general", ChannelKind::Public, "ana")),
+            to(id, ready()),
+        ]
+    );
+    assert_eq!(
+        hub.receive(id, &join(3, "general"), now()),
+        [to(id, error(Some(3), ErrorCode::AlreadyMember))]
+    );
+}
+
+#[test]
+fn answers_with_a_server_error_when_it_cannot_store_a_join_or_a_leave() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+    hub.store.lose_its_tables();
+
+    assert_eq!(
+        hub.receive(ids[2], &join(3, "general"), now()),
+        [to(ids[2], error(Some(3), ErrorCode::ServerError))]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &leave(4, "general"), now()),
+        [to(ids[1], error(Some(4), ErrorCode::ServerError))]
+    );
+}

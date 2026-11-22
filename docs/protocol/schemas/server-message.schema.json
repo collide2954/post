@@ -192,6 +192,15 @@
           "description": "The name of the user.",
           "$ref": "#/$defs/Name"
         },
+        "ref": {
+          "description": "The number from the `leave` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
         "time": {
           "description": "The time when the user went out.",
           "$ref": "#/$defs/Timestamp"
@@ -488,6 +497,21 @@
           "description": "The account owns the maximum number of channels.",
           "type": "string",
           "const": "too-many-channels"
+        },
+        {
+          "description": "The user is already a member of the channel.",
+          "type": "string",
+          "const": "already-member"
+        },
+        {
+          "description": "The user is not a member of the channel.",
+          "type": "string",
+          "const": "not-member"
+        },
+        {
+          "description": "The owner of a channel cannot leave it.",
+          "type": "string",
+          "const": "owner-cannot-leave"
         },
         {
           "description": "The server has a problem and cannot do the task.",
