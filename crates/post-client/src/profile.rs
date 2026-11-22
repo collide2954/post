@@ -4,10 +4,11 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use post_crypto::Seed;
-use post_proto::{Key, Name};
+use post_proto::{Address, Key, Name};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::destination::{Destination, TLS_PORT};
 use crate::home::Home;
 
 const PROFILES: &str = "profiles";
@@ -48,6 +49,8 @@ pub struct KnownServer {
     pub address: String,
     pub key: Key,
     pub name: Name,
+    #[serde(default)]
+    pub tls: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub certificate: Option<String>,
 }
@@ -268,6 +271,12 @@ impl Profile {
 }
 
 impl KnownServer {
+    #[must_use]
+    pub fn destination(&self) -> Option<Destination> {
+        let address = Address::parse(&self.address, TLS_PORT).ok()?;
+        Some(Destination::to(address, self.tls))
+    }
+
     pub fn remember_in(self, servers: &mut Vec<Self>) {
         servers.retain(|known| known.address != self.address && known.key != self.key);
         servers.insert(0, self);
@@ -402,6 +411,7 @@ mod tests {
             address: address.to_owned(),
             key: server_key(number),
             name: Name::parse(name).expect(name),
+            tls: false,
             certificate: None,
         }
     }
@@ -675,6 +685,7 @@ mod tests {
         let profiles = profiles(&directory);
         let mut profile = profiles.start("main").expect("a profile");
         let with_certificate = KnownServer {
+            tls: true,
             certificate: Some("ab".repeat(32)),
             ..server("home.example.org:7678", 1, "ana")
         };
@@ -684,6 +695,40 @@ mod tests {
 
         let profile = profiles.start("main").expect("a profile");
         assert_eq!(profile.servers(), [with_certificate]);
+    }
+
+    #[test]
+    fn gives_the_destination_of_a_known_server() {
+        let plain = server("localhost:7678", 1, "ana");
+        let secure = KnownServer {
+            tls: true,
+            ..server("localhost:8443", 2, "ana")
+        };
+        let damaged = server("not an address", 3, "ana");
+
+        let shown = |server: &KnownServer| server.destination().map(|to| to.to_string());
+        assert_eq!(shown(&plain).as_deref(), Some("localhost:7678"));
+        assert_eq!(shown(&secure).as_deref(), Some("https://localhost:8443"));
+        assert_eq!(shown(&damaged), None);
+    }
+
+    #[test]
+    fn reads_a_servers_file_of_an_earlier_build() {
+        let directory = Directory::new();
+        let profiles = profiles(&directory);
+        let id = profiles.create("main").expect("a profile");
+        let key = server_key(1);
+        let text =
+            format!("[[server]]\naddress = \"localhost:7678\"\nkey = \"{key}\"\nname = \"ana\"\n");
+        fs::write(
+            directory.join("profiles").join("1").join("servers.toml"),
+            text,
+        )
+        .expect("a file");
+
+        let profile = profiles.open(id).expect("the file is valid");
+
+        assert_eq!(profile.servers(), [server("localhost:7678", 1, "ana")]);
     }
 
     #[test]

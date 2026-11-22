@@ -78,6 +78,20 @@ impl Destination {
     }
 
     #[must_use]
+    pub fn to(address: Address, tls: bool) -> Self {
+        let security = if tls || !address.is_local() {
+            Security::Tls
+        } else {
+            Security::Plain
+        };
+        Self {
+            address,
+            security,
+            invitation: None,
+        }
+    }
+
+    #[must_use]
     pub fn address(&self) -> &Address {
         &self.address
     }
@@ -328,6 +342,46 @@ mod tests {
             ("chat.example.org/lobby", DestinationError::InvalidLink),
         ] {
             assert_eq!(Destination::parse(text), Err(error), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn makes_a_destination_from_an_address_that_the_profile_knows() {
+        for (address, tls, security, shown) in [
+            ("localhost:7678", false, Security::Plain, "localhost:7678"),
+            (
+                "localhost:8443",
+                true,
+                Security::Tls,
+                "https://localhost:8443",
+            ),
+            (
+                "chat.example.org:443",
+                true,
+                Security::Tls,
+                "chat.example.org",
+            ),
+            (
+                "chat.example.org:443",
+                false,
+                Security::Tls,
+                "chat.example.org",
+            ),
+            (
+                "192.168.1.20:7678",
+                false,
+                Security::Tls,
+                "192.168.1.20:7678",
+            ),
+        ] {
+            let parsed = post_proto::Address::parse(address, 443).expect(address);
+
+            let destination = Destination::to(parsed, tls);
+
+            assert_eq!(destination.address().to_string(), address);
+            assert_eq!(destination.security(), security, "{address}");
+            assert_eq!(destination.invitation(), None);
+            assert_eq!(destination.to_string(), shown);
         }
     }
 
