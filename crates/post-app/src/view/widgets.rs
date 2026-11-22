@@ -64,6 +64,42 @@ pub(super) fn divider<'a>(palette: Palette) -> Element<'a, Message> {
         .into()
 }
 
+pub(super) fn vertical_divider<'a>(palette: Palette) -> Element<'a, Message> {
+    rule::vertical(1)
+        .style(move |theme| rule::Style {
+            color: color(palette.rule),
+            ..rule::default(theme)
+        })
+        .into()
+}
+
+pub(super) fn entry<'a>(
+    content: String,
+    selected: bool,
+    message: Message,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let font = if selected { STRONG_FONT } else { TEXT_FONT };
+    button(text(content).size(TEXT_SIZE).font(font))
+        .width(Fill)
+        .padding([5, 16])
+        .on_press(message)
+        .style(move |_, status| {
+            let tint = match status {
+                button::Status::Hovered | button::Status::Pressed => Some(0.6),
+                _ if selected => Some(0.35),
+                _ => None,
+            };
+            button::Style {
+                background: tint
+                    .map(|amount| Background::Color(mix(palette.background, palette.rule, amount))),
+                text_color: color(palette.text),
+                ..button::Style::default()
+            }
+        })
+        .into()
+}
+
 pub(super) fn bar(
     heading: String,
     status: Option<String>,

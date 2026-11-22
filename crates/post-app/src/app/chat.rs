@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use post_client::{KnownServer, Link, Security, Session};
+use post_client::{Channel, Entry, KnownServer, Link, Security, Session};
 use post_proto::{
-    ChannelName, ClientMessage, Code, Name, NameError, Role, ServerMessage, TextError,
+    ChannelName, ClientMessage, Code, LOBBY, Name, NameError, Role, ServerMessage, TextError,
 };
 
 use super::servers::{Form, Target};
@@ -37,6 +37,7 @@ pub enum Place {
 pub enum Panel {
     Invitations,
     Account,
+    Menu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -73,6 +74,7 @@ pub struct Chat {
 pub enum Open {
     Invitations(Invitations),
     Account(Account),
+    Menu,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -94,6 +96,16 @@ enum Notice {
     NotSent,
     RequestNotSent,
     ServerNotSaved,
+}
+
+impl Place {
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Lobby => LOBBY,
+            Self::Channel(name) => name.as_str(),
+        }
+    }
 }
 
 impl Lifetime {
@@ -166,6 +178,14 @@ impl Chat {
     }
 
     #[must_use]
+    pub fn entries(&self) -> &[Entry] {
+        match &self.place {
+            Place::Lobby => self.session.entries(),
+            Place::Channel(name) => self.session.channel(name).map_or(&[], Channel::entries),
+        }
+    }
+
+    #[must_use]
     pub fn draft(&self) -> &str {
         self.drafts.get(&self.place).map_or("", String::as_str)
     }
@@ -227,6 +247,7 @@ impl Chat {
                 }));
                 return Effect::FocusPanel;
             }
+            Message::Open(Panel::Menu) => self.panel = Some(Open::Menu),
             Message::Close => return self.close(),
             Message::LifetimeSelected(lifetime) => {
                 if let Some(Open::Invitations(invitations)) = &mut self.panel {

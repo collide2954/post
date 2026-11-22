@@ -92,6 +92,7 @@ texts! {
     ChatRequestNotSent => "chat-request-not-sent",
     ChatInvitationsButton => "chat-invitations-button",
     ChatNameButton => "chat-name-button",
+    ChatMenuButton => "chat-menu-button",
     NavBackButton => "nav-back-button",
     NavSettingsButton => "nav-settings-button",
     NavProfilesButton => "nav-profiles-button",

@@ -47,7 +47,8 @@ const LINE_HEIGHT: f32 = 21.0;
 const NAME_CHARACTER_WIDTH: f32 = 8.5;
 const PAGE_WIDTH: f32 = 420.0;
 const BAR_HEIGHT: f32 = 42.0;
-const STATUS_WIDTH: f32 = 740.0;
+const SIDEBAR_WIDTH: f32 = 200.0;
+const WIDE_WIDTH: f32 = 700.0;
 
 pub struct Window {
     pub app: App,

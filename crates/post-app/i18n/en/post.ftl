@@ -71,6 +71,7 @@ chat-server-not-saved = Post could not save this server in your profile.
 chat-request-not-sent = Post did not send the request. Try again.
 chat-invitations-button = Invitations
 chat-name-button = Change name
+chat-menu-button = Menu
 nav-back-button = Back
 nav-settings-button = Settings
 nav-profiles-button = Profiles

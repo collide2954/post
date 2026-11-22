@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use iced::keyboard::key::Named;
 use iced::{Pixels, Settings, Size};
+use iced_test::selector::{Candidate, Selector};
 use iced_test::{Simulator, selector};
 use jiff::tz::TimeZone;
 use post_app::app::start::StartProblem;
@@ -16,7 +17,8 @@ use post_client::{
     ProfileEntry, ProfileId,
 };
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Invitation, Key, Name, Role, ServerMessage, Timestamp,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, Key, Name, Role,
+    ServerMessage, Timestamp,
 };
 
 const SCREENSHOT_VARIABLE: &str = "POST_SCREENSHOTS";
@@ -600,16 +602,179 @@ fn the_header_of_the_chat_has_a_link_for_each_panel() {
     );
 }
 
-#[test]
-fn the_smallest_window_shows_each_link_of_the_chat_and_not_the_status() {
-    let smallest = Size::new(520.0, 320.0);
-    let (app, _outbox) = chat_app_as(Mode::Light, Role::Owner);
-    let window = window(app, Language::Spanish);
-    let mut interface = simulator_of_size(&window, smallest);
+fn channel_state(title: &str) -> ServerMessage {
+    ServerMessage::Channel {
+        reference: None,
+        channel: ChannelName::parse(title).expect(title),
+        kind: ChannelKind::Public,
+        topic: String::new(),
+        owner: name("ana"),
+        created: time("14:00:00"),
+    }
+}
 
-    assert!(interface.find("ana · conectado").is_err());
+fn channels_app(mode: Mode, role: Role) -> (App, Outbox) {
+    let (mut app, outbox) = chat_app_as(mode, role);
+    let attempt = app.target().expect("the chat has a connection").attempt;
+    let received = [
+        channel_state("general"),
+        channel_state("dev"),
+        ServerMessage::Message {
+            reference: None,
+            channel: "general".to_owned(),
+            from: name("ben"),
+            time: time("14:06:00"),
+            text: "This is the channel for all people.".to_owned(),
+        },
+    ];
+    for message in received {
+        app.update(Message::Connection(attempt, Event::Received(message)));
+    }
+    (app, outbox)
+}
+
+fn channel_app(mode: Mode) -> App {
+    let (mut app, _outbox) = channels_app(mode, Role::Owner);
+    app.update(Message::Chat(chat::Message::Select(general())));
+    app
+}
+
+fn general() -> chat::Place {
+    chat::Place::Channel(ChannelName::parse("general").expect("a valid name"))
+}
+
+#[test]
+fn the_sidebar_shows_the_server_the_user_and_each_place() {
+    let (app, _outbox) = channels_app(Mode::Light, Role::Member);
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
     for text in [
+        "localhost:7678",
+        "ana · connected",
         "#lobby",
+        "#dev",
+        "#general",
+        "Change name",
+        "Settings",
+        "Leave",
+    ] {
+        let bounds = interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"))
+            .bounds();
+        assert!(bounds.x + bounds.width <= 200.0, "{text}: {bounds:?}");
+    }
+    assert!(interface.find("Menu").is_err());
+    assert!(interface.find("Invitations").is_err());
+
+    let messages = clicked(&window, "#general");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Select(place))] if *place == general()
+        ),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "#lobby");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Select(chat::Place::Lobby))]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_window_shows_the_timeline_of_the_place_that_the_user_selects() {
+    let (mut app, _outbox) = channels_app(Mode::Light, Role::Member);
+    app.update(Message::Chat(chat::Message::Select(general())));
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .find("This is the channel for all people.")
+        .expect("the timeline of the channel");
+    assert!(interface.find("Hi. Does it work?").is_err());
+    interface
+        .find(InMainArea("#general"))
+        .expect("the bar shows the name of the channel");
+    assert!(interface.find(InMainArea("#lobby")).is_err());
+}
+
+struct InMainArea(&'static str);
+
+impl Selector for InMainArea {
+    type Output = selector::Text;
+
+    fn select(&mut self, candidate: Candidate<'_>) -> Option<selector::Text> {
+        match candidate {
+            Candidate::Text {
+                id,
+                bounds,
+                visible_bounds,
+                content,
+            } if content == self.0 && bounds.x > 200.0 => Some(selector::Text::Raw {
+                id: id.cloned(),
+                bounds,
+                visible_bounds,
+            }),
+            _ => None,
+        }
+    }
+
+    fn description(&self) -> String {
+        format!("the text {} at the right of the sidebar", self.0)
+    }
+}
+
+#[test]
+fn the_smallest_window_has_a_menu_in_the_place_of_the_sidebar() {
+    let smallest = Size::new(520.0, 320.0);
+    let (app, _outbox) = channels_app(Mode::Light, Role::Owner);
+    let narrow = window(app, Language::Spanish);
+    let mut interface = simulator_of_size(&narrow, smallest);
+
+    for hidden in [
+        "ana · conectado",
+        "localhost:7678",
+        "Cambiar nombre",
+        "#dev",
+    ] {
+        assert!(interface.find(hidden).is_err(), "{hidden}");
+    }
+    for text in ["#lobby", "Menú"] {
+        let bounds = interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"))
+            .bounds();
+        assert!(
+            bounds.x >= 16.0 && bounds.x + bounds.width <= smallest.width - 16.0,
+            "{text}: {bounds:?}"
+        );
+    }
+    interface.click("Menú").expect("the bar has a menu link");
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Open(chat::Panel::Menu))]
+        ),
+        "{messages:?}"
+    );
+
+    let (mut app, _outbox) = channels_app(Mode::Light, Role::Owner);
+    app.update(Message::Chat(chat::Message::Open(chat::Panel::Menu)));
+    let menu = window(app, Language::Spanish);
+    let mut interface = simulator_of_size(&menu, smallest);
+    for text in [
+        "Volver",
+        "localhost:7678",
+        "ana · conectado",
+        "#lobby",
+        "#dev",
+        "#general",
         "Invitaciones",
         "Cambiar nombre",
         "Configuración",
@@ -624,10 +789,11 @@ fn the_smallest_window_shows_each_link_of_the_chat_and_not_the_status() {
             "{text}: {bounds:?}"
         );
     }
+    assert!(interface.find("Menú").is_err());
 
-    let mut wide = simulator_of_size(&window, Size::new(740.0, 320.0));
+    let mut wide = simulator_of_size(&menu, Size::new(700.0, 320.0));
     wide.find("ana · conectado")
-        .expect("a wide window shows the status");
+        .expect("a wide window shows the sidebar");
 }
 
 #[test]
@@ -651,8 +817,9 @@ fn the_invitations_panel_lists_the_open_invitations() {
             .find(text)
             .unwrap_or_else(|error| panic!("{text}: {error}"));
     }
+    interface.find("Back").expect("the bar has a back link");
     for text in ["Leave", "Change name", "Hello"] {
-        assert!(interface.find(text).is_err(), "{text}");
+        assert!(interface.find(InMainArea(text)).is_err(), "{text}");
     }
 }
 
@@ -766,7 +933,7 @@ fn the_account_panel_changes_the_name() {
     interface.typewrite("x");
     interface.tap_key(Named::Enter);
     interface
-        .click("Change name")
+        .click(InMainArea("Change name"))
         .expect("the account panel has a button");
 
     let messages: Vec<Message> = interface.into_messages().collect();
@@ -1379,6 +1546,7 @@ fn each_screen_draws_in_light_and_dark_mode() {
                 chat_app_as(mode, Role::Owner).0,
                 Language::English,
             ),
+            ("channel", channel_app(mode), Language::English),
             (
                 "invitations",
                 invitations_app(mode, Some(two_invitations())).0,

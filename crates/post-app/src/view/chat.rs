@@ -1,20 +1,20 @@
 use iced::widget::text::LineHeight;
 use iced::widget::{
-    Space, column, container, responsive, row, scrollable, space, text, text_input,
+    Column, Space, column, container, responsive, row, scrollable, space, text, text_input,
 };
 use iced::{Alignment, Background, Element, Fill, Pixels};
 use post_client::Entry;
-use post_proto::{Invitation, LOBBY, Timestamp};
+use post_proto::{Invitation, Timestamp};
 
 use super::widgets::{
-    bar, choice, color, divider, field_style, heading, label, link_button, page_link, panel_page,
-    paragraph, primary_button,
+    bar, choice, color, divider, entry, field_style, heading, label, link, link_button, page_link,
+    panel_page, paragraph, primary_button, vertical_divider,
 };
 use super::{
-    BAR_HEIGHT, DRAFT_FIELD, LINE_HEIGHT, MONO_FONT, NAME_CHARACTER_WIDTH, PANEL_FIELD, SMALL_SIZE,
-    STATUS_WIDTH, STRONG_FONT, TEXT_SIZE, Window,
+    BAR_HEIGHT, DRAFT_FIELD, LINE_HEIGHT, MONO_FONT, NAME_CHARACTER_WIDTH, PANEL_FIELD,
+    SIDEBAR_WIDTH, SMALL_SIZE, STRONG_FONT, TEXT_SIZE, WIDE_WIDTH, Window,
 };
-use crate::app::chat::{self, Account, Chat, Invitations, Lifetime, Open, Panel, Uses};
+use crate::app::chat::{self, Account, Chat, Invitations, Lifetime, Open, Panel, Place, Uses};
 use crate::app::{Message, Page, servers};
 use crate::i18n::{Strings, Text};
 use crate::palette::Palette;
@@ -26,20 +26,32 @@ pub(super) fn chat_screen<'a>(
     palette: Palette,
 ) -> Element<'a, Message> {
     let strings = &window.strings;
-    let header =
-        responsive(move |size| chat_bar(strings, chat, size.width >= STATUS_WIDTH, palette));
-    let body = match chat.panel() {
-        None => conversation(window, chat, palette),
-        Some(Open::Invitations(panel)) => invitations_panel(window, chat, panel, palette),
-        Some(Open::Account(account)) => account_panel(strings, chat, account, palette),
-    };
-    column![container(header).height(BAR_HEIGHT), body].into()
+    responsive(move |size| {
+        let is_wide = size.width >= WIDE_WIDTH;
+        let body = match chat.panel() {
+            None => conversation(window, chat, palette),
+            Some(Open::Invitations(panel)) => invitations_panel(window, chat, panel, palette),
+            Some(Open::Account(account)) => account_panel(strings, chat, account, palette),
+            Some(Open::Menu) => panel_page(navigation(strings, chat, palette)),
+        };
+        let header = chat_bar(strings, chat, is_wide, palette);
+        let main = column![container(header).height(BAR_HEIGHT), body];
+        if is_wide {
+            let sidebar = scrollable(navigation(strings, chat, palette).padding([8, 0]))
+                .width(SIDEBAR_WIDTH)
+                .height(Fill);
+            row![sidebar, vertical_divider(palette), main].into()
+        } else {
+            main.into()
+        }
+    })
+    .into()
 }
 
 pub(super) fn chat_bar<'a>(
     strings: &Strings,
     chat: &Chat,
-    with_status: bool,
+    is_wide: bool,
     palette: Palette,
 ) -> Element<'a, Message> {
     let link = |text: Text, message: chat::Message| {
@@ -49,22 +61,61 @@ pub(super) fn chat_bar<'a>(
     let mut links = row![].spacing(4);
     if chat.panel().is_some() {
         links = links.push(link(Text::NavBackButton, chat::Message::Close));
-    } else {
-        if chat.is_owner() {
-            let open = chat::Message::Open(Panel::Invitations);
-            links = links.push(link(Text::ChatInvitationsButton, open));
-        }
-        links = links
-            .push(link(
-                Text::ChatNameButton,
-                chat::Message::Open(Panel::Account),
-            ))
-            .push(page_link(strings, Page::Settings, [4, 8], palette))
-            .push(link(Text::ChatLeaveButton, chat::Message::Leave));
+    } else if !is_wide {
+        let open = chat::Message::Open(Panel::Menu);
+        links = links.push(link(Text::ChatMenuButton, open));
     }
-    let name = chat.session().name().as_str();
-    let status = with_status.then(|| strings.with(Text::ChatStatus, "name", name));
-    bar(format!("#{LOBBY}"), status, links, palette)
+    bar(format!("#{}", chat.place().name()), None, links, palette)
+}
+
+pub(super) fn navigation<'a>(
+    strings: &Strings,
+    chat: &Chat,
+    palette: Palette,
+) -> Column<'a, Message> {
+    let address = chat.target().destination.address().to_string();
+    let status = strings.with(Text::ChatStatus, "name", chat.session().name().as_str());
+    let place = |place: Place| {
+        let selected = *chat.place() == place;
+        let title = format!("#{}", place.name());
+        let select = Message::Chat(chat::Message::Select(place));
+        entry(title, selected, select, palette)
+    };
+    let action = |text: Text, message: chat::Message| {
+        let message = Some(Message::Chat(message));
+        link(strings.text(text), message, [5, 16], palette)
+    };
+
+    let mut places = column![place(Place::Lobby)];
+    for (name, _) in chat.session().channels() {
+        places = places.push(place(Place::Channel(name.clone())));
+    }
+    let mut actions = column![];
+    if chat.is_owner() {
+        let open = chat::Message::Open(Panel::Invitations);
+        actions = actions.push(action(Text::ChatInvitationsButton, open));
+    }
+    actions = actions
+        .push(action(
+            Text::ChatNameButton,
+            chat::Message::Open(Panel::Account),
+        ))
+        .push(page_link(strings, Page::Settings, [5, 16], palette))
+        .push(action(Text::ChatLeaveButton, chat::Message::Leave));
+
+    column![
+        container(
+            column![
+                text(address).font(STRONG_FONT).size(13),
+                text(status).size(SMALL_SIZE).color(color(palette.muted)),
+            ]
+            .spacing(2)
+        )
+        .padding([8, 16]),
+        places,
+        container(divider(palette)).padding([8, 16]),
+        actions,
+    ]
 }
 
 pub(super) fn conversation<'a>(
@@ -73,7 +124,7 @@ pub(super) fn conversation<'a>(
     palette: Palette,
 ) -> Element<'a, Message> {
     let strings = &window.strings;
-    let entries = chat.session().entries();
+    let entries = chat.entries();
 
     #[expect(
         clippy::cast_precision_loss,
@@ -97,7 +148,7 @@ pub(super) fn conversation<'a>(
         });
 
     let input = text_input(
-        &strings.with(Text::ChatInputPlaceholder, "channel", LOBBY),
+        &strings.with(Text::ChatInputPlaceholder, "channel", chat.place().name()),
         chat.draft(),
     )
     .id(DRAFT_FIELD)

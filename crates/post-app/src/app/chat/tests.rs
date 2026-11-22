@@ -722,3 +722,50 @@ fn forgets_an_error_when_the_user_selects_a_place() {
 
     assert_eq!(chat.notice(), None);
 }
+
+fn text_in(title: &str, text: &str) -> ServerMessage {
+    ServerMessage::Message {
+        reference: None,
+        channel: title.to_owned(),
+        from: name("ben"),
+        time: time(),
+        text: text.to_owned(),
+    }
+}
+
+#[test]
+fn gives_the_name_and_the_timeline_of_the_place_that_the_user_sees() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(None, "general"));
+    chat.receive(text_in("lobby", "Hi"));
+    chat.receive(text_in("general", "Hello"));
+    chat.receive(text_in("general", "Does it work?"));
+
+    assert_eq!(chat.place().name(), "lobby");
+    assert!(
+        matches!(chat.entries(), [Entry::Message { text, .. }] if text == "Hi"),
+        "{:?}",
+        chat.entries()
+    );
+
+    chat.update(Message::Select(place("general")));
+
+    assert_eq!(chat.place().name(), "general");
+    assert_eq!(chat.entries().len(), 2);
+}
+
+#[test]
+fn opens_the_menu_and_closes_it_when_the_user_selects_a_place() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(None, "general"));
+
+    assert_eq!(chat.update(Message::Open(Panel::Menu)), Effect::None);
+    assert_eq!(chat.panel(), Some(&Open::Menu));
+
+    chat.update(Message::Select(place("general")));
+    assert_eq!(chat.panel(), None);
+
+    chat.update(Message::Open(Panel::Menu));
+    assert_eq!(chat.update(Message::Close), Effect::FocusDraft);
+    assert_eq!(chat.panel(), None);
+}
