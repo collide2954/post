@@ -43,11 +43,10 @@ fn message(channel: &str, from: &str, second: u8, text: &str) -> ServerMessage {
 }
 
 #[test]
-fn starts_with_a_name_and_an_empty_timeline() {
+fn starts_with_a_name_and_no_problem() {
     let session = Session::new(name("ana"));
 
     assert_eq!(session.name(), &name("ana"));
-    assert_eq!(session.entries(), []);
     assert_eq!(session.problem(), None);
     assert_eq!(session.invitations(), None);
 }
@@ -85,7 +84,6 @@ fn keeps_the_newest_list_of_invitations_from_the_server() {
         list: Vec::new(),
     });
     assert_eq!(session.invitations(), Some([].as_slice()));
-    assert_eq!(session.entries(), []);
 }
 
 #[test]
@@ -134,10 +132,10 @@ fn forgets_the_error_when_the_user_dismisses_it() {
 
     assert_eq!(session.problem(), None);
     assert_eq!(
-        session.compose("Hello"),
+        session.compose(&channel("general"), "Hello"),
         Ok(ClientMessage::Send {
             reference: Some(1),
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: "Hello".to_owned(),
         })
     );
@@ -154,17 +152,17 @@ fn rename(old: &str, new: &str, second: u8) -> ServerMessage {
 
 #[test]
 fn shows_the_new_name_of_a_user_in_the_earlier_entries() {
-    let mut session = Session::new(name("ana"));
-    session.apply(join("lobby", "ben", 1));
-    session.apply(message("lobby", "ben", 2, "Hi"));
-    session.apply(message("lobby", "cy", 3, "Hello"));
-    session.apply(leave("lobby", "ben", 4));
+    let mut session = session_with(&["general"]);
+    session.apply(join("general", "ben", 1));
+    session.apply(message("general", "ben", 2, "Hi"));
+    session.apply(message("general", "cy", 3, "Hello"));
+    session.apply(leave("general", "ben", 4));
 
     session.apply(rename("ben", "benito", 5));
     session.apply(rename("benito", "beni", 6));
 
     assert_eq!(
-        session.entries(),
+        entries(&session, "general"),
         [
             Entry::Joined {
                 time: time(1),
@@ -201,8 +199,8 @@ fn shows_the_new_name_of_a_user_in_the_earlier_entries() {
 
 #[test]
 fn takes_the_new_name_of_its_own_account() {
-    let mut session = Session::new(name("ana"));
-    session.apply(message("lobby", "ana", 1, "Hello"));
+    let mut session = session_with(&["general"]);
+    session.apply(message("general", "ana", 1, "Hello"));
 
     session.apply(ServerMessage::Rename {
         reference: Some(4),
@@ -213,7 +211,7 @@ fn takes_the_new_name_of_its_own_account() {
 
     assert_eq!(session.name(), &name("anna"));
     assert!(matches!(
-        &session.entries()[0],
+        &entries(&session, "general")[0],
         Entry::Message { from, .. } if *from == name("anna")
     ));
 }
@@ -236,42 +234,16 @@ fn makes_a_rename_request_with_a_new_number() {
 }
 
 #[test]
-fn records_what_occurs_in_the_lobby_in_sequence() {
-    let mut session = Session::new(name("ana"));
-
-    session.apply(join("lobby", "ben", 1));
-    session.apply(message("lobby", "ben", 2, "Hi"));
-    session.apply(leave("lobby", "ben", 3));
-
-    assert_eq!(
-        session.entries(),
-        [
-            Entry::Joined {
-                time: time(1),
-                name: name("ben"),
-            },
-            Entry::Message {
-                time: time(2),
-                from: name("ben"),
-                text: "Hi".to_owned(),
-            },
-            Entry::Left {
-                time: time(3),
-                name: name("ben"),
-            },
-        ]
-    );
-}
-
-#[test]
-fn ignores_what_occurs_in_a_different_channel() {
-    let mut session = Session::new(name("ana"));
+fn ignores_what_occurs_in_a_channel_that_the_user_is_not_in() {
+    let mut session = session_with(&["general"]);
 
     session.apply(join("garden", "ben", 1));
     session.apply(message("garden", "ben", 2, "Hi"));
     session.apply(leave("garden", "ben", 3));
+    session.apply(leave("garden", "ana", 4));
 
-    assert_eq!(session.entries(), []);
+    assert_eq!(entries(&session, "general"), []);
+    assert_eq!(session.channels().count(), 1);
 }
 
 #[test]
@@ -285,27 +257,27 @@ fn ignores_a_second_welcome_message() {
     });
 
     assert_eq!(session.name(), &name("ana"));
-    assert_eq!(session.entries(), []);
     assert_eq!(session.problem(), None);
 }
 
 #[test]
 fn makes_a_send_message_with_a_new_number_each_time() {
     let mut session = Session::new(name("ana"));
+    let general = channel("general");
 
     assert_eq!(
-        session.compose("Hello"),
+        session.compose(&general, "Hello"),
         Ok(ClientMessage::Send {
             reference: Some(1),
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: "Hello".to_owned(),
         })
     );
     assert_eq!(
-        session.compose("  spaces stay  "),
+        session.compose(&general, "  spaces stay  "),
         Ok(ClientMessage::Send {
             reference: Some(2),
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: "  spaces stay  ".to_owned(),
         })
     );
@@ -314,11 +286,15 @@ fn makes_a_send_message_with_a_new_number_each_time() {
 #[test]
 fn does_not_make_a_message_from_a_text_that_breaks_the_rules() {
     let mut session = Session::new(name("ana"));
+    let general = channel("general");
 
-    assert_eq!(session.compose("   "), Err(TextError::Empty));
-    assert_eq!(session.compose(&"x".repeat(4001)), Err(TextError::TooLong));
+    assert_eq!(session.compose(&general, "   "), Err(TextError::Empty));
+    assert_eq!(
+        session.compose(&general, &"x".repeat(4001)),
+        Err(TextError::TooLong)
+    );
     assert!(matches!(
-        session.compose("Hello"),
+        session.compose(&general, "Hello"),
         Ok(ClientMessage::Send {
             reference: Some(1),
             ..
@@ -335,34 +311,35 @@ fn remembers_the_last_error_from_the_server() {
 
     session.apply(ServerMessage::error(None, ErrorCode::BadMessage));
     assert_eq!(session.problem(), Some(ErrorCode::BadMessage));
-    assert_eq!(session.entries(), []);
 }
 
 #[test]
 fn forgets_the_error_when_the_user_sends_a_new_text() {
     let mut session = Session::new(name("ana"));
+    let general = channel("general");
     session.apply(ServerMessage::error(Some(1), ErrorCode::TextTooLong));
 
-    assert_eq!(session.compose(" "), Err(TextError::Empty));
+    assert_eq!(session.compose(&general, " "), Err(TextError::Empty));
     assert_eq!(session.problem(), Some(ErrorCode::TextTooLong));
 
-    assert!(session.compose("Hello").is_ok());
+    assert!(session.compose(&general, "Hello").is_ok());
     assert_eq!(session.problem(), None);
 }
 
 #[test]
 fn starts_the_numbers_again_after_the_largest_number() {
     let mut session = Session::with_next_reference(name("ana"), u32::MAX);
+    let general = channel("general");
 
     assert!(matches!(
-        session.compose("one"),
+        session.compose(&general, "one"),
         Ok(ClientMessage::Send {
             reference: Some(u32::MAX),
             ..
         })
     ));
     assert!(matches!(
-        session.compose("two"),
+        session.compose(&general, "two"),
         Ok(ClientMessage::Send {
             reference: Some(0),
             ..
@@ -432,7 +409,6 @@ fn keeps_the_state_of_each_channel_of_the_user_in_the_sequence_of_the_names() {
     assert_eq!(general.entries(), []);
     let dev = session.channel(&channel("dev"));
     assert_eq!(dev.map(Channel::kind), Some(ChannelKind::Private));
-    assert_eq!(session.entries(), []);
 }
 
 #[test]
@@ -443,7 +419,7 @@ fn records_what_occurs_in_each_channel_in_its_own_timeline() {
     session.apply(message("general", "ben", 2, "Hi"));
     session.apply(message("dev", "ana", 3, "Notes"));
     session.apply(leave("general", "ben", 4));
-    session.apply(message("lobby", "cy", 5, "Hello"));
+    session.apply(message("garden", "cy", 5, "Hello"));
 
     assert_eq!(
         entries(&session, "general"),
@@ -471,7 +447,6 @@ fn records_what_occurs_in_each_channel_in_its_own_timeline() {
             text: "Notes".to_owned(),
         }]
     );
-    assert_eq!(session.entries().len(), 1);
 }
 
 #[test]
@@ -503,23 +478,6 @@ fn forgets_a_channel_when_the_user_leaves_it() {
     session.apply(message("general", "ben", 3, "Hi"));
     assert!(session.channel(&channel("general")).is_none());
     assert_eq!(entries(&session, "dev"), []);
-    assert_eq!(session.entries(), []);
-}
-
-#[test]
-fn records_that_the_user_went_out_of_the_temporary_lobby() {
-    let mut session = session_with(&["general"]);
-
-    session.apply(leave("lobby", "ana", 1));
-
-    assert_eq!(
-        session.entries(),
-        [Entry::Left {
-            time: time(1),
-            name: name("ana"),
-        }]
-    );
-    assert_eq!(session.channels().count(), 1);
 }
 
 #[test]
@@ -554,16 +512,16 @@ fn makes_each_channel_request_with_a_new_number() {
         ClientMessage::Channels { reference: Some(4) }
     );
     assert_eq!(
-        session.compose_to(&general, "Hello"),
+        session.compose(&general, "Hello"),
         Ok(ClientMessage::Send {
             reference: Some(5),
             channel: "general".to_owned(),
             text: "Hello".to_owned(),
         })
     );
-    assert_eq!(session.compose_to(&general, "  "), Err(TextError::Empty));
+    assert_eq!(session.compose(&general, "  "), Err(TextError::Empty));
     assert_eq!(
-        session.compose_to(&general, &"x".repeat(4001)),
+        session.compose(&general, &"x".repeat(4001)),
         Err(TextError::TooLong)
     );
 }
@@ -687,11 +645,10 @@ fn shows_the_new_name_of_a_user_in_each_channel_that_shows_the_user() {
                 from: name("benito"),
                 text: "Hi".to_owned(),
             },
-            renamed.clone(),
+            renamed,
         ]
     );
     assert_eq!(entries(&session, "quiet"), []);
-    assert_eq!(session.entries(), [renamed]);
 
     session.apply(rename("benito", "beni", 3));
     assert_eq!(entries(&session, "dev").len(), 3);

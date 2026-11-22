@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use post_proto::{
-    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, LOBBY, ListedChannel,
-    Name, ServerMessage, TextError, Timestamp, check_text,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, ListedChannel, Name,
+    ServerMessage, TextError, Timestamp, check_text,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +40,6 @@ pub struct Channel {
 #[derive(Debug)]
 pub struct Session {
     name: Name,
-    entries: Vec<Entry>,
     channels: BTreeMap<ChannelName, Channel>,
     is_ready: bool,
     listed: Option<Vec<ListedChannel>>,
@@ -107,7 +106,6 @@ impl Session {
     fn with_next_reference(name: Name, next_reference: u32) -> Self {
         Self {
             name,
-            entries: Vec::new(),
             channels: BTreeMap::new(),
             is_ready: false,
             listed: None,
@@ -121,11 +119,6 @@ impl Session {
     #[must_use]
     pub fn name(&self) -> &Name {
         &self.name
-    }
-
-    #[must_use]
-    pub fn entries(&self) -> &[Entry] {
-        &self.entries
     }
 
     pub fn channels(&self) -> impl Iterator<Item = (&ChannelName, &Channel)> {
@@ -161,23 +154,15 @@ impl Session {
         self.problem = None;
     }
 
-    pub fn compose(&mut self, text: &str) -> Result<ClientMessage, TextError> {
-        self.compose_for(LOBBY, text)
-    }
-
-    pub fn compose_to(
+    pub fn compose(
         &mut self,
         channel: &ChannelName,
         text: &str,
     ) -> Result<ClientMessage, TextError> {
-        self.compose_for(channel.as_str(), text)
-    }
-
-    fn compose_for(&mut self, channel: &str, text: &str) -> Result<ClientMessage, TextError> {
         check_text(text)?;
         Ok(ClientMessage::Send {
             reference: Some(self.request()),
-            channel: channel.to_owned(),
+            channel: channel.as_str().to_owned(),
             text: text.to_owned(),
         })
     }
@@ -298,7 +283,7 @@ impl Session {
                 more,
             } => self.listed_part(reference, list, more),
             ServerMessage::Invitations { list, .. } => self.invitations = Some(list),
-            ServerMessage::Rename { old, new, time, .. } => self.renamed(old, new, time),
+            ServerMessage::Rename { old, new, time, .. } => self.renamed(&old, &new, time),
             ServerMessage::Error { code, .. } => self.problem = Some(code),
             ServerMessage::Welcome { .. } | ServerMessage::Challenge { .. } => {}
         }
@@ -317,23 +302,16 @@ impl Session {
         }
     }
 
-    fn timeline(&mut self, channel: &str) -> Option<&mut Vec<Entry>> {
-        if channel == LOBBY {
-            return Some(&mut self.entries);
-        }
-        let name = ChannelName::parse(channel).ok()?;
-        self.channels.get_mut(&name).map(|state| &mut state.entries)
-    }
-
     fn record(&mut self, channel: &str, entry: Entry) {
-        if let Some(entries) = self.timeline(channel) {
-            entries.push(entry);
+        if let Ok(channel) = ChannelName::parse(channel)
+            && let Some(state) = self.channels.get_mut(&channel)
+        {
+            state.entries.push(entry);
         }
     }
 
     fn left(&mut self, channel: &str, name: Name, time: Timestamp) {
-        if channel != LOBBY
-            && name == self.name
+        if name == self.name
             && let Ok(channel) = ChannelName::parse(channel)
         {
             self.channels.remove(&channel);
@@ -342,14 +320,13 @@ impl Session {
         self.record(channel, Entry::Left { time, name });
     }
 
-    fn renamed(&mut self, old: Name, new: Name, time: Timestamp) {
-        if self.name == old {
+    fn renamed(&mut self, old: &Name, new: &Name, time: Timestamp) {
+        if self.name == *old {
             self.name = new.clone();
         }
-        rename_in(&mut self.entries, &old, &new);
         for channel in self.channels.values_mut() {
-            if channel.mentions(&old) {
-                channel.renamed(&old, &new);
+            if channel.mentions(old) {
+                channel.renamed(old, new);
                 channel.entries.push(Entry::Renamed {
                     time,
                     old: old.clone(),
@@ -357,7 +334,6 @@ impl Session {
                 });
             }
         }
-        self.entries.push(Entry::Renamed { time, old, new });
     }
 }
 

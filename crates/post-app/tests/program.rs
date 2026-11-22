@@ -686,7 +686,6 @@ fn a_user_changes_the_name_and_cannot_change_it_again_at_once() {
     driver.expect("Connect");
     driver.sign_up(backstage.owner_link.clone(), "ana");
     driver.expect("ana · connected");
-    driver.act("click \"Channels\"");
     driver.expect("Name of a new channel");
     driver.type_text("plans");
     driver.act("click \"Make a channel\"");
@@ -727,7 +726,6 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     driver.sign_up(invite_link, "ana");
 
     driver.expect("ana · connected");
-    driver.act("click \"Channels\"");
     driver.expect("#garden");
     driver.act("click \"Join\"");
     driver.expect("ana joined");
@@ -738,6 +736,10 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     driver.expect("Hello");
     driver.expect("Hi ana");
     driver.expect("ben");
+
+    driver.act("click \"Leave channel\"");
+    driver.expect("No channel is open");
+    driver.expect_no("Hi ana");
 
     driver.act("click \"Leave\"");
     driver.expect("Connect");
@@ -762,9 +764,8 @@ fn a_user_joins_a_channel_chats_there_and_makes_a_channel() {
     driver.expect("Connect");
     driver.sign_up(invite_link, "ana");
     driver.expect("ana · connected");
-    assert!(!driver.shows("#garden"));
 
-    driver.act("click \"Channels\"");
+    driver.expect("Name of a new channel");
     driver.expect("#garden");
     driver.expect("1 member");
     driver.act("click \"Join\"");
@@ -776,24 +777,21 @@ fn a_user_joins_a_channel_chats_there_and_makes_a_channel() {
     driver.expect("Hello");
     driver.expect("Hi ana");
 
-    driver.act("click \"#lobby\"");
-    driver.expect_no("Hi ana");
-    driver.expect_no("Leave channel");
-
     driver.act("click \"Channels\"");
     driver.expect("Name of a new channel");
     driver.expect("2 members");
     driver.type_text("plans");
     driver.act("click \"Make a channel\"");
     driver.expect("#plans");
-    driver.expect("Leave channel");
+    driver.expect_no("Hi ana");
 
     driver.act("click \"#garden\"");
     driver.expect("Hi ana");
     driver.act("click \"Leave channel\"");
     driver.expect_no("#garden");
+    driver.expect_no("Hi ana");
     driver.expect("#plans");
-    driver.expect_no("Leave channel");
+    driver.expect("Leave channel");
 }
 
 #[test]

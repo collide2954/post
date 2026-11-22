@@ -3,8 +3,8 @@ use std::num::NonZeroU32;
 
 use post_client::{Channel, Entry, KnownServer, Link, Security, Session};
 use post_proto::{
-    ChannelKind, ChannelName, ChannelNameError, ClientMessage, Code, ErrorCode, LOBBY, Name,
-    NameError, Role, ServerMessage, TextError,
+    ChannelKind, ChannelName, ChannelNameError, ClientMessage, Code, ErrorCode, Name, NameError,
+    Role, ServerMessage, TextError,
 };
 
 use super::servers::{Form, Target};
@@ -25,18 +25,12 @@ pub enum Message {
     Copy(Code),
     NameChanged(String),
     Rename,
-    Select(Place),
+    Select(ChannelName),
     ChannelNameChanged(String),
     KindSelected(ChannelKind),
     MakeChannel,
     Join(ChannelName),
     LeaveChannel,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Place {
-    Lobby,
-    Channel(ChannelName),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,8 +65,8 @@ pub struct Chat {
     target: Target,
     link: Link,
     session: Session,
-    place: Place,
-    drafts: BTreeMap<Place, String>,
+    place: Option<ChannelName>,
+    drafts: BTreeMap<ChannelName, String>,
     notice: Option<Notice>,
     panel: Option<Open>,
 }
@@ -111,16 +105,6 @@ enum Notice {
     NotSent,
     RequestNotSent,
     ServerNotSaved,
-}
-
-impl Place {
-    #[must_use]
-    pub fn name(&self) -> &str {
-        match self {
-            Self::Lobby => LOBBY,
-            Self::Channel(name) => name.as_str(),
-        }
-    }
 }
 
 impl Channels {
@@ -181,7 +165,7 @@ impl Chat {
             target,
             session: Session::new(link.name().clone()),
             link,
-            place: Place::Lobby,
+            place: None,
             drafts: BTreeMap::new(),
             notice: None,
             panel: None,
@@ -199,21 +183,24 @@ impl Chat {
     }
 
     #[must_use]
-    pub fn place(&self) -> &Place {
-        &self.place
+    pub fn place(&self) -> Option<&ChannelName> {
+        self.place.as_ref()
     }
 
     #[must_use]
     pub fn entries(&self) -> &[Entry] {
-        match &self.place {
-            Place::Lobby => self.session.entries(),
-            Place::Channel(name) => self.session.channel(name).map_or(&[], Channel::entries),
-        }
+        self.place
+            .as_ref()
+            .and_then(|place| self.session.channel(place))
+            .map_or(&[], Channel::entries)
     }
 
     #[must_use]
     pub fn draft(&self) -> &str {
-        self.drafts.get(&self.place).map_or("", String::as_str)
+        self.place
+            .as_ref()
+            .and_then(|place| self.drafts.get(place))
+            .map_or("", String::as_str)
     }
 
     #[must_use]
@@ -260,7 +247,9 @@ impl Chat {
     pub fn update(&mut self, message: Message) -> Effect {
         match message {
             Message::DraftChanged(draft) => {
-                self.drafts.insert(self.place.clone(), draft);
+                if let Some(place) = &self.place {
+                    self.drafts.insert(place.clone(), draft);
+                }
                 self.notice = None;
             }
             Message::Send => self.send(),
@@ -281,14 +270,7 @@ impl Chat {
             Message::Open(Panel::Menu) => self.panel = Some(Open::Menu),
             Message::Open(Panel::Channels) => {
                 self.forget_the_problem();
-                self.panel = Some(Open::Channels(Channels {
-                    name: String::new(),
-                    kind: ChannelKind::Public,
-                    problem: None,
-                }));
-                let request = self.session.ask_for_channels();
-                self.request(request);
-                return Effect::FocusPanel;
+                return self.open_channels();
             }
             Message::Close => return self.close(),
             Message::LifetimeSelected(lifetime) => {
@@ -323,7 +305,7 @@ impl Chat {
                 }
             }
             Message::Rename => return self.rename(),
-            Message::Select(place) => return self.select(place),
+            Message::Select(channel) => return self.select(channel),
             Message::ChannelNameChanged(name) => {
                 if let Some(Open::Channels(channels)) = &mut self.panel {
                     channels.name = name;
@@ -341,8 +323,8 @@ impl Chat {
                 self.request(request);
             }
             Message::LeaveChannel => {
-                if let Place::Channel(name) = &self.place {
-                    let request = self.session.leave(name);
+                if let Some(place) = &self.place {
+                    let request = self.session.leave(place);
                     self.request(request);
                 }
             }
@@ -360,24 +342,28 @@ impl Chat {
                 reference: Some(_),
                 channel,
                 ..
-            } => Some(Place::Channel(channel.clone())),
+            } => Some(channel.clone()),
             _ => None,
         };
+        let was_ready = self.session.is_ready();
         self.session.apply(message);
-        if !self.has(&self.place) {
-            self.drafts.remove(&self.place);
-            self.place = Place::Lobby;
+        let moved = self.keep_a_place();
+        if let Some(channel) = answer {
+            return self.select(channel);
         }
-        if let Some(place) = answer {
-            return self.select(place);
+        if !was_ready && self.session.is_ready() && self.place.is_none() {
+            return self.open_channels();
         }
-        if !own_name_changes {
-            return Effect::None;
+        if own_name_changes {
+            if matches!(self.panel, Some(Open::Account(_))) {
+                self.panel = None;
+            }
+            return Effect::Remember(self.server());
         }
-        if matches!(self.panel, Some(Open::Account(_))) {
-            self.panel = None;
+        if moved && self.panel.is_none() {
+            return Effect::FocusDraft;
         }
-        Effect::Remember(self.server())
+        Effect::None
     }
 
     #[must_use]
@@ -394,33 +380,53 @@ impl Chat {
         self.form
     }
 
-    fn has(&self, place: &Place) -> bool {
-        match place {
-            Place::Lobby => true,
-            Place::Channel(name) => self.session.channel(name).is_some(),
+    fn keep_a_place(&mut self) -> bool {
+        if let Some(place) = &self.place {
+            if self.session.channel(place).is_some() {
+                return false;
+            }
+            self.drafts.remove(place);
         }
+        self.place = if self.session.is_ready() {
+            self.session.channels().next().map(|(name, _)| name.clone())
+        } else {
+            None
+        };
+        self.place.is_some()
     }
 
-    fn select(&mut self, place: Place) -> Effect {
-        if !self.has(&place) {
+    fn open_channels(&mut self) -> Effect {
+        self.panel = Some(Open::Channels(Channels {
+            name: String::new(),
+            kind: ChannelKind::Public,
+            problem: None,
+        }));
+        let request = self.session.ask_for_channels();
+        if !self.link.send(request) {
+            self.notice = Some(Notice::RequestNotSent);
+        }
+        Effect::FocusPanel
+    }
+
+    fn select(&mut self, channel: ChannelName) -> Effect {
+        if self.session.channel(&channel).is_none() {
             return Effect::None;
         }
-        self.place = place;
+        self.place = Some(channel);
         self.panel = None;
         self.forget_the_problem();
         Effect::FocusDraft
     }
 
     fn send(&mut self) {
-        let draft = self.drafts.get(&self.place).map_or("", String::as_str);
-        let composed = match &self.place {
-            Place::Lobby => self.session.compose(draft),
-            Place::Channel(name) => self.session.compose_to(name, draft),
+        let Some(place) = &self.place else {
+            return;
         };
-        match composed {
+        let draft = self.drafts.get(place).map_or("", String::as_str);
+        match self.session.compose(place, draft) {
             Ok(message) => {
                 if self.link.send(message) {
-                    self.drafts.remove(&self.place);
+                    self.drafts.remove(place);
                     self.notice = None;
                 } else {
                     self.notice = Some(Notice::NotSent);

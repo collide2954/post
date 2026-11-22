@@ -95,6 +95,8 @@ texts! {
     ChatMenuButton => "chat-menu-button",
     ChatChannelsButton => "chat-channels-button",
     ChatLeaveChannelButton => "chat-leave-channel-button",
+    ChatNoChannelTitle => "chat-no-channel-title",
+    ChatNoChannelNote => "chat-no-channel-note",
     ChannelsTitle => "channels-title",
     ChannelsNameLabel => "channels-name-label",
     ChannelsKindPublic => "channels-kind-public",
@@ -413,8 +415,8 @@ mod tests {
         assert_eq!(english.with(Text::ChatJoined, "name", "ben"), "ben joined");
         assert_eq!(spanish.with(Text::ChatJoined, "name", "ben"), "ben entró");
         assert_eq!(
-            english.with(Text::ChatInputPlaceholder, "channel", "lobby"),
-            "Message #lobby"
+            english.with(Text::ChatInputPlaceholder, "channel", "general"),
+            "Message #general"
         );
     }
 

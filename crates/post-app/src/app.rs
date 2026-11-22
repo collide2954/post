@@ -359,7 +359,10 @@ mod tests {
         Direction, Disconnect, Entry, Event, Fingerprint, KnownServer, Line, Link, Outgoing,
         ProfileEntry, ProfileId,
     };
-    use post_proto::{ClientMessage, ErrorCode, Key, Name, Role, ServerMessage, Timestamp};
+    use post_proto::{
+        ChannelKind, ChannelName, ClientMessage, ErrorCode, Key, Name, Role, ServerMessage,
+        Timestamp,
+    };
 
     use super::servers::Problem;
     use super::start::StartProblem;
@@ -441,6 +444,22 @@ mod tests {
             Effect::Remember(server("localhost:7678", 1, who))
         );
         assert!(matches!(app.screen(), Screen::Chat(_)));
+        let general = ServerMessage::Channel {
+            reference: None,
+            channel: ChannelName::parse("general").expect("valid"),
+            kind: ChannelKind::Public,
+            topic: String::new(),
+            owner: name(who),
+            created: time(),
+        };
+        let received = [
+            (general, Effect::None),
+            (ServerMessage::Ready {}, Effect::FocusDraft),
+        ];
+        for (message, effect) in received {
+            let message = connection(&app, Event::Received(message));
+            assert_eq!(app.update(message), effect);
+        }
         (
             app,
             Box::new(move || messages.try_recv().ok().map(sent_message)),
@@ -456,7 +475,7 @@ mod tests {
 
     fn entries(app: &App) -> Vec<Entry> {
         match app.screen() {
-            Screen::Chat(chat) => chat.session().entries().to_vec(),
+            Screen::Chat(chat) => chat.entries().to_vec(),
             _ => panic!("the application is not on the chat screen"),
         }
     }
@@ -468,11 +487,15 @@ mod tests {
         }
     }
 
+    fn time() -> Timestamp {
+        Timestamp::parse("2026-11-21T14:02:00.000Z").expect("valid")
+    }
+
     fn joined(who: &str) -> ServerMessage {
         ServerMessage::Join {
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             name: name(who),
-            time: Timestamp::parse("2026-11-21T14:02:00.000Z").expect("valid"),
+            time: time(),
         }
     }
 
@@ -610,7 +633,7 @@ mod tests {
         assert_eq!(
             entries(&app),
             [Entry::Joined {
-                time: Timestamp::parse("2026-11-21T14:02:00.000Z").expect("valid"),
+                time: time(),
                 name: name("ben"),
             }]
         );
@@ -735,7 +758,7 @@ mod tests {
             outbox(),
             Some(ClientMessage::Send {
                 reference: Some(1),
-                channel: "lobby".to_owned(),
+                channel: "general".to_owned(),
                 text: "Hello".to_owned(),
             })
         );
@@ -752,7 +775,7 @@ mod tests {
             reference: None,
             old: name("ana"),
             new: name("anna"),
-            time: Timestamp::parse("2026-11-21T14:02:00.000Z").expect("valid"),
+            time: time(),
         };
 
         let message = connection(&app, Event::Received(renamed));

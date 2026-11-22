@@ -125,27 +125,41 @@ fn chat_app(mode: Mode) -> (App, Outbox) {
     chat_app_as(mode, Role::Member)
 }
 
-fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
+fn signed_in_app(mode: Mode, role: Role) -> (App, Outbox) {
     let mut app = connecting_app(mode);
     let attempt = app.target().expect("a connection is in progress").attempt;
     let (link, mut messages) = Link::channel(name("ana"), role, Key::from_bytes([1; 32]), 8);
     app.update(Message::Connection(attempt, Event::Connected(link)));
+    (
+        app,
+        Box::new(move || messages.try_recv().ok().map(sent_message)),
+    )
+}
 
-    let join = |who: &str, clock: &str| ServerMessage::Join {
-        channel: "lobby".to_owned(),
-        name: name(who),
-        time: time(clock),
-    };
+fn no_channel_app(mode: Mode) -> (App, Outbox) {
+    let (mut app, outbox) = signed_in_app(mode, Role::Member);
+    receive(&mut app, ServerMessage::Ready {});
+    app.update(Message::Chat(chat::Message::Close));
+    (app, outbox)
+}
+
+fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
+    let (mut app, outbox) = signed_in_app(mode, role);
     let message = |from: &str, clock: &str, text: &str| ServerMessage::Message {
         reference: None,
-        channel: "lobby".to_owned(),
+        channel: "general".to_owned(),
         from: name(from),
         time: time(clock),
         text: text.to_owned(),
     };
     let received = [
-        join("ana", "14:02:00"),
-        join("ben", "14:02:05"),
+        channel_state("general"),
+        ServerMessage::Ready {},
+        ServerMessage::Join {
+            channel: "general".to_owned(),
+            name: name("ben"),
+            time: time("14:02:05"),
+        },
         message("ana", "14:02:07", "Hello"),
         message("ben", "14:03:10", "Hi. Does it work?"),
         message("ana", "14:03:20", "Yes."),
@@ -156,18 +170,15 @@ fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
         ),
         ServerMessage::Leave {
             reference: None,
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             name: name("ben"),
             time: time("14:05:00"),
         },
     ];
     for message in received {
-        app.update(Message::Connection(attempt, Event::Received(message)));
+        receive(&mut app, message);
     }
-    (
-        app,
-        Box::new(move || messages.try_recv().ok().map(sent_message)),
-    )
+    (app, outbox)
 }
 
 fn receive(app: &mut App, message: ServerMessage) {
@@ -252,8 +263,8 @@ fn profile_message(window: &Window, text: &str) -> profiles::Message {
     }
 }
 
-const SENT_LINE: &str = r#"{"type":"send","ref":1,"channel":"lobby","text":"Hello"}"#;
-const RECEIVED_LINE: &str = r#"{"type":"message","ref":1,"channel":"lobby","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#;
+const SENT_LINE: &str = r#"{"type":"send","ref":1,"channel":"general","text":"Hello"}"#;
+const RECEIVED_LINE: &str = r#"{"type":"message","ref":1,"channel":"general","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#;
 
 fn with_console(app: &mut App) {
     let on = settings::Message::ConsoleToggled(true);
@@ -524,10 +535,9 @@ fn the_chat_screen_shows_the_timeline_with_local_times() {
     let mut interface = simulator(&window);
 
     for text in [
-        "#lobby",
+        "#general",
         "ana · connected",
         "14:02",
-        "ana joined",
         "ben joined",
         "Hello",
         "Hi. Does it work?",
@@ -605,7 +615,7 @@ fn the_header_of_the_chat_has_a_link_for_each_panel() {
 fn channel_state(title: &str) -> ServerMessage {
     ServerMessage::Channel {
         reference: None,
-        channel: ChannelName::parse(title).expect(title),
+        channel: channel(title),
         kind: ChannelKind::Public,
         topic: String::new(),
         owner: name("ana"),
@@ -615,33 +625,25 @@ fn channel_state(title: &str) -> ServerMessage {
 
 fn channels_app(mode: Mode, role: Role) -> (App, Outbox) {
     let (mut app, outbox) = chat_app_as(mode, role);
-    let attempt = app.target().expect("the chat has a connection").attempt;
     let received = [
-        channel_state("general"),
         channel_state("dev"),
         ServerMessage::Message {
             reference: None,
-            channel: "general".to_owned(),
+            channel: "dev".to_owned(),
             from: name("ben"),
             time: time("14:06:00"),
-            text: "This is the channel for all people.".to_owned(),
+            text: "This is the channel for the code.".to_owned(),
         },
     ];
     for message in received {
-        app.update(Message::Connection(attempt, Event::Received(message)));
+        receive(&mut app, message);
     }
     (app, outbox)
 }
 
-fn channel_app(mode: Mode) -> App {
-    let (mut app, _outbox) = channels_app(mode, Role::Owner);
-    app.update(Message::Chat(chat::Message::Select(general())));
-    app
-}
-
 fn listed(title: &str, topic: &str, members: u32) -> ListedChannel {
     ListedChannel {
-        channel: ChannelName::parse(title).expect(title),
+        channel: channel(title),
         kind: ChannelKind::Public,
         topic: topic.to_owned(),
         members,
@@ -674,12 +676,12 @@ fn channels_panel_app(mode: Mode, list: Option<Vec<ListedChannel>>) -> (App, Out
     (app, outbox)
 }
 
-fn general() -> chat::Place {
-    chat::Place::Channel(ChannelName::parse("general").expect("a valid name"))
+fn channel(title: &str) -> ChannelName {
+    ChannelName::parse(title).expect(title)
 }
 
 #[test]
-fn the_sidebar_shows_the_server_the_user_and_each_place() {
+fn the_sidebar_shows_the_server_the_user_and_each_channel() {
     let (app, _outbox) = channels_app(Mode::Light, Role::Member);
     let window = window(app, Language::English);
     let mut interface = simulator(&window);
@@ -687,7 +689,6 @@ fn the_sidebar_shows_the_server_the_user_and_each_place() {
     for text in [
         "localhost:7678",
         "ana · connected",
-        "#lobby",
         "#dev",
         "#general",
         "Change name",
@@ -703,47 +704,41 @@ fn the_sidebar_shows_the_server_the_user_and_each_place() {
     assert!(interface.find("Menu").is_err());
     assert!(interface.find("Invitations").is_err());
 
-    let messages = clicked(&window, "#general");
-    assert!(
-        matches!(
-            messages.as_slice(),
-            [Message::Chat(chat::Message::Select(place))] if *place == general()
-        ),
-        "{messages:?}"
-    );
-    let messages = clicked(&window, "#lobby");
-    assert!(
-        matches!(
-            messages.as_slice(),
-            [Message::Chat(chat::Message::Select(chat::Place::Lobby))]
-        ),
-        "{messages:?}"
-    );
+    for title in ["dev", "general"] {
+        let messages = clicked(&window, &format!("#{title}"));
+        assert!(
+            matches!(
+                messages.as_slice(),
+                [Message::Chat(chat::Message::Select(name))] if *name == channel(title)
+            ),
+            "{messages:?}"
+        );
+    }
 }
 
 #[test]
-fn the_window_shows_the_timeline_of_the_place_that_the_user_selects() {
+fn the_window_shows_the_timeline_of_the_channel_that_the_user_selects() {
     let (mut app, _outbox) = channels_app(Mode::Light, Role::Member);
-    app.update(Message::Chat(chat::Message::Select(general())));
+    app.update(Message::Chat(chat::Message::Select(channel("dev"))));
     let window = window(app, Language::English);
     let mut interface = simulator(&window);
 
     interface
-        .find("This is the channel for all people.")
+        .find("This is the channel for the code.")
         .expect("the timeline of the channel");
     assert!(interface.find("Hi. Does it work?").is_err());
     interface
-        .find(InMainArea("#general"))
+        .find(InMainArea("#dev"))
         .expect("the bar shows the name of the channel");
-    assert!(interface.find(InMainArea("#lobby")).is_err());
+    assert!(interface.find(InMainArea("#general")).is_err());
 }
 
 #[test]
 fn the_sidebar_opens_the_channels_panel_and_the_bar_leaves_a_channel() {
     let (app, _outbox) = channels_app(Mode::Light, Role::Member);
-    let lobby = window(app, Language::English);
-    assert!(simulator(&lobby).find("Leave channel").is_err());
-    let messages = clicked(&lobby, "Channels");
+    let window = window(app, Language::English);
+
+    let messages = clicked(&window, "Channels");
     assert!(
         matches!(
             messages.as_slice(),
@@ -751,9 +746,7 @@ fn the_sidebar_opens_the_channels_panel_and_the_bar_leaves_a_channel() {
         ),
         "{messages:?}"
     );
-
-    let channel = window(channel_app(Mode::Light), Language::English);
-    let messages = clicked(&channel, "Leave channel");
+    let messages = clicked(&window, "Leave channel");
     assert!(
         matches!(
             messages.as_slice(),
@@ -761,6 +754,79 @@ fn the_sidebar_opens_the_channels_panel_and_the_bar_leaves_a_channel() {
         ),
         "{messages:?}"
     );
+}
+
+#[test]
+fn the_chat_opens_the_channels_panel_for_a_user_with_no_channel() {
+    let (mut app, mut outbox) = signed_in_app(Mode::Light, Role::Member);
+    receive(&mut app, ServerMessage::Ready {});
+
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Channels { reference: Some(1) })
+    );
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+    for text in ["localhost:7678", "Name of a new channel", "Back"] {
+        interface
+            .find(InMainArea(text))
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+}
+
+#[test]
+fn the_chat_tells_a_user_with_no_channel_what_to_do() {
+    let (app, _outbox) = no_channel_app(Mode::Light);
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "localhost:7678",
+        "No channel is open",
+        "You are not a member of a channel. Join a channel or make one.",
+        "Channels",
+    ] {
+        interface
+            .find(InMainArea(text))
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    assert!(interface.find("Leave channel").is_err());
+    assert!(interface.find(selector::id(view::DRAFT_FIELD)).is_err());
+
+    interface
+        .click(InMainArea("Channels"))
+        .expect("the main area has a button for the channels");
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Open(chat::Panel::Channels))]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_chat_shows_a_notice_to_a_user_with_no_channel() {
+    let (mut app, _outbox) = no_channel_app(Mode::Light);
+    app.update(Message::ProfileNotSaved);
+    let window = window(app, Language::English);
+
+    simulator(&window)
+        .find("Post could not save this server in your profile.")
+        .expect("the notice shows below the hint");
+}
+
+#[test]
+fn the_chat_shows_no_hint_before_the_sign_in_is_complete() {
+    let (app, _outbox) = signed_in_app(Mode::Light, Role::Member);
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .find(InMainArea("localhost:7678"))
+        .expect("the bar shows the address of the server");
+    assert!(interface.find("No channel is open").is_err());
 }
 
 #[test]
@@ -801,7 +867,7 @@ fn the_channels_panel_lists_the_public_channels() {
     assert!(
         matches!(
             messages.as_slice(),
-            [Message::Chat(chat::Message::Select(place))] if *place == general()
+            [Message::Chat(chat::Message::Select(name))] if *name == channel("general")
         ),
         "{messages:?}"
     );
@@ -917,7 +983,7 @@ fn the_smallest_window_has_a_menu_in_the_place_of_the_sidebar() {
     ] {
         assert!(interface.find(hidden).is_err(), "{hidden}");
     }
-    for text in ["#lobby", "Menú"] {
+    for text in ["#general", "Menú"] {
         let bounds = interface
             .find(text)
             .unwrap_or_else(|error| panic!("{text}: {error}"))
@@ -945,7 +1011,6 @@ fn the_smallest_window_has_a_menu_in_the_place_of_the_sidebar() {
         "Volver",
         "localhost:7678",
         "ana · conectado",
-        "#lobby",
         "#dev",
         "#general",
         "Invitaciones",
@@ -976,7 +1041,7 @@ fn the_invitations_panel_lists_the_open_invitations() {
     let mut interface = simulator(&window);
 
     for text in [
-        "#lobby",
+        "#general",
         "Invitations",
         "Ends after",
         "7 days",
@@ -1343,7 +1408,7 @@ fn the_console_shows_each_line_with_its_time_and_direction() {
         "Clear",
         "Close",
         "Send",
-        "#lobby",
+        "#general",
         "ben left",
     ] {
         interface
@@ -1584,7 +1649,7 @@ fn the_times_obey_the_clock_settings() {
     settings_file(&mut app, "clock = 12\nseconds = true\n");
     let english = window(app, Language::English);
     let mut interface = simulator(&english);
-    for text in [" 2:02:00 PM", " 2:02:07 PM", " 2:05:00 PM"] {
+    for text in [" 2:02:05 PM", " 2:02:07 PM", " 2:05:00 PM"] {
         interface
             .find(text)
             .unwrap_or_else(|error| panic!("{text}: {error}"));
@@ -1671,6 +1736,18 @@ fn the_interface_has_spanish_text() {
             .unwrap_or_else(|error| panic!("{text}: {error}"));
     }
 
+    let (app, _outbox) = no_channel_app(Mode::Light);
+    let window = self::window(app, Language::Spanish);
+    let mut interface = simulator(&window);
+    for text in [
+        "No hay un canal abierto",
+        "No eres miembro de ningún canal. Únete a un canal o crea uno.",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+
     let window = self::window(settings_app(Mode::Light), Language::Spanish);
     let mut interface = simulator(&window);
     for text in [
@@ -1719,7 +1796,13 @@ fn each_screen_draws_in_light_and_dark_mode() {
                 chat_app_as(mode, Role::Owner).0,
                 Language::English,
             ),
-            ("channel", channel_app(mode), Language::English),
+            (
+                "chat-channels",
+                channels_app(mode, Role::Owner).0,
+                Language::English,
+            ),
+            ("no-channel", no_channel_app(mode).0, Language::English),
+            ("no-channel-es", no_channel_app(mode).0, Language::Spanish),
             (
                 "channels",
                 channels_panel_app(mode, Some(three_channels())).0,

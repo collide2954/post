@@ -6,7 +6,7 @@ use post_proto::{
     Name, NameError, Role, ServerMessage, Timestamp,
 };
 
-use super::{Account, Channels, Chat, Invitations, Lifetime, Message, Open, Panel, Place, Uses};
+use super::{Account, Channels, Chat, Invitations, Lifetime, Message, Open, Panel, Uses};
 use crate::app::Effect;
 use crate::app::servers::{Form, Target};
 use crate::i18n::Text;
@@ -51,8 +51,15 @@ fn chat_of(role: Role, address: &str, capacity: usize) -> (Chat, Outbox) {
     )
 }
 
-fn chat(capacity: usize) -> (Chat, Outbox) {
+fn new_chat(capacity: usize) -> (Chat, Outbox) {
     chat_of(Role::Member, "localhost", capacity)
+}
+
+fn chat(capacity: usize) -> (Chat, Outbox) {
+    let (mut chat, outbox) = new_chat(capacity);
+    chat.receive(state(None, "general"));
+    assert_eq!(chat.receive(ServerMessage::Ready {}), Effect::FocusDraft);
+    (chat, outbox)
 }
 
 fn owner_with_invitations() -> (Chat, Outbox) {
@@ -149,14 +156,14 @@ fn records_what_the_server_sends() {
     let (mut chat, _outbox) = chat(4);
 
     let effect = chat.receive(ServerMessage::Join {
-        channel: "lobby".to_owned(),
+        channel: "general".to_owned(),
         name: name("ben"),
         time: time(),
     });
 
     assert_eq!(effect, Effect::None);
     assert_eq!(
-        chat.session().entries(),
+        chat.entries(),
         [Entry::Joined {
             time: time(),
             name: name("ben"),
@@ -176,7 +183,7 @@ fn sends_the_draft_and_makes_the_field_empty() {
         outbox(),
         Some(ClientMessage::Send {
             reference: Some(1),
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: "Hello".to_owned(),
         })
     );
@@ -567,10 +574,6 @@ fn channel(text: &str) -> ChannelName {
     ChannelName::parse(text).expect(text)
 }
 
-fn place(title: &str) -> Place {
-    Place::Channel(channel(title))
-}
-
 fn state(reference: Option<u32>, title: &str) -> ServerMessage {
     ServerMessage::Channel {
         reference,
@@ -592,62 +595,118 @@ fn left(title: &str, who: &str) -> ServerMessage {
 }
 
 #[test]
-fn starts_in_the_temporary_lobby() {
-    let (chat, _outbox) = chat(4);
+fn starts_with_no_channel() {
+    let (mut chat, mut outbox) = new_chat(4);
 
-    assert_eq!(chat.place(), &Place::Lobby);
+    assert_eq!(chat.place(), None);
+    assert_eq!(chat.entries(), []);
+
+    chat.update(Message::DraftChanged("Hello".to_owned()));
+    chat.update(Message::Send);
+
+    assert_eq!(chat.draft(), "");
+    assert_eq!(outbox(), None);
+}
+
+#[test]
+fn opens_the_first_channel_when_the_sign_in_is_complete() {
+    let (mut chat, mut outbox) = new_chat(4);
+
+    assert_eq!(chat.receive(state(None, "general")), Effect::None);
+    assert_eq!(chat.receive(state(None, "dev")), Effect::None);
+    assert_eq!(chat.place(), None);
+
+    assert_eq!(chat.receive(ServerMessage::Ready {}), Effect::FocusDraft);
+
+    assert_eq!(chat.place(), Some(&channel("dev")));
+    assert_eq!(chat.panel(), None);
+    assert_eq!(outbox(), None);
+    assert_eq!(chat.receive(ServerMessage::Ready {}), Effect::None);
+}
+
+#[test]
+fn opens_the_channels_panel_when_the_user_has_no_channel_after_the_sign_in() {
+    let (mut chat, mut outbox) = new_chat(4);
+
+    assert_eq!(chat.receive(ServerMessage::Ready {}), Effect::FocusPanel);
+
+    assert!(matches!(chat.panel(), Some(Open::Channels(_))));
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Channels { reference: Some(1) })
+    );
+    assert_eq!(chat.place(), None);
+
+    assert_eq!(chat.receive(state(None, "general")), Effect::None);
+    assert_eq!(chat.place(), Some(&channel("general")));
+    assert!(matches!(chat.panel(), Some(Open::Channels(_))));
+}
+
+#[test]
+fn keeps_a_warning_when_the_channels_panel_opens_after_the_sign_in() {
+    let (mut chat, _outbox) = new_chat(4);
+    chat.warn_that_the_server_is_not_saved();
+
+    chat.receive(ServerMessage::Ready {});
+
+    assert!(matches!(chat.panel(), Some(Open::Channels(_))));
+    assert_eq!(chat.notice(), Some(Text::ChatServerNotSaved));
+}
+
+#[test]
+fn tells_the_user_that_the_connection_cannot_take_the_request_for_the_channels() {
+    let (mut chat, _outbox) = new_chat(1);
+    chat.update(Message::Join(channel("dev")));
+
+    chat.update(Message::Open(Panel::Channels));
+
+    assert_eq!(chat.notice(), Some(Text::ChatRequestNotSent));
 }
 
 #[test]
 fn shows_a_channel_when_the_user_selects_it() {
     let (mut chat, _outbox) = chat(4);
 
-    assert_eq!(chat.receive(state(None, "general")), Effect::None);
-    assert_eq!(chat.place(), &Place::Lobby);
+    assert_eq!(chat.receive(state(None, "dev")), Effect::None);
+    assert_eq!(chat.place(), Some(&channel("general")));
 
-    let effect = chat.update(Message::Select(place("general")));
+    let effect = chat.update(Message::Select(channel("dev")));
     assert_eq!(effect, Effect::FocusDraft);
-    assert_eq!(chat.place(), &place("general"));
-
-    let effect = chat.update(Message::Select(Place::Lobby));
-    assert_eq!(effect, Effect::FocusDraft);
-    assert_eq!(chat.place(), &Place::Lobby);
+    assert_eq!(chat.place(), Some(&channel("dev")));
 }
 
 #[test]
 fn does_not_show_a_channel_that_the_user_is_not_in() {
     let (mut chat, _outbox) = chat(4);
-    chat.receive(state(None, "general"));
-    chat.update(Message::Select(place("general")));
 
-    let effect = chat.update(Message::Select(place("garden")));
+    let effect = chat.update(Message::Select(channel("garden")));
 
     assert_eq!(effect, Effect::None);
-    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.place(), Some(&channel("general")));
 }
 
 #[test]
-fn keeps_one_draft_for_each_place() {
+fn keeps_one_draft_for_each_channel() {
     let (mut chat, _outbox) = chat(4);
-    chat.receive(state(None, "general"));
-    chat.update(Message::DraftChanged("for the lobby".to_owned()));
-
-    chat.update(Message::Select(place("general")));
-    assert_eq!(chat.draft(), "");
+    chat.receive(state(None, "dev"));
     chat.update(Message::DraftChanged("for general".to_owned()));
 
-    chat.update(Message::Select(Place::Lobby));
-    assert_eq!(chat.draft(), "for the lobby");
-    chat.update(Message::Select(place("general")));
+    chat.update(Message::Select(channel("dev")));
+    assert_eq!(chat.draft(), "");
+    chat.update(Message::DraftChanged("for dev".to_owned()));
+
+    chat.update(Message::Select(channel("general")));
     assert_eq!(chat.draft(), "for general");
+    chat.update(Message::Select(channel("dev")));
+    assert_eq!(chat.draft(), "for dev");
 }
 
 #[test]
-fn sends_the_draft_to_the_place_that_the_user_sees() {
+fn sends_the_draft_to_the_channel_that_the_user_sees() {
     let (mut chat, mut outbox) = chat(4);
-    chat.receive(state(None, "general"));
-    chat.update(Message::DraftChanged("to the lobby".to_owned()));
-    chat.update(Message::Select(place("general")));
+    chat.receive(state(None, "dev"));
+    chat.update(Message::DraftChanged("to general".to_owned()));
+    chat.update(Message::Select(channel("dev")));
     chat.update(Message::DraftChanged("Hello".to_owned()));
 
     chat.update(Message::Send);
@@ -656,20 +715,20 @@ fn sends_the_draft_to_the_place_that_the_user_sees() {
         outbox(),
         Some(ClientMessage::Send {
             reference: Some(1),
-            channel: "general".to_owned(),
+            channel: "dev".to_owned(),
             text: "Hello".to_owned(),
         })
     );
     assert_eq!(chat.draft(), "");
-    chat.update(Message::Select(Place::Lobby));
-    assert_eq!(chat.draft(), "to the lobby");
+    chat.update(Message::Select(channel("general")));
+    assert_eq!(chat.draft(), "to general");
     chat.update(Message::Send);
     assert_eq!(
         outbox(),
         Some(ClientMessage::Send {
             reference: Some(2),
-            channel: "lobby".to_owned(),
-            text: "to the lobby".to_owned(),
+            channel: "general".to_owned(),
+            text: "to general".to_owned(),
         })
     );
 }
@@ -680,45 +739,68 @@ fn opens_a_channel_when_the_server_answers_a_request_of_this_window() {
     chat.update(Message::Open(Panel::Account));
     chat.receive(ServerMessage::error(Some(1), ErrorCode::NameTaken));
 
-    let effect = chat.receive(state(Some(2), "general"));
+    let effect = chat.receive(state(Some(2), "dev"));
 
     assert_eq!(effect, Effect::FocusDraft);
-    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.place(), Some(&channel("dev")));
     assert_eq!(chat.panel(), None);
     assert_eq!(chat.notice(), None);
 }
 
 #[test]
-fn goes_back_to_the_lobby_when_its_channel_goes_away() {
+fn opens_a_different_channel_when_its_channel_goes_away() {
     let (mut chat, _outbox) = chat(4);
-    chat.receive(state(Some(1), "general"));
     chat.receive(state(None, "dev"));
     chat.update(Message::DraftChanged("not sent".to_owned()));
 
-    chat.receive(left("dev", "ana"));
-    assert_eq!(chat.place(), &place("general"));
+    chat.receive(left("dev", "ben"));
     chat.receive(left("general", "ben"));
-    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.place(), Some(&channel("general")));
     assert_eq!(chat.draft(), "not sent");
 
     let effect = chat.receive(left("general", "ana"));
 
-    assert_eq!(effect, Effect::None);
-    assert_eq!(chat.place(), &Place::Lobby);
+    assert_eq!(effect, Effect::FocusDraft);
+    assert_eq!(chat.place(), Some(&channel("dev")));
     assert_eq!(chat.draft(), "");
     chat.receive(state(None, "general"));
-    chat.update(Message::Select(place("general")));
+    chat.update(Message::Select(channel("general")));
     assert_eq!(chat.draft(), "");
 }
 
 #[test]
-fn forgets_an_error_when_the_user_selects_a_place() {
+fn shows_no_channel_when_the_last_channel_goes_away() {
     let (mut chat, _outbox) = chat(4);
-    chat.receive(state(None, "general"));
+    chat.update(Message::DraftChanged("not sent".to_owned()));
+
+    let effect = chat.receive(left("general", "ana"));
+
+    assert_eq!(effect, Effect::None);
+    assert_eq!(chat.place(), None);
+    assert_eq!(chat.draft(), "");
+    assert_eq!(chat.panel(), None);
+}
+
+#[test]
+fn keeps_an_open_panel_when_its_channel_goes_away() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(None, "dev"));
+    chat.update(Message::Open(Panel::Account));
+
+    let effect = chat.receive(left("general", "ana"));
+
+    assert_eq!(effect, Effect::None);
+    assert_eq!(chat.place(), Some(&channel("dev")));
+    assert!(matches!(chat.panel(), Some(Open::Account(_))));
+}
+
+#[test]
+fn forgets_an_error_when_the_user_selects_a_channel() {
+    let (mut chat, _outbox) = chat(4);
     chat.receive(ServerMessage::error(Some(1), ErrorCode::NotMember));
     assert_eq!(chat.notice(), Some(Text::ErrorNotMember));
 
-    chat.update(Message::Select(place("general")));
+    chat.update(Message::Select(channel("general")));
 
     assert_eq!(chat.notice(), None);
 }
@@ -734,35 +816,33 @@ fn text_in(title: &str, text: &str) -> ServerMessage {
 }
 
 #[test]
-fn gives_the_name_and_the_timeline_of_the_place_that_the_user_sees() {
+fn gives_the_timeline_of_the_channel_that_the_user_sees() {
     let (mut chat, _outbox) = chat(4);
-    chat.receive(state(None, "general"));
-    chat.receive(text_in("lobby", "Hi"));
+    chat.receive(state(None, "dev"));
+    chat.receive(text_in("dev", "Hi"));
     chat.receive(text_in("general", "Hello"));
     chat.receive(text_in("general", "Does it work?"));
 
-    assert_eq!(chat.place().name(), "lobby");
+    assert_eq!(chat.place(), Some(&channel("general")));
+    assert_eq!(chat.entries().len(), 2);
+
+    chat.update(Message::Select(channel("dev")));
+
     assert!(
         matches!(chat.entries(), [Entry::Message { text, .. }] if text == "Hi"),
         "{:?}",
         chat.entries()
     );
-
-    chat.update(Message::Select(place("general")));
-
-    assert_eq!(chat.place().name(), "general");
-    assert_eq!(chat.entries().len(), 2);
 }
 
 #[test]
-fn opens_the_menu_and_closes_it_when_the_user_selects_a_place() {
+fn opens_the_menu_and_closes_it_when_the_user_selects_a_channel() {
     let (mut chat, _outbox) = chat(4);
-    chat.receive(state(None, "general"));
 
     assert_eq!(chat.update(Message::Open(Panel::Menu)), Effect::None);
     assert_eq!(chat.panel(), Some(&Open::Menu));
 
-    chat.update(Message::Select(place("general")));
+    chat.update(Message::Select(channel("general")));
     assert_eq!(chat.panel(), None);
 
     chat.update(Message::Open(Panel::Menu));
@@ -809,9 +889,9 @@ fn asks_the_server_for_the_channels_when_the_panel_opens() {
 #[test]
 fn makes_a_channel_with_the_name_and_the_kind_that_the_user_selects() {
     let (mut chat, mut outbox) = channels_panel();
-    chat.update(Message::ChannelNameChanged(" general ".to_owned()));
+    chat.update(Message::ChannelNameChanged(" dev ".to_owned()));
     chat.update(Message::KindSelected(ChannelKind::Private));
-    assert_eq!(open_channels(&chat).name, " general ");
+    assert_eq!(open_channels(&chat).name, " dev ");
     assert_eq!(open_channels(&chat).kind, ChannelKind::Private);
 
     assert_eq!(chat.update(Message::MakeChannel), Effect::None);
@@ -820,17 +900,17 @@ fn makes_a_channel_with_the_name_and_the_kind_that_the_user_selects() {
         outbox(),
         Some(ClientMessage::ChannelCreate {
             reference: Some(2),
-            channel: "general".to_owned(),
+            channel: "dev".to_owned(),
             kind: ChannelKind::Private,
         })
     );
     assert_eq!(open_channels(&chat).problem, None);
 
-    let effect = chat.receive(state(Some(2), "general"));
+    let effect = chat.receive(state(Some(2), "dev"));
 
     assert_eq!(effect, Effect::FocusDraft);
     assert_eq!(chat.panel(), None);
-    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.place(), Some(&channel("dev")));
 }
 
 #[test]
@@ -895,13 +975,13 @@ fn joins_a_channel_of_the_list() {
         })
     );
     assert_eq!(chat.receive(state(Some(2), "dev")), Effect::FocusDraft);
-    assert_eq!(chat.place(), &place("dev"));
+    assert_eq!(chat.place(), Some(&channel("dev")));
     assert_eq!(chat.panel(), None);
 }
 
 #[test]
 fn leaves_the_channel_that_the_user_sees() {
-    let (mut chat, mut outbox) = chat(8);
+    let (mut chat, mut outbox) = new_chat(8);
 
     assert_eq!(chat.update(Message::LeaveChannel), Effect::None);
     assert_eq!(outbox(), None);
@@ -916,9 +996,9 @@ fn leaves_the_channel_that_the_user_sees() {
             channel: "general".to_owned(),
         })
     );
-    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.place(), Some(&channel("general")));
     chat.receive(left("general", "ana"));
-    assert_eq!(chat.place(), &Place::Lobby);
+    assert_eq!(chat.place(), None);
 }
 
 #[test]

@@ -4,7 +4,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Background, Element, Fill, Pixels};
 use post_client::Entry;
-use post_proto::{ChannelKind, Invitation, ListedChannel, Timestamp};
+use post_proto::{ChannelKind, ChannelName, Invitation, ListedChannel, Timestamp};
 
 use super::widgets::{
     bar, choice, color, divider, entry, field_style, heading, label, link, link_button, page_link,
@@ -14,9 +14,7 @@ use super::{
     BAR_HEIGHT, DRAFT_FIELD, LINE_HEIGHT, MONO_FONT, NAME_CHARACTER_WIDTH, PANEL_FIELD,
     SIDEBAR_WIDTH, SMALL_SIZE, STRONG_FONT, TEXT_SIZE, WIDE_WIDTH, Window,
 };
-use crate::app::chat::{
-    self, Account, Channels, Chat, Invitations, Lifetime, Open, Panel, Place, Uses,
-};
+use crate::app::chat::{self, Account, Channels, Chat, Invitations, Lifetime, Open, Panel, Uses};
 use crate::app::{Message, Page, servers};
 use crate::i18n::{Strings, Text};
 use crate::palette::Palette;
@@ -65,7 +63,7 @@ pub(super) fn chat_bar<'a>(
     if chat.panel().is_some() {
         links = links.push(link(Text::NavBackButton, chat::Message::Close));
     } else {
-        if matches!(chat.place(), Place::Channel(_)) {
+        if chat.place().is_some() {
             let leave = chat::Message::LeaveChannel;
             links = links.push(link(Text::ChatLeaveChannelButton, leave));
         }
@@ -74,7 +72,11 @@ pub(super) fn chat_bar<'a>(
             links = links.push(link(Text::ChatMenuButton, open));
         }
     }
-    bar(format!("#{}", chat.place().name()), None, links, palette)
+    let title = chat.place().map_or_else(
+        || chat.target().destination.address().to_string(),
+        |place| format!("#{place}"),
+    );
+    bar(title, None, links, palette)
 }
 
 pub(super) fn navigation<'a>(
@@ -84,21 +86,17 @@ pub(super) fn navigation<'a>(
 ) -> Column<'a, Message> {
     let address = chat.target().destination.address().to_string();
     let status = strings.with(Text::ChatStatus, "name", chat.session().name().as_str());
-    let place = |place: Place| {
-        let selected = *chat.place() == place;
-        let title = format!("#{}", place.name());
-        let select = Message::Chat(chat::Message::Select(place));
-        entry(title, selected, select, palette)
+    let place = |name: &ChannelName| {
+        let selected = chat.place() == Some(name);
+        let select = Message::Chat(chat::Message::Select(name.clone()));
+        entry(format!("#{name}"), selected, select, palette)
     };
     let action = |text: Text, message: chat::Message| {
         let message = Some(Message::Chat(message));
         link(strings.text(text), message, [5, 16], palette)
     };
 
-    let mut places = column![place(Place::Lobby)];
-    for (name, _) in chat.session().channels() {
-        places = places.push(place(Place::Channel(name.clone())));
-    }
+    let places = Column::with_children(chat.session().channels().map(|(name, _)| place(name)));
     let mut actions = column![action(
         Text::ChatChannelsButton,
         chat::Message::Open(Panel::Channels)
@@ -136,6 +134,9 @@ pub(super) fn conversation<'a>(
     palette: Palette,
 ) -> Element<'a, Message> {
     let strings = &window.strings;
+    let Some(place) = chat.place() else {
+        return no_channel(strings, chat, palette);
+    };
     let entries = chat.entries();
 
     #[expect(
@@ -160,7 +161,7 @@ pub(super) fn conversation<'a>(
         });
 
     let input = text_input(
-        &strings.with(Text::ChatInputPlaceholder, "channel", chat.place().name()),
+        &strings.with(Text::ChatInputPlaceholder, "channel", place.as_str()),
         chat.draft(),
     )
     .id(DRAFT_FIELD)
@@ -181,6 +182,24 @@ pub(super) fn conversation<'a>(
         );
     }
     page.push(divider(palette)).push(input).into()
+}
+
+fn no_channel<'a>(strings: &Strings, chat: &Chat, palette: Palette) -> Element<'a, Message> {
+    if !chat.session().is_ready() {
+        return space().width(Fill).height(Fill).into();
+    }
+    let open = Message::Chat(chat::Message::Open(Panel::Channels));
+    let button = primary_button(strings.text(Text::ChatChannelsButton), open, palette);
+    let mut content = column![
+        heading(strings.text(Text::ChatNoChannelTitle)),
+        paragraph(strings.text(Text::ChatNoChannelNote), palette.muted),
+        Space::new().height(4),
+        row![button],
+    ];
+    if let Some(notice) = chat.notice() {
+        content = content.push(paragraph(strings.text(notice), palette.danger));
+    }
+    panel_page(content)
 }
 
 pub(super) fn invitations_panel<'a>(
@@ -421,8 +440,7 @@ pub(super) fn channel_row<'a>(
     };
     let name = listed.channel.clone();
     let (action, message) = if chat.session().channel(&name).is_some() {
-        let open = chat::Message::Select(Place::Channel(name));
-        (Text::ChannelsOpenButton, open)
+        (Text::ChannelsOpenButton, chat::Message::Select(name))
     } else {
         (Text::ChannelsJoinButton, chat::Message::Join(name))
     };
