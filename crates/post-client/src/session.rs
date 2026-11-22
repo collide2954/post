@@ -72,6 +72,10 @@ impl Session {
         self.invitations.as_deref()
     }
 
+    pub fn dismiss_problem(&mut self) {
+        self.problem = None;
+    }
+
     pub fn compose(&mut self, text: &str) -> Result<ClientMessage, TextError> {
         check_text(text)?;
         Ok(ClientMessage::Send {
@@ -293,6 +297,24 @@ mod tests {
 
         let _request = session.ask_for_invitations();
         assert_eq!(session.problem(), None);
+    }
+
+    #[test]
+    fn forgets_the_error_when_the_user_dismisses_it() {
+        let mut session = Session::new(name("ana"));
+        session.apply(ServerMessage::error(Some(1), ErrorCode::TooSoon));
+
+        session.dismiss_problem();
+
+        assert_eq!(session.problem(), None);
+        assert_eq!(
+            session.compose("Hello"),
+            Ok(ClientMessage::Send {
+                reference: Some(1),
+                channel: "lobby".to_owned(),
+                text: "Hello".to_owned(),
+            })
+        );
     }
 
     fn rename(old: &str, new: &str, second: u8) -> ServerMessage {
