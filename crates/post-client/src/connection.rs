@@ -350,6 +350,7 @@ async fn dial(
             let stream = TcpStream::connect(candidate)
                 .await
                 .map_err(|_| Disconnect::Unreachable)?;
+            let _ = stream.set_nodelay(true);
             let (stream, certificate) = match destination.security() {
                 Security::Plain => (Transport::Plain(stream), None),
                 Security::Tls => tls::secure(stream, &host, accepted).await?,
