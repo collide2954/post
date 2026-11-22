@@ -2,6 +2,14 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.6 - 2026-11-22
+
+- Add TLS 1.3 to the server and to the application (D-061). A server can make its own certificate (D-164) or use certificate files.
+- Ask the user to accept the fingerprint of a private certificate, and give a warning if the certificate changes (D-073).
+- Add the Servers screen (D-171). The application connects at the start to the server that was last in use.
+- Add the handle change with the `rename` messages (D-024).
+- Show a page for an invite link in a browser (D-173).
+
 ## 0.1.5 - 2026-11-22
 
 - Let the application sign in with an account (D-163). The application makes the first profile and remembers the key of each server.

@@ -3063,7 +3063,7 @@ dependencies = [
 
 [[package]]
 name = "post-app"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "fluent-bundle",
  "futures-util",
@@ -3081,7 +3081,7 @@ dependencies = [
 
 [[package]]
 name = "post-client"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "futures-util",
  "post-crypto",
@@ -3099,7 +3099,7 @@ dependencies = [
 
 [[package]]
 name = "post-crypto"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.4.3",
@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "post-proto"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "schemars",
  "serde",
@@ -3122,7 +3122,7 @@ dependencies = [
 
 [[package]]
 name = "post-rules"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "post-proto",
  "vstd",
@@ -3130,7 +3130,7 @@ dependencies = [
 
 [[package]]
 name = "post-server"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "axum",
  "futures-util",
@@ -3150,14 +3150,14 @@ dependencies = [
 
 [[package]]
 name = "post-site"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "post-testing"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "powerfmt"
