@@ -2,7 +2,7 @@ pub mod chat;
 pub mod servers;
 pub mod start;
 
-use post_client::{Event, KnownServer, Link};
+use post_client::{Event, KnownServer, Link, Security};
 use post_proto::ErrorCode;
 
 use self::chat::Chat;
@@ -16,7 +16,7 @@ pub enum Message {
     Servers(servers::Message),
     Chat(chat::Message),
     Connection(u64, Event),
-    ServerNotSaved,
+    ProfileNotSaved,
     ModeChanged(Mode),
     FocusNext,
     FocusPrevious,
@@ -25,10 +25,11 @@ pub enum Message {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     None,
-    FocusName,
+    FocusForm,
     FocusNext,
     FocusPrevious,
     Connected(KnownServer),
+    Forget(String),
 }
 
 #[derive(Debug)]
@@ -49,11 +50,16 @@ pub enum Screen {
 impl App {
     #[must_use]
     pub fn new(mode: Mode, servers: Vec<KnownServer>) -> Self {
+        let mut attempts = 0;
+        let screen = match servers.first() {
+            Some(last_in_use) => Servers::opening(last_in_use, &mut attempts),
+            None => Servers::default(),
+        };
         Self {
             mode,
             servers,
-            attempts: 0,
-            screen: Screen::Servers(Box::default()),
+            attempts,
+            screen: Screen::Servers(Box::new(screen)),
         }
     }
 
@@ -95,15 +101,17 @@ impl App {
         match message {
             Message::Servers(message) => match &mut self.screen {
                 Screen::Servers(servers) => {
-                    servers.update(message, &self.servers, &mut self.attempts)
+                    servers.update(message, &mut self.servers, &mut self.attempts)
                 }
                 Screen::Stopped(_) | Screen::Chat(_) => Effect::None,
             },
             Message::Chat(message) => self.chat(message),
             Message::Connection(attempt, event) => self.connection(attempt, event),
-            Message::ServerNotSaved => {
-                if let Screen::Chat(chat) = &mut self.screen {
-                    chat.warn_that_the_server_is_not_saved();
+            Message::ProfileNotSaved => {
+                match &mut self.screen {
+                    Screen::Servers(servers) => servers.warn_that_the_profile_is_not_saved(),
+                    Screen::Chat(chat) => chat.warn_that_the_server_is_not_saved(),
+                    Screen::Stopped(_) => {}
                 }
                 Effect::None
             }
@@ -161,6 +169,7 @@ impl App {
             address: target.destination.address().to_string(),
             key: *link.server(),
             name: link.name().clone(),
+            tls: target.destination.security() == Security::Tls,
             certificate: link
                 .certificate()
                 .map(|fingerprint| fingerprint.to_string()),
@@ -179,7 +188,7 @@ impl App {
         let mut form = chat.into_form();
         form.problem = problem;
         self.screen = Screen::Servers(Box::new(Servers::with(form)));
-        Effect::FocusName
+        Effect::FocusForm
     }
 }
 
@@ -235,6 +244,7 @@ mod tests {
             address: address.to_owned(),
             key: key(number),
             name: name(who),
+            tls: false,
             certificate: None,
         }
     }
@@ -252,6 +262,10 @@ mod tests {
 
     fn connect(app: &mut App) -> Effect {
         app.update(Message::Servers(servers::Message::Connect))
+    }
+
+    fn cancel(app: &mut App) -> Effect {
+        app.update(Message::Servers(servers::Message::Cancel))
     }
 
     fn leave(app: &mut App) -> Effect {
@@ -313,58 +327,44 @@ mod tests {
     }
 
     #[test]
-    fn starts_on_the_servers_screen_with_the_servers_of_the_profile() {
-        let known = vec![server("localhost:7678", 1, "ana")];
-        let app = App::new(Mode::Dark, known.clone());
+    fn starts_on_the_servers_screen_with_an_empty_form() {
+        let app = App::new(Mode::Dark, Vec::new());
 
         let Screen::Servers(servers) = app.screen() else {
             panic!("the application starts on the servers screen");
         };
-        assert_eq!(servers.form().address, "localhost:7678");
+        assert_eq!(servers.form().address, "");
         assert_eq!(app.mode(), Mode::Dark);
         assert_eq!(app.target(), None);
+        assert_eq!(app.servers(), []);
+    }
+
+    #[test]
+    fn connects_at_the_start_to_the_server_that_was_last_in_use() {
+        let known = vec![
+            server("chat.example.org:443", 2, "ana"),
+            server("localhost:7678", 1, "ana"),
+        ];
+
+        let app = App::new(Mode::Light, known.clone());
+
+        let target = app.target().expect("a connection is in progress");
+        assert_eq!(target.attempt, 1);
+        assert_eq!(target.destination.to_string(), "chat.example.org");
+        assert_eq!(target.trust.key, Some(key(2)));
         assert_eq!(app.servers(), known);
     }
 
     #[test]
     fn gives_each_connection_a_new_number() {
-        let mut app = connecting("ana");
+        let mut app = App::new(Mode::Light, vec![server("localhost:7678", 1, "ana")]);
         assert_eq!(app.target().map(|target| target.attempt), Some(1));
-        let cancel = Message::Servers(servers::Message::Cancel);
-        assert_eq!(app.update(cancel), Effect::FocusName);
+        assert_eq!(cancel(&mut app), Effect::FocusForm);
         assert_eq!(app.target(), None);
 
-        connect(&mut app);
+        app.update(Message::Servers(servers::Message::Open(0)));
 
         assert_eq!(app.target().expect("a second connection").attempt, 2);
-    }
-
-    #[test]
-    fn gives_the_key_of_a_known_server_to_the_connection() {
-        let mut app = App::new(Mode::Light, vec![server("localhost:7678", 2, "ana")]);
-
-        connect(&mut app);
-
-        let target = app.target().expect("a connection is in progress");
-        assert_eq!(target.trust.key, Some(key(2)));
-    }
-
-    #[test]
-    fn remembers_the_certificate_that_the_connection_accepted() {
-        let mut app = connecting("ana");
-        let (link, _messages) = Link::channel(name("ana"), Role::Member, key(1), 4);
-        let certificate = Fingerprint::from_bytes([9; 32]);
-        let link = link.with_certificate(Some(certificate));
-
-        let message = connection(&app, Event::Connected(link));
-        let effect = app.update(message);
-
-        let expected = KnownServer {
-            certificate: Some("09".repeat(32)),
-            ..server("localhost:7678", 1, "ana")
-        };
-        assert_eq!(effect, Effect::Connected(expected.clone()));
-        assert_eq!(app.servers(), [expected]);
     }
 
     #[test]
@@ -388,15 +388,42 @@ mod tests {
     }
 
     #[test]
-    fn knows_the_server_at_the_next_connection() {
+    fn remembers_the_certificate_that_the_connection_accepted() {
+        let mut app = app();
+        typed(&mut app, "https://localhost:8443", "ana");
+        connect(&mut app);
+        let (link, _messages) = Link::channel(name("ana"), Role::Member, key(1), 4);
+        let certificate = Fingerprint::from_bytes([9; 32]);
+        let link = link.with_certificate(Some(certificate));
+
+        let message = connection(&app, Event::Connected(link));
+        let effect = app.update(message);
+
+        let expected = KnownServer {
+            tls: true,
+            certificate: Some("09".repeat(32)),
+            ..server("localhost:8443", 1, "ana")
+        };
+        assert_eq!(effect, Effect::Connected(expected.clone()));
+        assert_eq!(app.servers(), [expected]);
+    }
+
+    #[test]
+    fn puts_the_server_of_the_connection_first_in_the_list() {
         let known = vec![
             server("chat.example.org:443", 2, "ana"),
             server("localhost:7678", 3, "ana-old"),
         ];
         let mut app = App::new(Mode::Light, known);
-        connect(&mut app);
+        cancel(&mut app);
+        app.update(Message::Servers(servers::Message::Open(1)));
+        assert_eq!(
+            app.target().map(|target| target.trust.key),
+            Some(Some(key(3)))
+        );
         let (link, _messages) = Link::channel(name("ana"), Role::Member, key(3), 4);
         let message = connection(&app, Event::Connected(link));
+
         app.update(message);
 
         assert_eq!(
@@ -406,11 +433,21 @@ mod tests {
                 server("chat.example.org:443", 2, "ana"),
             ]
         );
+    }
 
-        leave(&mut app);
-        connect(&mut app);
-        let target = app.target().expect("a second connection");
-        assert_eq!(target.trust.key, Some(key(3)));
+    #[test]
+    fn removes_a_server_when_the_user_asks() {
+        let known = vec![
+            server("chat.example.org:443", 2, "ana"),
+            server("localhost:7678", 1, "ana"),
+        ];
+        let mut app = App::new(Mode::Light, known);
+        cancel(&mut app);
+
+        let effect = app.update(Message::Servers(servers::Message::Forget(0)));
+
+        assert_eq!(effect, Effect::Forget("chat.example.org:443".to_owned()));
+        assert_eq!(app.servers(), [server("localhost:7678", 1, "ana")]);
     }
 
     #[test]
@@ -438,7 +475,7 @@ mod tests {
             let mut app = connecting("ana");
 
             let message = connection(&app, Event::Disconnected(reason));
-            assert_eq!(app.update(message), Effect::FocusName);
+            assert_eq!(app.update(message), Effect::FocusForm);
 
             assert_eq!(form_problem(&app), Some(Problem::Disconnected(reason)));
             assert_eq!(app.target(), None);
@@ -451,7 +488,7 @@ mod tests {
 
         let (mut app, _outbox) = chatting("ana", 4);
         let message = connection(&app, Event::Disconnected(Disconnect::Closed));
-        assert_eq!(app.update(message), Effect::FocusName);
+        assert_eq!(app.update(message), Effect::FocusForm);
         assert_eq!(
             form_problem(&app),
             Some(Problem::Disconnected(Disconnect::Closed))
@@ -459,10 +496,36 @@ mod tests {
     }
 
     #[test]
+    fn asks_about_a_private_certificate_before_it_connects() {
+        let mut app = app();
+        typed(&mut app, "https://localhost:8443", "ana");
+        connect(&mut app);
+        let certificate = Fingerprint::from_bytes([9; 32]);
+
+        let refused = Event::Disconnected(Disconnect::UnknownCertificate(certificate));
+        let message = connection(&app, refused);
+        assert_eq!(app.update(message), Effect::None);
+
+        let Screen::Servers(servers) = app.screen() else {
+            panic!("the application is on the servers screen");
+        };
+        assert_eq!(
+            servers.question().map(|question| question.fingerprint),
+            Some(certificate)
+        );
+        assert_eq!(app.target(), None);
+
+        app.update(Message::Servers(servers::Message::AcceptCertificate));
+        let target = app.target().expect("a second connection");
+        assert_eq!(target.attempt, 2);
+        assert_eq!(target.trust.certificate, Some(certificate));
+    }
+
+    #[test]
     fn leaves_the_chat_when_the_user_asks() {
         let (mut app, _outbox) = chatting("ana", 4);
 
-        assert_eq!(leave(&mut app), Effect::FocusName);
+        assert_eq!(leave(&mut app), Effect::FocusForm);
 
         assert_eq!(form_problem(&app), None);
         assert_eq!(app.target(), None);
@@ -470,13 +533,14 @@ mod tests {
             panic!("the application is on the servers screen");
         };
         assert_eq!(servers.form().name, "ana");
+        assert_eq!(app.servers().len(), 1);
     }
 
     #[test]
     fn ignores_an_event_of_an_earlier_connection() {
         let mut app = connecting("ana");
         let old = app.target().expect("a connection is in progress").attempt;
-        app.update(Message::Servers(servers::Message::Cancel));
+        cancel(&mut app);
         connect(&mut app);
         let (link, _messages) = Link::channel(name("ana"), Role::Member, key(1), 4);
 
@@ -528,12 +592,14 @@ mod tests {
     }
 
     #[test]
-    fn tells_the_user_that_the_profile_did_not_save_the_server() {
+    fn tells_the_user_that_the_profile_did_not_save_a_change() {
         let (mut app, _outbox) = chatting("ana", 4);
-
-        assert_eq!(app.update(Message::ServerNotSaved), Effect::None);
-
+        assert_eq!(app.update(Message::ProfileNotSaved), Effect::None);
         assert_eq!(notice(&app), Some(Text::ChatServerNotSaved));
+
+        let mut app = App::new(Mode::Light, Vec::new());
+        assert_eq!(app.update(Message::ProfileNotSaved), Effect::None);
+        assert_eq!(form_problem(&app), Some(Problem::NotSaved));
     }
 
     #[test]
@@ -560,13 +626,17 @@ mod tests {
         assert_eq!(app.update(Message::Chat(draft)), Effect::None);
         assert_eq!(app.update(Message::Chat(chat::Message::Send)), Effect::None);
         assert_eq!(leave(&mut app), Effect::None);
-        assert_eq!(app.update(Message::ServerNotSaved), Effect::None);
         assert!(matches!(app.screen(), Screen::Servers(_)));
 
         let (mut app, _outbox) = chatting("ana", 4);
         typed(&mut app, "x", "x");
         assert_eq!(connect(&mut app), Effect::None);
+        assert_eq!(
+            app.update(Message::Servers(servers::Message::Forget(0))),
+            Effect::None
+        );
         assert!(matches!(app.screen(), Screen::Chat(_)));
+        assert_eq!(app.servers().len(), 1);
         leave(&mut app);
         let Screen::Servers(servers) = app.screen() else {
             panic!("the application is on the servers screen");
@@ -584,6 +654,7 @@ mod tests {
         assert_eq!(connect(&mut app), Effect::None);
         assert_eq!(leave(&mut app), Effect::None);
         assert_eq!(app.update(Message::Chat(chat::Message::Send)), Effect::None);
+        assert_eq!(app.update(Message::ProfileNotSaved), Effect::None);
         let event = Event::Disconnected(Disconnect::Closed);
         assert_eq!(app.update(Message::Connection(0, event)), Effect::None);
         app.update(Message::ModeChanged(Mode::Dark));

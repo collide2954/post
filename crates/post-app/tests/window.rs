@@ -10,7 +10,7 @@ use post_app::app::{App, Message, chat, servers};
 use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::view::{self, Window};
-use post_client::{Event, Link};
+use post_client::{Disconnect, Event, Fingerprint, KnownServer, Link};
 use post_proto::{ClientMessage, ErrorCode, Key, Name, Role, ServerMessage, Timestamp};
 
 const SCREENSHOT_VARIABLE: &str = "POST_SCREENSHOTS";
@@ -50,11 +50,48 @@ fn new_app(mode: Mode) -> App {
     App::new(mode, Vec::new())
 }
 
+fn typed(app: &mut App, address: &str, name: &str) {
+    let address = servers::Message::AddressChanged(address.to_owned());
+    app.update(Message::Servers(address));
+    let name = servers::Message::NameChanged(name.to_owned());
+    app.update(Message::Servers(name));
+}
+
 fn connect_app(mode: Mode) -> App {
     let mut app = new_app(mode);
-    app.update(Message::Servers(servers::Message::NameChanged(
-        "ana".to_owned(),
-    )));
+    typed(&mut app, "localhost:7678", "ana");
+    app
+}
+
+fn list_app(mode: Mode) -> App {
+    let server = |address: &str, tls| KnownServer {
+        address: address.to_owned(),
+        key: Key::from_bytes([1; 32]),
+        name: name("ana"),
+        tls,
+        certificate: None,
+    };
+    let known = vec![
+        server("chat.example.org:443", true),
+        server("localhost:8443", true),
+    ];
+    let mut app = App::new(mode, known);
+    app.update(Message::Servers(servers::Message::Cancel));
+    app
+}
+
+fn certificate_app(mode: Mode, changed: bool) -> App {
+    let mut app = new_app(mode);
+    typed(&mut app, "https://home.example.org:7678", "ana");
+    app.update(Message::Servers(servers::Message::Connect));
+    let attempt = app.target().expect("a connection is in progress").attempt;
+    let fingerprint = Fingerprint::of_certificate(b"abc");
+    let reason = if changed {
+        Disconnect::ChangedCertificate(fingerprint)
+    } else {
+        Disconnect::UnknownCertificate(fingerprint)
+    };
+    app.update(Message::Connection(attempt, Event::Disconnected(reason)));
     app
 }
 
@@ -124,20 +161,123 @@ fn the_name_field_gets_the_keys_that_the_user_types() {
 }
 
 #[test]
-fn the_server_field_shows_the_local_address() {
+fn the_address_field_gets_the_keys_that_the_user_types() {
     let window = window(new_app(Mode::Light), Language::English);
     let mut interface = simulator(&window);
 
     interface
-        .click("localhost:7678")
-        .expect("the server field shows the default address");
-    interface.typewrite("0");
+        .click(selector::id(view::ADDRESS_FIELD))
+        .expect("the servers screen has an address field");
+    interface.typewrite("l");
+    assert!(interface.find("Servers").is_err());
 
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::Servers(servers::Message::AddressChanged(address))] if address == "localhost:76780"),
+        matches!(messages.as_slice(), [Message::Servers(servers::Message::AddressChanged(address))] if address == "l"),
         "{messages:?}"
     );
+}
+
+#[test]
+fn the_servers_screen_lists_the_servers_of_the_profile() {
+    let window = window(list_app(Mode::Light), Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Servers",
+        "chat.example.org",
+        "https://localhost:8443",
+        "Add a server",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+}
+
+#[test]
+fn the_buttons_of_a_server_open_it_and_remove_it() {
+    let mut app = list_app(Mode::Light);
+    app.update(Message::Servers(servers::Message::Forget(0)));
+    let window = window(app, Language::English);
+
+    let mut interface = simulator(&window);
+    interface
+        .click("Open")
+        .expect("a server has an open button");
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Servers(servers::Message::Open(0))]
+        ),
+        "{messages:?}"
+    );
+
+    let mut interface = simulator(&window);
+    interface
+        .click("Remove")
+        .expect("a server has a remove button");
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Servers(servers::Message::Forget(0))]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_window_asks_about_a_certificate_that_no_authority_signed() {
+    let window = window(certificate_app(Mode::Light, false), Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "home.example.org:7678",
+        "This server has a certificate that no public authority signed.",
+        "Fingerprint",
+        "ba78 16bf 8f01 cfea 4141 40de 5dae 2223",
+        "b003 61a3 9617 7a9c b410 ff61 f200 15ad",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    interface
+        .click("Accept the certificate")
+        .expect("the question has an accept button");
+    interface
+        .click("Cancel")
+        .expect("the question has a cancel button");
+
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [
+                Message::Servers(servers::Message::AcceptCertificate),
+                Message::Servers(servers::Message::Cancel)
+            ]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_window_warns_about_a_certificate_that_changed() {
+    let window = window(certificate_app(Mode::Light, true), Language::Spanish);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Advertencia: el certificado de este servidor cambió.",
+        "Huella",
+        "Aceptar el certificado",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
 }
 
 #[test]
@@ -175,9 +315,7 @@ fn the_connect_button_and_the_enter_key_start_a_connection() {
 #[test]
 fn the_connect_screen_shows_a_problem() {
     let mut app = new_app(Mode::Light);
-    app.update(Message::Servers(servers::Message::NameChanged(
-        "a".to_owned(),
-    )));
+    typed(&mut app, "localhost", "a");
     app.update(Message::Servers(servers::Message::Connect));
     let window = window(app, Language::English);
     let mut interface = simulator(&window);
@@ -335,6 +473,17 @@ fn each_screen_draws_in_light_and_dark_mode() {
                 Language::English,
             ),
             ("connect", connect_app(mode), Language::English),
+            ("servers", list_app(mode), Language::English),
+            (
+                "certificate",
+                certificate_app(mode, false),
+                Language::English,
+            ),
+            (
+                "certificate-changed",
+                certificate_app(mode, true),
+                Language::English,
+            ),
             ("connecting", connecting_app(mode), Language::English),
             ("chat", chat_app(mode).0, Language::English),
             ("chat-es", chat_app(mode).0, Language::Spanish),

@@ -2,23 +2,24 @@ use std::sync::LazyLock;
 
 use iced::widget::text::LineHeight;
 use iced::widget::{
-    Space, button, column, container, row, rule, scrollable, space, text, text_input,
+    Column, Space, button, column, container, row, rule, scrollable, space, text, text_input,
 };
 use iced::{
     Alignment, Background, Border, Color, Element, Fill, Font, Pixels, Theme, border, font,
 };
 use jiff::tz::TimeZone;
-use post_client::Entry;
+use post_client::{Entry, KnownServer};
 use post_proto::LOBBY;
 
 use crate::app::chat::{self, Chat};
-use crate::app::servers::{self, Form, Target};
+use crate::app::servers::{self, Question, Servers};
 use crate::app::start::StartProblem;
 use crate::app::{App, Message, Screen};
 use crate::i18n::{Strings, Text};
 use crate::palette::{Mode, Palette, Rgb};
 use crate::timeline::{clock, name_column, shows_name};
 
+pub const ADDRESS_FIELD: &str = "address";
 pub const NAME_FIELD: &str = "name";
 pub const DRAFT_FIELD: &str = "draft";
 
@@ -39,6 +40,7 @@ const TEXT_SIZE: f32 = 14.0;
 const SMALL_SIZE: f32 = 12.0;
 const LINE_HEIGHT: f32 = 21.0;
 const NAME_CHARACTER_WIDTH: f32 = 8.5;
+const PAGE_WIDTH: f32 = 420.0;
 
 pub struct Window {
     pub app: App,
@@ -73,19 +75,19 @@ fn custom_theme(name: &'static str, mode: Mode) -> Theme {
 
 pub fn view(window: &Window) -> Element<'_, Message> {
     let palette = Palette::of(window.app.mode());
+    let strings = &window.strings;
     match window.app.screen() {
-        Screen::Stopped(problem) => stopped_screen(&window.strings, problem, palette),
-        Screen::Servers(servers) => connect_screen(
-            &window.strings,
-            servers.form(),
-            servers.connecting(),
-            palette,
-        ),
+        Screen::Stopped(problem) => stopped_screen(strings, problem, palette),
+        Screen::Servers(servers) => match servers.question() {
+            Some(question) => certificate_screen(strings, question, palette),
+            None => servers_screen(strings, servers, window.app.servers(), palette),
+        },
         Screen::Chat(chat) => chat_screen(window, chat, palette),
     }
 }
 
 const CONNECT: Message = Message::Servers(servers::Message::Connect);
+const CANCEL: Message = Message::Servers(servers::Message::Cancel);
 
 fn address_changed(address: String) -> Message {
     Message::Servers(servers::Message::AddressChanged(address))
@@ -95,33 +97,115 @@ fn name_changed(name: String) -> Message {
     Message::Servers(servers::Message::NameChanged(name))
 }
 
+fn page(content: Column<'_, Message>) -> Element<'_, Message> {
+    let content = content.spacing(8).max_width(PAGE_WIDTH);
+    container(scrollable(container(content).center_x(Fill).padding(24)))
+        .center_y(Fill)
+        .into()
+}
+
+fn title<'a>() -> Element<'a, Message> {
+    column![
+        text("Post").font(STRONG_FONT).size(28),
+        Space::new().height(12)
+    ]
+    .into()
+}
+
+fn paragraph<'a>(content: String, tone: Rgb) -> Element<'a, Message> {
+    text(content)
+        .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
+        .color(color(tone))
+        .into()
+}
+
 fn stopped_screen<'a>(
     strings: &Strings,
     problem: &StartProblem,
     palette: Palette,
 ) -> Element<'a, Message> {
-    let content = column![
-        text("Post").font(STRONG_FONT).size(28),
-        Space::new().height(12),
-        text(problem.describe(strings))
-            .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
-            .color(color(palette.danger)),
-    ]
-    .spacing(8)
-    .max_width(380);
-
-    container(content).center(Fill).padding(24).into()
+    page(column![
+        title(),
+        paragraph(problem.describe(strings), palette.danger),
+    ])
 }
 
-fn connect_screen<'a>(
+fn certificate_screen<'a>(
     strings: &Strings,
-    form: &'a Form,
-    connecting: Option<&Target>,
+    question: &Question,
     palette: Palette,
 ) -> Element<'a, Message> {
+    let (headline, explanation, tone) = if question.changed {
+        (
+            Text::CertificateChanged,
+            Text::CertificateChangedText,
+            palette.danger,
+        )
+    } else {
+        (
+            Text::CertificateUnknown,
+            Text::CertificateUnknownText,
+            palette.text,
+        )
+    };
+    let fingerprint = question.fingerprint.grouped();
+    let (first, second) = fingerprint.split_at(fingerprint.len() / 2);
+    let line = |groups: &str| {
+        text(groups.trim().to_owned())
+            .font(MONO_FONT)
+            .size(SMALL_SIZE)
+            .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
+    };
+    let accept = Message::Servers(servers::Message::AcceptCertificate);
+
+    page(column![
+        title(),
+        text(question.target.destination.to_string()).font(STRONG_FONT),
+        paragraph(strings.text(headline), tone),
+        paragraph(strings.text(explanation), palette.muted),
+        Space::new().height(4),
+        label(strings.text(Text::CertificateFingerprintLabel), palette),
+        line(first),
+        line(second),
+        Space::new().height(8),
+        row![
+            space::horizontal(),
+            link_button(
+                strings.text(Text::ConnectCancelButton),
+                Some(CANCEL),
+                palette
+            ),
+            primary_button(strings.text(Text::CertificateAcceptButton), accept, palette),
+        ]
+        .spacing(12)
+        .align_y(Alignment::Center),
+    ])
+}
+
+fn servers_screen<'a>(
+    strings: &Strings,
+    servers: &'a Servers,
+    known: &'a [KnownServer],
+    palette: Palette,
+) -> Element<'a, Message> {
+    let form = servers.form();
+    let connecting = servers.connecting();
     let idle = connecting.is_none();
 
-    let address = text_input("localhost", &form.address)
+    let mut content = column![title()];
+    if !known.is_empty() {
+        content = content.push(label(strings.text(Text::ServersTitle), palette));
+        for (index, server) in known.iter().enumerate() {
+            content = content.push(server_row(strings, index, server, idle, palette));
+        }
+        content = content
+            .push(Space::new().height(12))
+            .push(label(strings.text(Text::ServersAddTitle), palette))
+            .push(Space::new().height(4));
+    }
+
+    let address = text_input("chat.example.org", &form.address)
+        .id(ADDRESS_FIELD)
         .on_input_maybe(idle.then_some(address_changed))
         .on_submit_maybe(idle.then_some(CONNECT))
         .padding([8, 10])
@@ -134,48 +218,68 @@ fn connect_screen<'a>(
         .style(move |_, status| field_style(palette, status, 1.0));
 
     let feedback: Element<'a, Message> = match (connecting, form.problem) {
-        (Some(target), _) => text(strings.with(
-            Text::ConnectProgress,
-            "address",
-            &target.destination.to_string(),
-        ))
-        .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
-        .color(color(palette.muted))
-        .into(),
-        (None, Some(problem)) => text(strings.text(problem.text()))
-            .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
-            .color(color(palette.danger))
-            .into(),
+        (Some(target), _) => paragraph(
+            strings.with(
+                Text::ConnectProgress,
+                "address",
+                &target.destination.to_string(),
+            ),
+            palette.muted,
+        ),
+        (None, Some(problem)) => paragraph(strings.text(problem.text()), palette.danger),
         (None, None) => Space::new().height(LINE_HEIGHT).into(),
     };
-
     let action = if idle {
         primary_button(strings.text(Text::ConnectButton), CONNECT, palette)
     } else {
-        primary_button(
-            strings.text(Text::ConnectCancelButton),
-            Message::Servers(servers::Message::Cancel),
-            palette,
-        )
+        primary_button(strings.text(Text::ConnectCancelButton), CANCEL, palette)
     };
 
-    let content = column![
-        text("Post").font(STRONG_FONT).size(28),
-        Space::new().height(12),
-        label(strings.text(Text::ConnectServerLabel), palette),
-        address,
-        Space::new().height(4),
-        label(strings.text(Text::ConnectNameLabel), palette),
-        name,
-        feedback,
-        row![space::horizontal(), action],
-    ]
-    .spacing(8)
-    .max_width(380);
-
-    container(content).center(Fill).padding(24).into()
+    page(
+        content
+            .push(label(strings.text(Text::ConnectServerLabel), palette))
+            .push(address)
+            .push(Space::new().height(4))
+            .push(label(strings.text(Text::ConnectNameLabel), palette))
+            .push(name)
+            .push(feedback)
+            .push(row![space::horizontal(), action]),
+    )
 }
 
+fn server_row<'a>(
+    strings: &Strings,
+    index: usize,
+    server: &'a KnownServer,
+    idle: bool,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let address = server.destination().map_or_else(
+        || server.address.clone(),
+        |destination| destination.to_string(),
+    );
+    let open = Message::Servers(servers::Message::Open(index));
+    let forget = Message::Servers(servers::Message::Forget(index));
+    row![
+        text(address).width(Fill),
+        text(server.name.as_str())
+            .size(13)
+            .color(color(palette.muted)),
+        link_button(
+            strings.text(Text::ServersOpenButton),
+            idle.then_some(open),
+            palette
+        ),
+        link_button(
+            strings.text(Text::ServersRemoveButton),
+            idle.then_some(forget),
+            palette
+        ),
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center)
+    .into()
+}
 fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Element<'a, Message> {
     let strings = &window.strings;
     let session = chat.session();
@@ -189,7 +293,7 @@ fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Elem
             .color(color(palette.muted)),
         link_button(
             strings.text(Text::ChatLeaveButton),
-            Message::Chat(chat::Message::Leave),
+            Some(Message::Chat(chat::Message::Leave)),
             palette
         ),
     ]
@@ -344,14 +448,19 @@ fn primary_button<'a>(content: String, message: Message, palette: Palette) -> El
         .into()
 }
 
-fn link_button<'a>(content: String, message: Message, palette: Palette) -> Element<'a, Message> {
+fn link_button<'a>(
+    content: String,
+    message: Option<Message>,
+    palette: Palette,
+) -> Element<'a, Message> {
     button(text(content).size(13))
         .padding([4, 8])
-        .on_press(message)
+        .on_press_maybe(message)
         .style(move |_, status| {
             let text_color = match status {
                 button::Status::Hovered | button::Status::Pressed => color(palette.text),
-                button::Status::Active | button::Status::Disabled => color(palette.accent),
+                button::Status::Active => color(palette.accent),
+                button::Status::Disabled => color(palette.muted),
             };
             button::Style {
                 background: None,

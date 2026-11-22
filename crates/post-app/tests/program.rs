@@ -10,10 +10,10 @@ use iced_test::{Instruction, Simulator};
 use post_app::app::{Message, servers};
 use post_app::i18n::Language;
 use post_app::shell;
-use post_client::{Destination, Event, Home, Identity, Seed, Trust, sign_in};
+use post_client::{Destination, Event, Fingerprint, Home, Identity, Seed, Trust, sign_in};
 use post_proto::{ClientMessage, Name, ServerMessage};
 use post_server::Server;
-use post_server::config::Config;
+use post_server::config::{Config, Tls};
 use post_testing::Directory;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
@@ -78,6 +78,13 @@ where
         self.pump();
     }
 
+    fn sign_up(&mut self, to: String, name: &str) {
+        self.send(address(to));
+        self.send(Message::FocusNext);
+        self.type_text(name);
+        self.act("type enter");
+    }
+
     fn shows(&self, text: &str) -> bool {
         Simulator::new(self.emulator.view(&self.program))
             .find(text)
@@ -97,6 +104,7 @@ struct Backstage {
     runtime: Runtime,
     port: u16,
     owner_link: String,
+    fingerprint: Option<Fingerprint>,
     _stop: oneshot::Sender<()>,
     _data: Directory,
 }
@@ -120,16 +128,22 @@ fn home(directory: &Directory) -> Home {
 }
 
 fn start_server() -> Backstage {
+    start_server_with(Tls::Off)
+}
+
+fn start_server_with(tls: Tls) -> Backstage {
     let runtime = Runtime::new().expect("a runtime for the server");
     let data = Directory::new();
     let config = Config {
         data: data.path().to_owned(),
+        tls,
         ..Config::development(0)
     };
     let server = runtime
         .block_on(Server::bind(&config))
         .expect("the server can bind");
     let port = server.addresses()[0].port();
+    let fingerprint = server.fingerprint();
     let owner_link = server
         .owner_link()
         .expect("a new server has no owner")
@@ -142,6 +156,7 @@ fn start_server() -> Backstage {
         runtime,
         port,
         owner_link,
+        fingerprint,
         _stop: stop,
         _data: data,
     }
@@ -200,10 +215,7 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     ));
 
     driver.expect("Connect");
-    driver.send(address(invite_link));
-    driver.type_text("ana");
-    driver.act("type tab");
-    driver.act("type enter");
+    driver.sign_up(invite_link, "ana");
 
     driver.expect("#lobby");
     driver.expect("ana · connected");
@@ -239,9 +251,7 @@ fn a_user_signs_in_again_with_the_account_of_the_profile() {
         Some(home(&directory)),
     ));
     first.expect("Connect");
-    first.send(address(backstage.owner_link.clone()));
-    first.type_text("ana");
-    first.act("type enter");
+    first.sign_up(backstage.owner_link.clone(), "ana");
     first.expect("ana · connected");
     drop(first);
 
@@ -249,11 +259,66 @@ fn a_user_signs_in_again_with_the_account_of_the_profile() {
         Language::English,
         Some(home(&directory)),
     ));
-    second.expect("Connect");
-    second.send(address(backstage.address()));
-    second.act("type enter");
 
     second.expect("ana · connected");
+}
+
+#[test]
+fn a_user_removes_a_server_from_the_list() {
+    let backstage = start_server();
+    let directory = Directory::new();
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+    driver.sign_up(backstage.owner_link.clone(), "ana");
+    driver.expect("ana · connected");
+    driver.act("click \"Leave\"");
+    driver.expect("Servers");
+    assert!(driver.shows(&backstage.address()));
+
+    driver.act("click \"Remove\"");
+
+    assert!(!driver.shows(&backstage.address()));
+    assert!(!driver.shows("Servers"));
+    let servers = directory.join("profiles").join("1").join("servers.toml");
+    let servers = std::fs::read_to_string(servers).expect("a servers file");
+    assert!(!servers.contains("address"), "{servers}");
+}
+
+#[test]
+fn a_user_accepts_the_certificate_of_a_server_and_signs_in_with_tls() {
+    let backstage = start_server_with(Tls::Own);
+    let fingerprint = backstage
+        .fingerprint
+        .expect("a server with TLS has a certificate");
+    assert!(backstage.owner_link.starts_with("https://localhost:"));
+    let directory = Directory::new();
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+
+    driver.sign_up(backstage.owner_link.clone(), "ana");
+
+    driver.expect("This server has a certificate that no public authority signed.");
+    let groups = fingerprint.grouped();
+    driver.expect(groups[..39].trim());
+    driver.expect(groups[39..].trim());
+    assert!(!driver.shows("ana · connected"));
+
+    driver.act("click \"Accept the certificate\"");
+
+    driver.expect("ana · connected");
+    let servers = directory.join("profiles").join("1").join("servers.toml");
+    let servers = std::fs::read_to_string(servers).expect("a servers file");
+    assert!(servers.contains("tls = true"), "{servers}");
+    assert!(
+        servers.contains(&format!("certificate = \"{fingerprint}\"")),
+        "{servers}"
+    );
 }
 
 #[test]
@@ -266,9 +331,7 @@ fn a_user_without_an_account_sees_that_an_invite_link_is_necessary() {
     ));
 
     driver.expect("Connect");
-    driver.send(address(backstage.address()));
-    driver.type_text("ana");
-    driver.act("type enter");
+    driver.sign_up(backstage.address(), "ana");
 
     driver.expect("You have no account on this server. Paste an invite link to join.");
 }
@@ -285,9 +348,7 @@ fn a_user_sees_a_note_when_the_profile_cannot_save_the_server() {
     let servers = directory.join("profiles").join("1").join("servers.toml");
     std::fs::create_dir(servers).expect("a directory in the place of the file");
 
-    driver.send(address(backstage.owner_link.clone()));
-    driver.type_text("ana");
-    driver.act("type enter");
+    driver.sign_up(backstage.owner_link.clone(), "ana");
 
     driver.expect("ana · connected");
     driver.expect("Post could not save this server in your profile.");
@@ -305,9 +366,7 @@ fn a_user_sees_a_problem_when_no_server_answers() {
     ));
 
     driver.expect("Conectar");
-    driver.send(address(format!("localhost:{port}")));
-    driver.type_text("ana");
-    driver.act("type enter");
+    driver.sign_up(format!("localhost:{port}"), "ana");
 
     driver.expect("Ningún servidor de Post responde en esta dirección.");
     let profile = directory.join("profiles").join("1").join("profile.toml");

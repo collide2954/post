@@ -21,7 +21,7 @@ Version 0.1 is the first slice. It shows that all the layers work together:
 
 Version 0.1 has no accounts, no encryption, and no stored history. The connection does not go across a network. The [roadmap](docs/decisions/engineering.md) gives the sequence of the next versions (record D-100).
 
-The main branch contains the work on version 0.2. The application now signs in with an account. The connection still has no encryption, and it does not go across a network.
+The main branch contains the work on version 0.2. The application now signs in with an account, and a connection across a network uses TLS 1.3.
 
 ## Try the main branch
 
@@ -43,6 +43,8 @@ You must have [rustup](https://rustup.rs). It installs the Rust release that the
 
 3. Paste the owner link into the first field. Type a name, and select **Connect**. You are now the owner of the server.
 4. Write a message.
+
+At the next start, the application connects to this server again. Without a configuration file, the server listens only on your computer and uses no TLS.
 
 The application keeps a secret seed in a file in your user directory. Only your user account can read the file, and the seed has no other protection at this time (record D-169).
 

@@ -4,6 +4,11 @@ start-profile-damaged = The { $file } file of this profile is not valid. Post ca
 start-profile-files = Post cannot use the files of this profile. { $reason }
 profile-first-name = main
 
+servers-title = Servers
+servers-add-title = Add a server
+servers-open-button = Open
+servers-remove-button = Remove
+servers-not-saved = Post could not save the change in your profile.
 connect-server-label = Invite link or server address
 connect-name-label = Name for a new account
 connect-button = Connect
@@ -27,7 +32,11 @@ problem-missing-parts = This server needs functions that this version of Post do
 problem-name-required = Type a name for your new account.
 problem-invitation-required = You have no account on this server. Paste an invite link to join.
 certificate-unknown = This server has a certificate that no public authority signed.
+certificate-unknown-text = Compare this fingerprint with the fingerprint that the operator of the server gave you. Accept the certificate only if they are the same.
 certificate-changed = Warning: the certificate of this server changed.
+certificate-changed-text = A different computer can be in the place of the server. Ask the operator before you accept the new certificate.
+certificate-fingerprint-label = Fingerprint
+certificate-accept-button = Accept the certificate
 
 error-unsupported-protocol = The server uses a different version of the protocol.
 error-wrong-address = The server does not use this address.

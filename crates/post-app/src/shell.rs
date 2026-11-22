@@ -79,7 +79,7 @@ fn boot(language: Language, home: Option<Home>) -> (Shell, Task<Message>) {
     };
     let tasks = Task::batch([
         iced::system::theme().map(mode_changed),
-        operation::focus(view::NAME_FIELD),
+        operation::focus(view::ADDRESS_FIELD),
     ]);
     (shell, tasks)
 }
@@ -87,7 +87,7 @@ fn boot(language: Language, home: Option<Home>) -> (Shell, Task<Message>) {
 fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match shell.window.app.update(message) {
         Effect::None => Task::none(),
-        Effect::FocusName => operation::focus(view::NAME_FIELD),
+        Effect::FocusForm => operation::focus(view::ADDRESS_FIELD),
 
         Effect::FocusNext => operation::focus_next(),
         Effect::FocusPrevious => operation::focus_previous(),
@@ -97,9 +97,19 @@ fn update(shell: &mut Shell, message: Message) -> Task<Message> {
                 .as_mut()
                 .is_some_and(|profile| profile.remember(server).is_ok());
             if !saved {
-                shell.window.app.update(Message::ServerNotSaved);
+                shell.window.app.update(Message::ProfileNotSaved);
             }
             operation::focus(view::DRAFT_FIELD)
+        }
+        Effect::Forget(address) => {
+            let saved = shell
+                .profile
+                .as_mut()
+                .is_some_and(|profile| profile.forget(&address).is_ok());
+            if !saved {
+                shell.window.app.update(Message::ProfileNotSaved);
+            }
+            Task::none()
         }
     }
 }

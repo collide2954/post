@@ -4,6 +4,11 @@ start-profile-damaged = El archivo { $file } de este perfil no es válido. Post 
 start-profile-files = Post no puede usar los archivos de este perfil. { $reason }
 profile-first-name = principal
 
+servers-title = Servidores
+servers-add-title = Agregar un servidor
+servers-open-button = Abrir
+servers-remove-button = Quitar
+servers-not-saved = Post no pudo guardar el cambio en tu perfil.
 connect-server-label = Enlace de invitación o dirección del servidor
 connect-name-label = Nombre para una cuenta nueva
 connect-button = Conectar
@@ -27,7 +32,11 @@ problem-missing-parts = Este servidor necesita funciones que esta versión de Po
 problem-name-required = Escribe un nombre para tu cuenta nueva.
 problem-invitation-required = No tienes una cuenta en este servidor. Pega un enlace de invitación para unirte.
 certificate-unknown = Este servidor tiene un certificado que ninguna autoridad pública firmó.
+certificate-unknown-text = Compara esta huella con la huella que te dio el operador del servidor. Acepta el certificado solo si son iguales.
 certificate-changed = Advertencia: el certificado de este servidor cambió.
+certificate-changed-text = Otra computadora puede estar en el lugar del servidor. Pregunta al operador antes de aceptar el certificado nuevo.
+certificate-fingerprint-label = Huella
+certificate-accept-button = Aceptar el certificado
 
 error-unsupported-protocol = El servidor usa otra versión del protocolo.
 error-wrong-address = El servidor no usa esta dirección.
