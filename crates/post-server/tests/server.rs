@@ -113,33 +113,41 @@ async fn is_closed(socket: &mut Socket) -> bool {
     }
 }
 
-fn guest(name: &str) -> ClientMessage {
-    ClientMessage::Guest {
-        reference: None,
-        protocol: 0,
-        name: name.to_owned(),
-    }
-}
-
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
 }
 
-async fn join_as(port: u16, who: &str) -> Socket {
-    let mut socket = connect_v4(port).await;
-    write(&mut socket, &guest(who)).await;
-    assert_eq!(
-        read(&mut socket).await,
-        ServerMessage::Welcome {
-            reference: None,
-            name: name(who),
-            role: Role::Member,
-        }
+async fn owner(server: &Running) -> Socket {
+    let link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    join_with(server.port, 7, "ana", &link).await
+}
+
+async fn join_with(port: u16, person: u8, who: &str, link: &str) -> Socket {
+    let seed = Seed::from_bytes([person; 32]);
+    let (mut socket, answer) = register_and_stay(port, &seed, who, link).await;
+    assert!(
+        matches!(answer, ServerMessage::Welcome { name: welcomed, .. } if welcomed == name(who))
     );
     assert!(
         matches!(read(&mut socket).await, ServerMessage::Join { name: joined, .. } if joined == name(who))
     );
     socket
+}
+
+async fn invite(owner: &mut Socket) -> String {
+    let invite = ClientMessage::Invite {
+        reference: None,
+        lifetime: None,
+        uses: None,
+    };
+    write(owner, &invite).await;
+    let ServerMessage::Invitations { list, .. } = read(owner).await else {
+        panic!("the owner gets the open invitations");
+    };
+    list[0].link.clone()
 }
 
 async fn prove(socket: &mut Socket, address: &str, seed: &Seed) -> (Key, Signature) {
@@ -443,8 +451,9 @@ async fn listens_on_the_addresses_that_the_configuration_gives() {
 #[tokio::test]
 async fn two_users_exchange_text() {
     let server = start().await;
-    let mut ana = join_as(server.port, "ana").await;
-    let mut ben = join_as(server.port, "ben").await;
+    let mut ana = owner(&server).await;
+    let link = invite(&mut ana).await;
+    let mut ben = join_with(server.port, 8, "ben", &link).await;
     assert!(
         matches!(read(&mut ana).await, ServerMessage::Join { channel, name: joined, .. } if channel == "lobby" && joined == name("ben"))
     );
@@ -513,11 +522,8 @@ async fn keeps_the_connection_open_after_an_error() {
         ServerMessage::error(None, ErrorCode::BadMessage)
     );
 
-    write(&mut socket, &guest("ana")).await;
-    assert!(matches!(
-        read(&mut socket).await,
-        ServerMessage::Welcome { .. }
-    ));
+    let address = format!("localhost:{}", server.port);
+    prove(&mut socket, &address, &Seed::from_bytes([7; 32])).await;
 }
 
 #[tokio::test]
@@ -555,18 +561,15 @@ async fn accepts_a_connection_on_the_ipv6_loopback_address_if_the_computer_has_o
 
     if server.addresses.contains(&ipv6) {
         let mut socket = connect(ipv6).await;
-        write(&mut socket, &guest("ana")).await;
-        assert!(matches!(
-            read(&mut socket).await,
-            ServerMessage::Welcome { .. }
-        ));
+        let address = format!("[::1]:{}", server.port);
+        prove(&mut socket, &address, &Seed::from_bytes([7; 32])).await;
     }
 }
 
 #[tokio::test]
 async fn stops_and_closes_each_connection_when_the_stop_signal_comes() {
     let server = start().await;
-    let mut ana = join_as(server.port, "ana").await;
+    let mut ana = owner(&server).await;
 
     let stopped = tokio::spawn(server.stop());
 

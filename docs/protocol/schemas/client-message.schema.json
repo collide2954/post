@@ -139,41 +139,6 @@
       ]
     },
     {
-      "description": "Starts a session with a temporary name and no account.\nThis message is temporary. It goes away before version 0.2.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "The name that the user wants.",
-          "type": "string"
-        },
-        "protocol": {
-          "description": "The protocol version of the client.",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "ref": {
-          "description": "A number that the answer of the server repeats.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        },
-        "type": {
-          "type": "string",
-          "const": "guest"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "protocol",
-        "name"
-      ]
-    },
-    {
       "description": "Sends a text to a channel.",
       "type": "object",
       "properties": {

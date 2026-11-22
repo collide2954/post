@@ -57,12 +57,16 @@ impl Sessions {
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, Name, Role, ServerMessage, Timestamp};
+    use post_crypto::{Exchange, Seed};
+    use post_proto::{ClientMessage, ErrorCode, Name, Nonce, Role, ServerMessage, Timestamp};
     use tokio::sync::mpsc::{self, Receiver, error::TryRecvError};
 
     use super::Sessions;
-    use crate::hub::{ConnectionId, Hub, Random, Settings};
+    use crate::hub::{ConnectionId, Hub, LIMITS, Random, Settings};
     use crate::store::Store;
+
+    const ADDRESS: &str = "localhost:7678";
+    const PEOPLE: [&str; 2] = ["ana", "ben"];
 
     fn clock() -> Timestamp {
         Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid")
@@ -72,24 +76,54 @@ mod tests {
         Name::parse(text).expect(text)
     }
 
+    fn seed(who: &str) -> Seed {
+        let person = PEOPLE.iter().position(|known| *known == who);
+        let number = u8::try_from(person.expect("a known person")).expect("few people");
+        Seed::from_bytes([number + 1; 32])
+    }
+
     fn sessions() -> Sessions {
-        let store = Store::in_memory().expect("a database in memory");
+        let mut store = Store::in_memory().expect("a database in memory");
+        let server = store.server_key().expect("a server key").public();
+        let mut rules = store.rules(LIMITS).expect("the rules of an empty store");
+        let link = post_crypto::code();
+        rules
+            .owner_code(&mut store, &link, clock())
+            .expect("stored")
+            .expect("the code is free");
+        let key = |who: &str| seed(who).account_key(&server).public();
+        let ana = rules
+            .register(
+                &mut store,
+                key("ana").as_bytes(),
+                &name("ana"),
+                &link,
+                clock(),
+            )
+            .expect("stored")
+            .expect("the owner link is open");
+        let invitation = post_crypto::code();
+        rules
+            .invite(&mut store, ana.id, &invitation, None, None, clock())
+            .expect("stored")
+            .expect("the owner can invite");
+        rules
+            .register(
+                &mut store,
+                key("ben").as_bytes(),
+                &name("ben"),
+                &invitation,
+                clock(),
+            )
+            .expect("stored")
+            .expect("the invitation is open");
         let settings = Settings {
-            addresses: vec!["localhost:7678".to_owned()],
+            addresses: vec![ADDRESS.to_owned()],
             link: "http://localhost:7678".to_owned(),
             requires: Vec::new(),
         };
         let hub = Hub::new(store, settings, Random::default()).expect("a hub");
         Sessions::new(hub, clock)
-    }
-
-    fn guest(name: &str) -> String {
-        ClientMessage::Guest {
-            reference: None,
-            protocol: 0,
-            name: name.to_owned(),
-        }
-        .encode()
     }
 
     fn send(text: &str) -> String {
@@ -124,9 +158,37 @@ mod tests {
         who: &str,
         capacity: usize,
     ) -> (ConnectionId, Receiver<String>) {
-        let (queue, lines) = mpsc::channel(capacity);
+        let (queue, mut lines) = mpsc::channel(capacity);
         let id = sessions.connect(queue);
-        sessions.receive(id, &guest(who));
+        let client = Nonce::from_bytes([200; 32]);
+        let hello = ClientMessage::Hello {
+            reference: None,
+            protocol: 0,
+            address: ADDRESS.to_owned(),
+            nonce: client,
+            supports: Vec::new(),
+        };
+        sessions.receive(id, &hello.encode());
+        let challenge = lines
+            .try_recv()
+            .expect("the server answers the hello message");
+        let Ok(ServerMessage::Challenge { key, nonce, .. }) = ServerMessage::decode(&challenge)
+        else {
+            panic!("the server sends a challenge, not {challenge}");
+        };
+        let exchange = Exchange {
+            address: ADDRESS,
+            client: &client,
+            server: &nonce,
+        };
+        let account = seed(who).account_key(&key);
+        let identify = ClientMessage::Identify {
+            reference: None,
+            key: account.public(),
+            proof: account.prove(&key, &exchange),
+            invitation: None,
+        };
+        sessions.receive(id, &identify.encode());
         (id, lines)
     }
 
@@ -152,7 +214,7 @@ mod tests {
                 ServerMessage::Welcome {
                     reference: None,
                     name: name("ana"),
-                    role: Role::Member,
+                    role: Role::Owner,
                 },
                 join("ana"),
                 join("ben"),

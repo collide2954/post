@@ -1,9 +1,11 @@
 # Two users exchange text in the channel "lobby".
-# The lines show the connection of the user "ana".
+# The lines show the connection of the user "ana". She has an account on the server.
 # "C:" is a line from the client. "S:" is a line from the server.
 
-# Ana starts a session and comes into the channel.
-C: {"type":"guest","protocol":0,"name":"ana"}
+# Ana signs in and comes into the channel.
+C: {"type":"hello","protocol":0,"address":"chat.example.org:443","nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","supports":[]}
+S: {"type":"challenge","protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI","proof":"ZeA2ResstAfHtxRGEs6knEtI14hfp-IrwWCnVdDajcWimrtB6_yXo33nRHzuebREmPcb2GQo1XPcZONrCBKXCw","requires":[]}
+C: {"type":"identify","key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
 S: {"type":"welcome","name":"ana","role":"member"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
@@ -17,5 +19,5 @@ S: {"type":"message","ref":1,"channel":"lobby","from":"ana","time":"2026-11-21T1
 # Ben answers.
 S: {"type":"message","channel":"lobby","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi. Does it work?"}
 
-# Ben closes his connection.
+# Ben closes his last connection.
 S: {"type":"leave","channel":"lobby","name":"ben","time":"2026-11-21T14:03:00.000Z"}

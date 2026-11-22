@@ -124,7 +124,6 @@ fn the_schemas_list_each_message_type() {
     assert_eq!(
         client,
         [
-            "guest",
             "hello",
             "identify",
             "invitations",

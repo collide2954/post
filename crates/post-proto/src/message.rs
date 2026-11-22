@@ -55,17 +55,7 @@ pub enum ClientMessage {
         /// The code of an invitation or of an owner link.
         invitation: Code,
     },
-    /// Starts a session with a temporary name and no account.
-    /// This message is temporary. It goes away before version 0.2.
-    Guest {
-        /// A number that the answer of the server repeats.
-        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
-        reference: Option<u32>,
-        /// The protocol version of the client.
-        protocol: u32,
-        /// The name that the user wants.
-        name: String,
-    },
+
     /// Sends a text to a channel.
     Send {
         /// A number that the answer of the server repeats.
@@ -349,22 +339,6 @@ mod tests {
     fn client_examples() -> Vec<(ClientMessage, &'static str)> {
         vec![
             (
-                ClientMessage::Guest {
-                    reference: None,
-                    protocol: 0,
-                    name: "ana".to_owned(),
-                },
-                r#"{"type":"guest","protocol":0,"name":"ana"}"#,
-            ),
-            (
-                ClientMessage::Guest {
-                    reference: Some(7),
-                    protocol: 3,
-                    name: "Not A Name".to_owned(),
-                },
-                r#"{"type":"guest","ref":7,"protocol":3,"name":"Not A Name"}"#,
-            ),
-            (
                 ClientMessage::Send {
                     reference: Some(1),
                     channel: "lobby".to_owned(),
@@ -598,6 +572,12 @@ mod tests {
         let proof = "A".repeat(86);
         let lines = [
             format!(r#"{{"type":"hello","protocol":0,"address":"a:1","nonce":"{key}"}}"#),
+            format!(
+                r#"{{"type":"hello","protocol":"0","address":"a:1","nonce":"{key}","supports":[]}}"#
+            ),
+            format!(
+                r#"{{"type":"hello","protocol":-1,"address":"a:1","nonce":"{key}","supports":[]}}"#
+            ),
             format!(
                 r#"{{"type":"hello","protocol":0,"address":"a:1","nonce":"{key}A","supports":[]}}"#
             ),
@@ -835,18 +815,17 @@ mod tests {
             "[]",
             "{}",
             r#"{"type":"dance"}"#,
-            r#"{"type":"guest"}"#,
-            r#"{"type":"guest","protocol":0}"#,
-            r#"{"type":"guest","protocol":"0","name":"ana"}"#,
-            r#"{"type":"guest","protocol":-1,"name":"ana"}"#,
-            r#"{"type":"guest","protocol":0,"name":"ana","extra":1}"#,
-            r#"{"type":"guest","ref":-1,"protocol":0,"name":"ana"}"#,
-            r#"{"type":"guest","ref":4294967296,"protocol":0,"name":"ana"}"#,
-            r#"{"type":"guest","ref":1.5,"protocol":0,"name":"ana"}"#,
-            r#"{"type":"GUEST","protocol":0,"name":"ana"}"#,
-            r#"{"type":"welcome","name":"ana","role":"member"}"#,
+            r#"{"type":"send"}"#,
             r#"{"type":"send","channel":"lobby"}"#,
-            r#"{"type":"guest","protocol":0,"name":"ana"} x"#,
+            r#"{"type":"send","channel":7,"text":"Hello"}"#,
+            r#"{"type":"send","channel":"lobby","text":"Hello","extra":1}"#,
+            r#"{"type":"send","ref":-1,"channel":"lobby","text":"Hello"}"#,
+            r#"{"type":"send","ref":4294967296,"channel":"lobby","text":"Hello"}"#,
+            r#"{"type":"send","ref":1.5,"channel":"lobby","text":"Hello"}"#,
+            r#"{"type":"SEND","channel":"lobby","text":"Hello"}"#,
+            r#"{"type":"guest","protocol":0,"name":"ana"}"#,
+            r#"{"type":"welcome","name":"ana","role":"member"}"#,
+            r#"{"type":"send","channel":"lobby","text":"Hello"} x"#,
             r#"{"type":"invite","lifetime":0}"#,
             r#"{"type":"invite","lifetime":-1}"#,
             r#"{"type":"invite","lifetime":4294967296}"#,
@@ -874,7 +853,7 @@ mod tests {
             r#"{"type":"join","channel":"lobby","name":"ben","time":"yesterday"}"#,
             r#"{"type":"join","channel":"lobby","name":"ben","time":1795269727120}"#,
             r#"{"type":"error","code":"no-such-code","text":"x"}"#,
-            r#"{"type":"guest","protocol":0,"name":"ana"}"#,
+            r#"{"type":"send","channel":"lobby","text":"Hello"}"#,
             r#"{"type":"invitations"}"#,
             r#"{"type":"invitations","list":{}}"#,
             r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z"}]}"#,
@@ -892,9 +871,9 @@ mod tests {
     #[test]
     fn refuses_a_message_on_more_than_one_line() {
         for line in [
-            "{\"type\":\"guest\",\n\"protocol\":0,\"name\":\"ana\"}",
-            "{\"type\":\"guest\",\"protocol\":0,\"name\":\"ana\"}\n",
-            "{\"type\":\"guest\",\r\"protocol\":0,\"name\":\"ana\"}",
+            "{\"type\":\"send\",\n\"channel\":\"lobby\",\"text\":\"Hello\"}",
+            "{\"type\":\"send\",\"channel\":\"lobby\",\"text\":\"Hello\"}\n",
+            "{\"type\":\"send\",\r\"channel\":\"lobby\",\"text\":\"Hello\"}",
         ] {
             assert!(
                 matches!(ClientMessage::decode(line), Err(DecodeError::LineBreak)),
@@ -911,7 +890,7 @@ mod tests {
     fn refuses_a_line_that_is_too_long() {
         assert_eq!(MAX_LINE_BYTES, 65_536);
 
-        let start = r#"{"type":"guest","protocol":0,"name":""#;
+        let start = r#"{"type":"send","channel":"lobby","text":""#;
         let end = r#""}"#;
         let fill = MAX_LINE_BYTES - start.len() - end.len();
 

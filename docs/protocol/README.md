@@ -210,20 +210,6 @@ The `register` message makes an account and signs in to it.
 
 The server answers with a `welcome` message or with an `error` message. After an error, the client can send a new `register` message on the same connection.
 
-### `guest`
-
-The `guest` message starts a session with a temporary name and no account. It must be the first message on a connection.
-
-This message is temporary. The project removes it before version 0.2, when the application uses accounts.
-
-| Field | Value |
-|---|---|
-| `type` | `"guest"` |
-| `ref` | Optional. |
-| `protocol` | The protocol version of the client. |
-| `name` | The name that the user wants. |
-
-The server answers with a `welcome` message or with an `error` message. After an error, the client can send a new `guest` message on the same connection.
 
 ### `send`
 
@@ -299,7 +285,7 @@ The `welcome` message starts the session of a user. The session now has a name.
 | `type` | `"welcome"` |
 | `ref` | The value from the message that the server accepts, if it had one. |
 | `name` | The name of the user in this session. |
-| `role` | The role of the user on this server: `"owner"` or `"member"`. A user with a temporary name is a member. |
+| `role` | The role of the user on this server: `"owner"` or `"member"`. |
 
 After the `welcome` message, the server puts the user into the channel `lobby`. The server sends a `join` message to each user in the channel, also to the new user.
 
@@ -411,5 +397,5 @@ Each file in the [examples](examples) directory shows one connection.
 | [requirements.txt](examples/requirements.txt) | A server requires a part of the protocol that the client does not support. |
 | [invitations.txt](examples/invitations.txt) | The server owner makes, lists, and cancels invitations. |
 | [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
-| [two-users.txt](examples/two-users.txt) | Two users with temporary names exchange text. |
+| [two-users.txt](examples/two-users.txt) | Two users exchange text. |
 | [errors.txt](examples/errors.txt) | The server refuses other messages. |

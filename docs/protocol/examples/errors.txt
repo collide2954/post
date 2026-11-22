@@ -1,4 +1,5 @@
-# The server refuses messages. Each error code shows one time.
+# The server refuses messages. Each error code of this file shows one time.
+# The file "sign-in-errors.txt" shows the other error codes of the sign-in.
 # "C:" is a line from the client. "S:" is a line from the server.
 
 # The first message is not a hello message.
@@ -6,40 +7,43 @@ C: {"type":"send","channel":"lobby","text":"Hello"}
 S: {"type":"error","code":"hello-required","text":"The first message must be a hello message."}
 
 # The server knows only protocol version 0.
-C: {"type":"guest","ref":1,"protocol":7,"name":"ana"}
+C: {"type":"hello","ref":1,"protocol":7,"address":"chat.example.org:443","nonce":"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc","supports":[]}
 S: {"type":"error","ref":1,"code":"unsupported-protocol","text":"The server does not support this protocol version."}
 
-# A name cannot contain a capital letter or a space.
-C: {"type":"guest","ref":2,"protocol":0,"name":"Ana Maria"}
-S: {"type":"error","ref":2,"code":"invalid-name","text":"A name has 2 to 20 characters: a to z, 0 to 9, hyphen, and underscore."}
+C: {"type":"hello","ref":2,"protocol":0,"address":"chat.example.org:443","nonce":"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc","supports":[]}
+S: {"type":"challenge","ref":2,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg","proof":"rL842Tlb_EcUOIxYBVIRI_St7I2pGsNtnyH8wscnpprBFBfaHmE9E3pX-ri-rYSJSx2VMnUdggMKq1POODX6AA","requires":[]}
 
-# A different connected user has the name "ben".
-C: {"type":"guest","ref":3,"protocol":0,"name":"ben"}
-S: {"type":"error","ref":3,"code":"name-taken","text":"This name is not available."}
+# The server accepts only one hello message on a connection.
+C: {"type":"hello","ref":3,"protocol":0,"address":"chat.example.org:443","nonce":"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc","supports":[]}
+S: {"type":"error","ref":3,"code":"duplicate-hello","text":"The connection already had a hello message."}
+
+# A name cannot contain a capital letter or a space.
+C: {"type":"register","ref":4,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"v8d4t7VYMSVVZlv8aH7A5lG6DIQi-Tyj4iakgMaCshPhNLsn9EV98Wx2xeNTUz7VGOcfEy6Fnz-LOZPIGJApBw","name":"Ana Maria","invitation":"7Hq2kdX9mPq4"}
+S: {"type":"error","ref":4,"code":"invalid-name","text":"A name has 2 to 20 characters: a to z, 0 to 9, hyphen, and underscore."}
+
+# A different account has the name "ben".
+C: {"type":"register","ref":5,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"v8d4t7VYMSVVZlv8aH7A5lG6DIQi-Tyj4iakgMaCshPhNLsn9EV98Wx2xeNTUz7VGOcfEy6Fnz-LOZPIGJApBw","name":"ben","invitation":"7Hq2kdX9mPq4"}
+S: {"type":"error","ref":5,"code":"name-taken","text":"This name is not available."}
 
 # The session starts.
-C: {"type":"guest","ref":4,"protocol":0,"name":"ana"}
-S: {"type":"welcome","ref":4,"name":"ana","role":"member"}
+C: {"type":"register","ref":6,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"v8d4t7VYMSVVZlv8aH7A5lG6DIQi-Tyj4iakgMaCshPhNLsn9EV98Wx2xeNTUz7VGOcfEy6Fnz-LOZPIGJApBw","name":"ana","invitation":"7Hq2kdX9mPq4"}
+S: {"type":"welcome","ref":6,"name":"ana","role":"member"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
-# A session can have only one hello message.
-C: {"type":"guest","ref":5,"protocol":0,"name":"ana2"}
-S: {"type":"error","ref":5,"code":"duplicate-hello","text":"The connection already had a hello message."}
-
-# Version 0.1 has only the channel "lobby".
-C: {"type":"send","ref":6,"channel":"garden","text":"Hello"}
-S: {"type":"error","ref":6,"code":"no-such-channel","text":"The channel does not exist."}
+# At this time, Post has only the channel "lobby".
+C: {"type":"send","ref":7,"channel":"garden","text":"Hello"}
+S: {"type":"error","ref":7,"code":"no-such-channel","text":"The channel does not exist."}
 
 # A text must have a visible character.
-C: {"type":"send","ref":7,"channel":"lobby","text":"   "}
-S: {"type":"error","ref":7,"code":"empty-text","text":"A message must contain text."}
+C: {"type":"send","ref":8,"channel":"lobby","text":"   "}
+S: {"type":"error","ref":8,"code":"empty-text","text":"A message must contain text."}
 
 # Only the server owner makes an invitation.
-C: {"type":"invite","ref":8}
-S: {"type":"error","ref":8,"code":"not-permitted","text":"Your account does not have the permission for this request."}
+C: {"type":"invite","ref":9}
+S: {"type":"error","ref":9,"code":"not-permitted","text":"Your account does not have the permission for this request."}
 
 # A text with more than 4000 characters gets this answer.
-S: {"type":"error","ref":9,"code":"text-too-long","text":"A message can have a maximum of 4000 characters."}
+S: {"type":"error","ref":10,"code":"text-too-long","text":"A message can have a maximum of 4000 characters."}
 
 # A line that is not a message gets this answer. The server cannot read a number from the line.
 S: {"type":"error","code":"bad-message","text":"The message is not a valid protocol message."}
