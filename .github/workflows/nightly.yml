@@ -79,6 +79,16 @@ jobs:
         run: cargo install cargo-deny --locked --version "$CARGO_DENY_VERSION"
       - run: cargo deny check advisories
 
+  budgets:
+    name: Performance budgets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: |
+          ulimit -n 65536
+          cargo test --release --locked -p post-server --test budgets -- --ignored --nocapture --test-threads 1
+
   arm64:
     name: Tests on Linux ARM64
     runs-on: ubuntu-24.04-arm
