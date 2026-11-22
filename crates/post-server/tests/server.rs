@@ -1,9 +1,10 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroU32;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use post_crypto::{Exchange, Seed};
+use post_crypto::{Exchange, Fingerprint, Seed};
 use post_proto::{
     ClientMessage, Code, ErrorCode, Key, MAX_LINE_BYTES, Name, Role, ServerMessage, Signature,
 };
@@ -11,21 +12,30 @@ use post_server::config::{Config, Listen, Tls};
 use post_server::store::StoreError;
 use post_server::{Server, StartError, new_owner_link};
 use post_testing::Directory;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use tokio_rustls::TlsConnector;
+use tokio_rustls::client::TlsStream;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, client_async, connect_async};
 
 const PATIENCE: Duration = Duration::from_secs(10);
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type TlsSocket = WebSocketStream<TlsStream<TcpStream>>;
 
 struct Running {
     port: u16,
     addresses: Vec<SocketAddr>,
     owner_link: Option<String>,
+    fingerprint: Option<Fingerprint>,
     config: Config,
     data: Directory,
     stop: oneshot::Sender<()>,
@@ -41,9 +51,14 @@ async fn start_with(data: Directory) -> Running {
         data: data.path().to_owned(),
         ..Config::development(0)
     };
+    start_config(config, data).await
+}
+
+async fn start_config(config: Config, data: Directory) -> Running {
     let server = Server::bind(&config).await.expect("the server can bind");
     let addresses = server.addresses().to_vec();
     let owner_link = server.owner_link().map(str::to_owned);
+    let fingerprint = server.fingerprint();
     let (stop, stopped) = oneshot::channel::<()>();
     let task = tokio::spawn(server.run(async {
         let _ = stopped.await;
@@ -52,11 +67,93 @@ async fn start_with(data: Directory) -> Running {
         port: addresses[0].port(),
         addresses,
         owner_link,
+        fingerprint,
         config,
         data,
         stop,
         task,
     }
+}
+
+#[derive(Debug)]
+struct AnyCertificate {
+    provider: Arc<CryptoProvider>,
+    seen: Mutex<Option<Fingerprint>>,
+}
+
+impl ServerCertVerifier for AnyCertificate {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        let fingerprint = Fingerprint::of_certificate(end_entity.as_ref());
+        *self.seen.lock().expect("no panic with the lock") = Some(fingerprint);
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        let algorithms = &self.provider.signature_verification_algorithms;
+        verify_tls12_signature(message, cert, dss, algorithms)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        let algorithms = &self.provider.signature_verification_algorithms;
+        verify_tls13_signature(message, cert, dss, algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.provider
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
+
+async fn connect_with_tls(port: u16) -> (TlsSocket, Fingerprint) {
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let verifier = Arc::new(AnyCertificate {
+        provider: Arc::clone(&provider),
+        seen: Mutex::new(None),
+    });
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("the provider has TLS 1.3")
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::clone(&verifier) as Arc<dyn ServerCertVerifier>)
+        .with_no_client_auth();
+    let stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+        .await
+        .expect("the server listens");
+    let name = ServerName::try_from("localhost").expect("a valid name");
+    let stream = timeout(
+        PATIENCE,
+        TlsConnector::from(Arc::new(config)).connect(name, stream),
+    )
+    .await
+    .expect("the server answers in time")
+    .expect("the server uses TLS 1.3");
+    let (socket, _) = client_async(format!("wss://localhost:{port}/"), stream)
+        .await
+        .expect("the server accepts the connection");
+    let fingerprint = verifier
+        .seen
+        .lock()
+        .expect("no panic with the lock")
+        .expect("the server showed a certificate");
+    (socket, fingerprint)
 }
 
 impl Running {
@@ -83,14 +180,20 @@ async fn connect_v4(port: u16) -> Socket {
     connect(SocketAddr::from((Ipv4Addr::LOCALHOST, port))).await
 }
 
-async fn write(socket: &mut Socket, message: &ClientMessage) {
+async fn write<S>(socket: &mut WebSocketStream<S>, message: &ClientMessage)
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     socket
         .send(Message::text(message.encode()))
         .await
         .expect("the socket is open");
 }
 
-async fn read(socket: &mut Socket) -> ServerMessage {
+async fn read<S>(socket: &mut WebSocketStream<S>) -> ServerMessage
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     loop {
         let frame = timeout(PATIENCE, socket.next())
             .await
@@ -150,7 +253,10 @@ async fn invite(owner: &mut Socket) -> String {
     list[0].link.clone()
 }
 
-async fn prove(socket: &mut Socket, address: &str, seed: &Seed) -> (Key, Signature) {
+async fn prove<S>(socket: &mut WebSocketStream<S>, address: &str, seed: &Seed) -> (Key, Signature)
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let client = post_crypto::nonce();
     let hello = ClientMessage::Hello {
         reference: None,
@@ -385,16 +491,19 @@ async fn tells_why_it_cannot_start() {
         ..Config::development(0)
     };
 
-    let with_tls = Config {
-        tls: Tls::Own,
+    let without_files = Config {
+        tls: Tls::Files {
+            certificate: data.join("missing.pem"),
+            key: data.join("missing-key.pem"),
+        },
         ..development.clone()
     };
-    let error = Server::bind(&with_tls).await.err().expect("an error");
-    assert!(matches!(error, StartError::NoTls));
+    let error = Server::bind(&without_files).await.err().expect("an error");
+    assert!(matches!(error, StartError::Tls(_)));
     assert!(
         error
             .to_string()
-            .starts_with("this version cannot use TLS yet")
+            .ends_with("does not contain a certificate")
     );
 
     let first = Server::bind(&development)
@@ -431,6 +540,75 @@ async fn tells_why_it_cannot_start() {
     let error = Server::bind(&with_damage).await.err().expect("an error");
     assert!(matches!(error, StartError::Store(_)));
     assert!(error.to_string().starts_with("the database has a problem"));
+}
+
+fn with_own_certificate(data: &Directory) -> Config {
+    Config {
+        tls: Tls::Own,
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    }
+}
+
+#[tokio::test]
+async fn uses_tls_with_its_own_certificate() {
+    let data = Directory::new();
+    let server = start_config(with_own_certificate(&data), data).await;
+    let fingerprint = server
+        .fingerprint
+        .expect("a server with TLS has a certificate");
+    let owner_link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let (start, code) = owner_link.rsplit_once('/').expect("a link has a code");
+    assert_eq!(start, format!("https://localhost:{}/i", server.port));
+
+    let (mut socket, seen) = connect_with_tls(server.port).await;
+
+    assert_eq!(seen, fingerprint);
+    let address = format!("localhost:{}", server.port);
+    let (key, proof) = prove(&mut socket, &address, &Seed::from_bytes([7; 32])).await;
+    let register = ClientMessage::Register {
+        reference: None,
+        key,
+        proof,
+        name: "ana".to_owned(),
+        invitation: Code::parse(code).expect("a valid code"),
+    };
+    write(&mut socket, &register).await;
+    assert_eq!(read(&mut socket).await, welcome("ana", Role::Owner));
+
+    let without_tls = format!("ws://127.0.0.1:{}/", server.port);
+    let plain = timeout(PATIENCE, connect_async(without_tls))
+        .await
+        .expect("the server answers in time");
+    assert!(plain.is_err(), "the server accepts only TLS");
+}
+
+#[tokio::test]
+async fn keeps_its_certificate_and_can_use_certificate_files() {
+    let data = Directory::new();
+    let own = with_own_certificate(&data);
+    let first = start_config(own.clone(), data).await;
+    let fingerprint = first.fingerprint.expect("a certificate");
+    let data = first.stop().await;
+
+    let second = start_config(own.clone(), data).await;
+    assert_eq!(second.fingerprint, Some(fingerprint));
+    let data = second.stop().await;
+
+    let files = Config {
+        tls: Tls::Files {
+            certificate: data.join("certificate.pem"),
+            key: data.join("certificate-key.pem"),
+        },
+        ..own
+    };
+    let third = start_config(files, data).await;
+    assert_eq!(third.fingerprint, Some(fingerprint));
+    let (_socket, seen) = connect_with_tls(third.port).await;
+    assert_eq!(seen, fingerprint);
 }
 
 #[tokio::test]
@@ -586,6 +764,7 @@ async fn listens_only_on_the_loopback_addresses() {
         assert_eq!(address.port(), server.port);
     }
     assert!(server.addresses.len() <= 2);
+    assert_eq!(server.fingerprint, None);
 }
 
 #[tokio::test]

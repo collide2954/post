@@ -15,9 +15,12 @@ axum.workspace = true
 post-crypto.workspace = true
 post-proto.workspace = true
 post-rules.workspace = true
+rcgen.workspace = true
 rusqlite.workspace = true
+rustls.workspace = true
 serde.workspace = true
 tokio.workspace = true
+tokio-rustls.workspace = true
 toml.workspace = true
 
 [dev-dependencies]

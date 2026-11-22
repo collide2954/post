@@ -361,6 +361,7 @@ Server:
 - Without a configuration file, the server operates in development mode. It listens only on the local computer, without TLS.
 - The configuration file has the name `post-server.toml`. It gives the public addresses, the listen addresses, the data directory, and the TLS mode. The TLS modes are the own certificate, certificate files, and a reverse proxy.
 - The server accepts only TLS 1.3. The own certificate is valid for 10 years. The application identifies a private certificate by its SHA-256 fingerprint.
+- The own certificate has an ECDSA P-256 key. The files `certificate.pem` and `certificate-key.pem` in the data directory hold the certificate and its key. The server prints the fingerprint at each start.
 - The code of an invitation has 12 random letters and digits. An owner link is an invitation that makes its user the server owner.
 - Only the server owner makes invitations. Operators and the setting for members (D-056) come in version 0.9.
 - A request for a new invitation gives the time to its end in seconds. The server calculates the end time, thus the clock of the client has no effect.

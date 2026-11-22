@@ -43,6 +43,10 @@ async fn run(source: &Source) -> Result<(), Box<dyn Error>> {
         );
     }
     println!("The data of the server is in {}.", config.data.display());
+    if let Some(fingerprint) = server.fingerprint() {
+        println!("The certificate of this server has this SHA-256 fingerprint:");
+        println!("{}", fingerprint.grouped());
+    }
     if let Some(link) = server.owner_link() {
         println!("This server has no owner. Paste this link into Post to become the owner:");
         println!("{link}");

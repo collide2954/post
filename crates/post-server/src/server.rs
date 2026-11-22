@@ -15,7 +15,8 @@ use axum::http::header::{
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
-use post_proto::{Code, MAX_LINE_BYTES, Timestamp};
+use post_crypto::Fingerprint;
+use post_proto::{Address, Code, Host, MAX_LINE_BYTES, Timestamp};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
@@ -26,15 +27,22 @@ use crate::hub::{Hub, LIMITS, Random, Settings};
 use crate::page;
 use crate::sessions::Sessions;
 use crate::store::{Store, StoreError};
+use crate::tls::{self, TlsError, TlsListener};
 
 const QUEUE_LINES: usize = 256;
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Server {
-    listeners: Vec<TcpListener>,
+    listeners: Vec<Bound>,
     addresses: Vec<SocketAddr>,
     hub: Hub,
     owner_link: Option<String>,
+    fingerprint: Option<Fingerprint>,
+}
+
+enum Bound {
+    Plain(TcpListener),
+    Tls(TlsListener),
 }
 
 #[derive(Debug)]
@@ -48,7 +56,7 @@ pub enum StartError {
         error: io::Error,
     },
     Store(StoreError),
-    NoTls,
+    Tls(TlsError),
 }
 
 struct Shared {
@@ -58,28 +66,42 @@ struct Shared {
 
 impl Server {
     pub async fn bind(config: &Config) -> Result<Self, StartError> {
-        if matches!(config.tls, Tls::Own | Tls::Files { .. }) {
-            return Err(StartError::NoTls);
-        }
         let (listeners, addresses) = listen(&config.listen).await?;
         let port = addresses[0].port();
+        let public = config.public_addresses(port);
         let settings = Settings {
-            addresses: config
-                .public_addresses(port)
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
+            addresses: public.iter().map(ToString::to_string).collect(),
             link: config.link(port),
             requires: Vec::new(),
         };
-        let mut hub = Hub::new(open_store(config)?, settings, Random::default())?;
+        let store = open_store(config)?;
+        let identity = match &config.tls {
+            Tls::Off | Tls::Proxy => None,
+            Tls::Own => Some(tls::own(&config.data, &hosts(&public), Timestamp::now())?),
+            Tls::Files { certificate, key } => Some(tls::from_files(certificate, key)?),
+        };
+        let mut hub = Hub::new(store, settings, Random::default())?;
         let owner_link = hub.owner_link(Timestamp::now())?;
 
+        let fingerprint = identity.as_ref().map(|identity| identity.fingerprint);
+        let listeners = listeners
+            .into_iter()
+            .zip(&addresses)
+            .map(|(listener, address)| match &identity {
+                Some(identity) => Bound::Tls(TlsListener::new(
+                    listener,
+                    *address,
+                    identity.acceptor.clone(),
+                )),
+                None => Bound::Plain(listener),
+            })
+            .collect();
         Ok(Self {
             listeners,
             addresses,
             hub,
             owner_link,
+            fingerprint,
         })
     }
 
@@ -91,6 +113,11 @@ impl Server {
     #[must_use]
     pub fn owner_link(&self) -> Option<&str> {
         self.owner_link.as_deref()
+    }
+
+    #[must_use]
+    pub fn fingerprint(&self) -> Option<Fingerprint> {
+        self.fingerprint
     }
 
     pub async fn run(self, stop: impl Future<Output = ()> + Send + 'static) -> io::Result<()> {
@@ -114,12 +141,19 @@ impl Server {
         let mut tasks = JoinSet::new();
         for listener in self.listeners {
             let router = router.clone();
-            let stopped = stopped.clone();
-            tasks.spawn(async move {
-                axum::serve(listener, router)
-                    .with_graceful_shutdown(wait_for_stop(stopped))
-                    .await
-            });
+            let stopped = wait_for_stop(stopped.clone());
+            match listener {
+                Bound::Plain(listener) => tasks.spawn(async move {
+                    axum::serve(listener, router)
+                        .with_graceful_shutdown(stopped)
+                        .await
+                }),
+                Bound::Tls(listener) => tasks.spawn(async move {
+                    axum::serve(listener, router)
+                        .with_graceful_shutdown(stopped)
+                        .await
+                }),
+            };
         }
         while let Some(result) = tasks.join_next().await {
             result.map_err(io::Error::other)??;
@@ -136,6 +170,20 @@ pub fn new_owner_link(config: &Config) -> Result<String, StartError> {
         .new_owner_code(&mut store, &code, Timestamp::now())?
         .map_err(|_| StoreError::CodeInUse)?;
     Ok(format!("{}/i/{code}", config.link(config.port())))
+}
+
+fn hosts(addresses: &[Address]) -> Vec<String> {
+    let mut hosts: Vec<String> = Vec::new();
+    for address in addresses {
+        let host = match address.host() {
+            Host::Name(name) => name.clone(),
+            Host::Ip(ip) => ip.to_string(),
+        };
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+    hosts
 }
 
 fn open_store(config: &Config) -> Result<Store, StartError> {
@@ -198,6 +246,12 @@ impl From<StoreError> for StartError {
     }
 }
 
+impl From<TlsError> for StartError {
+    fn from(error: TlsError) -> Self {
+        Self::Tls(error)
+    }
+}
+
 impl fmt::Display for StartError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -210,9 +264,7 @@ impl fmt::Display for StartError {
                 path.display()
             ),
             Self::Store(error) => error.fmt(formatter),
-            Self::NoTls => formatter.write_str(
-                "this version cannot use TLS yet: use the TLS mode \"proxy\" or no configuration file",
-            ),
+            Self::Tls(error) => error.fmt(formatter),
         }
     }
 }
