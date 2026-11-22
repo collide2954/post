@@ -21,6 +21,7 @@ jiff.workspace = true
 post-client.workspace = true
 post-proto.workspace = true
 sys-locale.workspace = true
+toml_edit.workspace = true
 unic-langid.workspace = true
 
 [dev-dependencies]
