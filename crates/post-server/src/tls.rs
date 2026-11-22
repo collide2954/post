@@ -141,6 +141,7 @@ impl TlsListener {
                     tokio::time::sleep(RETRY).await;
                     continue;
                 };
+                let _ = stream.set_nodelay(true);
                 let acceptor = acceptor.clone();
                 let sender = sender.clone();
                 tokio::spawn(async move {

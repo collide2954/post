@@ -1,13 +1,18 @@
 use std::collections::HashMap;
 
-use post_proto::{Code, Timestamp};
+use axum::extract::ws::Utf8Bytes;
+use post_proto::{Code, ServerMessage, Timestamp};
 use tokio::sync::mpsc::Sender;
 
 use crate::hub::{ConnectionId, Hub, Outgoing};
 
+pub type Line = Utf8Bytes;
+
+const SHARED_LINES: usize = 4;
+
 pub struct Sessions {
     hub: Hub,
-    queues: HashMap<ConnectionId, Sender<String>>,
+    queues: HashMap<ConnectionId, Sender<Line>>,
     clock: fn() -> Timestamp,
 }
 
@@ -25,7 +30,7 @@ impl Sessions {
         self.hub.open_link(code, (self.clock)())
     }
 
-    pub fn connect(&mut self, queue: Sender<String>) -> ConnectionId {
+    pub fn connect(&mut self, queue: Sender<Line>) -> ConnectionId {
         let id = self.hub.connect();
         self.queues.insert(id, queue);
         id
@@ -48,12 +53,22 @@ impl Sessions {
     }
 
     fn send(&mut self, outgoing: Vec<Outgoing>) {
+        let mut shared: Vec<(ServerMessage, Line)> = Vec::new();
         for Outgoing { to, message } in outgoing {
-            let lost = self
-                .queues
-                .get(&to)
-                .is_some_and(|queue| queue.try_send(message.encode()).is_err());
-            if lost {
+            let Some(queue) = self.queues.get(&to) else {
+                continue;
+            };
+            let known = shared.iter().find(|(known, _)| *known == message);
+            let line = if let Some((_, line)) = known {
+                line.clone()
+            } else {
+                let line = Line::from(message.encode());
+                if shared.len() < SHARED_LINES {
+                    shared.push((message, line.clone()));
+                }
+                line
+            };
+            if queue.try_send(line).is_err() {
                 self.queues.remove(&to);
             }
         }
@@ -66,7 +81,7 @@ mod tests {
     use post_proto::{ClientMessage, ErrorCode, Name, Nonce, Role, ServerMessage, Timestamp};
     use tokio::sync::mpsc::{self, Receiver, error::TryRecvError};
 
-    use super::Sessions;
+    use super::{Line, Sessions};
     use crate::hub::{ConnectionId, Hub, LIMITS, Random, Settings};
     use crate::store::Store;
 
@@ -158,11 +173,7 @@ mod tests {
         }
     }
 
-    fn user(
-        sessions: &mut Sessions,
-        who: &str,
-        capacity: usize,
-    ) -> (ConnectionId, Receiver<String>) {
+    fn user(sessions: &mut Sessions, who: &str, capacity: usize) -> (ConnectionId, Receiver<Line>) {
         let (queue, mut lines) = mpsc::channel(capacity);
         let id = sessions.connect(queue);
         let client = Nonce::from_bytes([200; 32]);
@@ -197,7 +208,7 @@ mod tests {
         (id, lines)
     }
 
-    fn drain(lines: &mut Receiver<String>) -> Vec<ServerMessage> {
+    fn drain(lines: &mut Receiver<Line>) -> Vec<ServerMessage> {
         let mut messages = Vec::new();
         while let Ok(line) = lines.try_recv() {
             messages.push(ServerMessage::decode(&line).expect("a valid line"));
@@ -238,6 +249,32 @@ mod tests {
                 message("ana", "Hello"),
             ]
         );
+    }
+
+    #[test]
+    fn gives_one_copy_of_a_line_to_the_connections_that_get_the_same_message() {
+        let mut sessions = sessions();
+        let (ana, mut ana_lines) = user(&mut sessions, "ana", 8);
+        let (_ben, mut ben_lines) = user(&mut sessions, "ben", 8);
+        let (_ben_again, mut more_lines) = user(&mut sessions, "ben", 8);
+        for lines in [&mut ana_lines, &mut ben_lines, &mut more_lines] {
+            drain(lines);
+        }
+        let hello = ClientMessage::Send {
+            reference: Some(7),
+            channel: "lobby".to_owned(),
+            text: "Hello".to_owned(),
+        };
+
+        sessions.receive(ana, &hello.encode());
+
+        let to_ana = ana_lines.try_recv().expect("a line for the sender");
+        let to_ben = ben_lines.try_recv().expect("a line for ben");
+        let to_ben_again = more_lines.try_recv().expect("a line for ben");
+        assert_eq!(to_ben.as_str(), to_ben_again.as_str());
+        assert_eq!(to_ben.as_ptr(), to_ben_again.as_ptr());
+        assert_ne!(to_ana.as_str(), to_ben.as_str());
+        assert!(to_ana.as_str().contains("\"ref\":7"), "{to_ana}");
     }
 
     #[test]

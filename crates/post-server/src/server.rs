@@ -15,6 +15,7 @@ use axum::http::header::{
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
+use axum::serve::ListenerExt;
 use post_crypto::Fingerprint;
 use post_proto::{Address, Code, Host, MAX_LINE_BYTES, Timestamp};
 use tokio::net::TcpListener;
@@ -30,6 +31,7 @@ use crate::store::{Store, StoreError};
 use crate::tls::{self, TlsError, TlsListener};
 
 const QUEUE_LINES: usize = 256;
+const READ_BUFFER_BYTES: usize = 4096;
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Server {
@@ -144,6 +146,9 @@ impl Server {
             let stopped = wait_for_stop(stopped.clone());
             match listener {
                 Bound::Plain(listener) => tasks.spawn(async move {
+                    let listener = listener.tap_io(|stream| {
+                        let _ = stream.set_nodelay(true);
+                    });
                     axum::serve(listener, router)
                         .with_graceful_shutdown(stopped)
                         .await
@@ -284,6 +289,7 @@ async fn wait_for_stop(mut stopped: watch::Receiver<bool>) {
 async fn upgrade(State(shared): State<Arc<Shared>>, upgrade: WebSocketUpgrade) -> Response {
     upgrade
         .max_message_size(MAX_LINE_BYTES)
+        .read_buffer_size(READ_BUFFER_BYTES)
         .on_upgrade(|socket| connection(socket, shared))
 }
 
@@ -346,7 +352,7 @@ async fn connection(mut socket: WebSocket, shared: Arc<Shared>) {
             },
             line = lines.recv() => {
                 let Some(line) = line else { break };
-                let sent = timeout(SEND_TIMEOUT, socket.send(Message::Text(line.into()))).await;
+                let sent = timeout(SEND_TIMEOUT, socket.send(Message::Text(line))).await;
                 if !matches!(sent, Ok(Ok(()))) {
                     break;
                 }

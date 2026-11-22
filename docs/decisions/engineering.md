@@ -311,6 +311,8 @@ The reference computer is a laptop with an Intel Core i5-8365U processor and bui
 
 **Reason.** The budgets are near the measured values of version 0.1: a window in 50 ms to 80 ms, 120 MB of memory, and less than 1% of one core. Thus a decrease in performance shows early. A reference computer of average speed gives stable numbers.
 
+**Open point.** In version 0.2, the message delivery is at the limit of its budget on the reference computer (`docs/performance.md`). The 1,000 test clients use the same computer as the server. We must measure the delivery with the clients on a second computer.
+
 **Not selected.**
 
 - Strict budgets of 150 ms and 80 MB. The GPU renderer of the toolkit uses more than 80 MB today.
@@ -370,6 +372,9 @@ Server:
 - The server tells each user in the channel about a handle change. The application then shows the new handle in the earlier lines of that user.
 - A line in the timeline for a person who joins or leaves still shows the start or the end of a connection. Channels and members come in version 0.3.
 - The server stores accounts, handles, and invitations. It stores no messages before version 0.4.
+- A connection starts with a read buffer of 4,096 bytes. Without this value, the WebSocket library gives 131,072 bytes to each connection, and 10,000 idle connections use more than the memory budget (D-170).
+- The server makes the text of a message one time for all the connections that get the same message.
+- The server and the application send small packets immediately. They turn off the delay that the operating system has for small packets.
 
 Application:
 
