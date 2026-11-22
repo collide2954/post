@@ -89,6 +89,18 @@ struct StateFile {
     last_profile: Option<u32>,
 }
 
+impl ProfileId {
+    #[must_use]
+    pub const fn from_number(number: u32) -> Self {
+        Self(number)
+    }
+
+    #[must_use]
+    pub const fn number(self) -> u32 {
+        self.0
+    }
+}
+
 impl Profiles {
     pub const MAX_NAME_CHARACTERS: usize = 30;
 
@@ -623,6 +635,18 @@ mod tests {
         assert!(matches!(profiles.delete(work), Err(ProfileError::NotFound)));
         assert_eq!(profiles.create("garden").expect("a profile"), ProfileId(3));
         assert_eq!(profiles.open(personal).expect("open").name(), "personal");
+    }
+
+    #[test]
+    fn gives_the_number_of_a_profile() {
+        let directory = Directory::new();
+        let profiles = profiles(&directory);
+        profiles.create("work").expect("a profile");
+        let second = profiles.create("personal").expect("a profile");
+
+        assert_eq!(second.number(), 2);
+        assert_eq!(ProfileId::from_number(2), second);
+        assert_ne!(ProfileId::from_number(1), second);
     }
 
     #[test]
