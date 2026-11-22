@@ -1,4 +1,5 @@
 mod chat;
+mod console;
 mod profiles;
 mod servers;
 mod settings;
@@ -6,10 +7,12 @@ mod widgets;
 
 use std::sync::LazyLock;
 
-use iced::{Element, Font, Theme, font};
+use iced::widget::{column, container};
+use iced::{Element, Fill, Font, Theme, font};
 use jiff::tz::TimeZone;
 
 use self::chat::chat_screen;
+use self::console::console_panel;
 use self::profiles::profiles_page;
 use self::servers::{certificate_screen, servers_screen, stopped_screen};
 use self::settings::settings_page;
@@ -23,6 +26,7 @@ pub const NAME_FIELD: &str = "name";
 pub const DRAFT_FIELD: &str = "draft";
 pub const PANEL_FIELD: &str = "panel";
 pub const PROFILE_FIELD: &str = "profile";
+pub const CONSOLE_FIELD: &str = "console";
 
 pub const TEXT_FONT: Font = Font::with_name("Inter");
 const STRONG_FONT: Font = Font {
@@ -79,6 +83,18 @@ fn custom_theme(name: &'static str, mode: Mode) -> Theme {
 
 pub fn view(window: &Window) -> Element<'_, Message> {
     let palette = Palette::of(window.app.mode());
+    let content = content(window, palette);
+    match window.app.console() {
+        Some(console) => column![
+            container(content).height(Fill),
+            console_panel(window, console, palette),
+        ]
+        .into(),
+        None => content,
+    }
+}
+
+fn content(window: &Window, palette: Palette) -> Element<'_, Message> {
     let strings = &window.strings;
     match window.app.page() {
         Some(Page::Settings) => return settings_page(window, palette),

@@ -5,7 +5,10 @@ mod profile;
 mod session;
 mod tls;
 
-pub use connection::{Disconnect, Event, Identity, Link, Trust, sign_in};
+pub use connection::{
+    Direction, Disconnect, Event, Identity, Line, Link, Outgoing, Trust, sign_in,
+    sign_in_with_lines,
+};
 pub use destination::{Destination, DestinationError, Security, TLS_PORT};
 pub use home::{Home, System};
 pub use post_crypto::{Fingerprint, Seed};

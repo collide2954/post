@@ -6,13 +6,14 @@ use iced::{Pixels, Settings, Size};
 use iced_test::{Simulator, selector};
 use jiff::tz::TimeZone;
 use post_app::app::start::StartProblem;
-use post_app::app::{App, Message, Page, chat, profiles, servers, settings};
+use post_app::app::{App, Message, Page, chat, console, profiles, servers, settings};
 use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::settings::Clock;
 use post_app::view::{self, Window};
 use post_client::{
-    Disconnect, Event, Fingerprint, KnownServer, Link, NameProblem, ProfileEntry, ProfileId,
+    Direction, Disconnect, Event, Fingerprint, KnownServer, Line, Link, NameProblem, Outgoing,
+    ProfileEntry, ProfileId,
 };
 use post_proto::{
     ClientMessage, Code, ErrorCode, Invitation, Key, Name, Role, ServerMessage, Timestamp,
@@ -21,6 +22,13 @@ use post_proto::{
 const SCREENSHOT_VARIABLE: &str = "POST_SCREENSHOTS";
 
 type Outbox = Box<dyn FnMut() -> Option<ClientMessage>>;
+
+fn sent_message(outgoing: Outgoing) -> ClientMessage {
+    match outgoing {
+        Outgoing::Message(message) => message,
+        Outgoing::Line(line) => panic!("a typed line and not a message: {line}"),
+    }
+}
 
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
@@ -153,7 +161,10 @@ fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
     for message in received {
         app.update(Message::Connection(attempt, Event::Received(message)));
     }
-    (app, Box::new(move || messages.try_recv().ok()))
+    (
+        app,
+        Box::new(move || messages.try_recv().ok().map(sent_message)),
+    )
 }
 
 fn receive(app: &mut App, message: ServerMessage) {
@@ -236,6 +247,37 @@ fn profile_message(window: &Window, text: &str) -> profiles::Message {
         [Message::Profiles(message)] => message.clone(),
         other => panic!("{text}: {other:?}"),
     }
+}
+
+const SENT_LINE: &str = r#"{"type":"send","ref":1,"channel":"lobby","text":"Hello"}"#;
+const RECEIVED_LINE: &str = r#"{"type":"message","ref":1,"channel":"lobby","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#;
+
+fn with_console(app: &mut App) {
+    let on = settings::Message::ConsoleToggled(true);
+    app.update(Message::Settings(on));
+}
+
+fn console_app(mode: Mode) -> (App, Outbox) {
+    let (mut app, outbox) = chat_app(mode);
+    with_console(&mut app);
+    let attempt = app.target().expect("a connection").attempt;
+    let lines = [
+        (Direction::Sent, "2026-11-21T14:02:07.004Z", SENT_LINE),
+        (
+            Direction::Received,
+            "2026-11-21T14:02:07.120Z",
+            RECEIVED_LINE,
+        ),
+    ];
+    for (direction, time, text) in lines {
+        let line = Line {
+            time: Timestamp::parse(time).expect(time),
+            direction,
+            text: text.to_owned(),
+        };
+        app.update(Message::Connection(attempt, Event::Line(line)));
+    }
+    (app, outbox)
 }
 
 fn settings_file(app: &mut App, text: &str) {
@@ -944,6 +986,122 @@ fn the_profiles_page_shows_a_problem_at_the_place_of_the_change() {
 }
 
 #[test]
+fn the_console_shows_each_line_with_its_time_and_direction() {
+    let (app, _outbox) = console_app(Mode::Light);
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Protocol console",
+        "14:02:07.004",
+        "→",
+        SENT_LINE,
+        "14:02:07.120",
+        "←",
+        RECEIVED_LINE,
+        "Clear",
+        "Close",
+        "Send",
+        "#lobby",
+        "ben left",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+}
+
+#[test]
+fn the_console_sends_a_line_and_has_its_own_links() {
+    let (app, _outbox) = console_app(Mode::Light);
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .click(selector::id(view::CONSOLE_FIELD))
+        .expect("the console has a field");
+    interface.typewrite("{");
+    interface.tap_key(Named::Enter);
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [
+                Message::Console(console::Message::DraftChanged(draft)),
+                Message::Console(console::Message::Send)
+            ] if draft == "{"
+        ),
+        "{messages:?}"
+    );
+
+    let messages = clicked(&window, "Send");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Console(console::Message::Send)]
+        ),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Clear");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Console(console::Message::Clear)]
+        ),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Close");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Settings(settings::Message::ConsoleToggled(false))]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_console_shows_on_each_screen_only_when_the_setting_is_on() {
+    let window = window(new_app(Mode::Light), Language::English);
+    assert!(simulator(&window).find("Protocol console").is_err());
+
+    let mut app = new_app(Mode::Light);
+    with_console(&mut app);
+    let draft = console::Message::DraftChanged("{}".to_owned());
+    app.update(Message::Console(draft));
+    app.update(Message::Console(console::Message::Send));
+    let window = self::window(app, Language::English);
+    let mut interface = simulator(&window);
+    for text in [
+        "Protocol console",
+        "The console shows the lines of a connection.",
+        "Post did not send the line. A line needs an open connection.",
+        "Connect",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+
+    let mut app = settings_app(Mode::Light);
+    with_console(&mut app);
+    let window = self::window(app, Language::Spanish);
+    let mut interface = simulator(&window);
+    for text in [
+        "Consola del protocolo",
+        "La consola muestra las líneas de una conexión.",
+        "Limpiar",
+        "Cerrar",
+        "Enviar",
+        "Idioma",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+}
+
+#[test]
 fn the_settings_page_shows_each_setting() {
     let mut window = window(settings_app(Mode::Light), Language::English);
     window.settings_file = Some("/home/ana/.config/post/profiles/1/settings.toml".to_owned());
@@ -1233,6 +1391,7 @@ fn each_screen_draws_in_light_and_dark_mode() {
             ("account", account_app(mode).0, Language::English),
             ("settings", settings_app(mode), Language::English),
             ("settings-es", settings_app(mode), Language::Spanish),
+            ("console", console_app(mode).0, Language::English),
             ("profiles", profiles_app(mode), Language::English),
             (
                 "profiles-rename",

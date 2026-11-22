@@ -262,6 +262,11 @@ impl Chat {
         Effect::Remember(self.server())
     }
 
+    #[must_use]
+    pub fn send_line(&self, line: String) -> bool {
+        self.link.send_line(line)
+    }
+
     pub fn warn_that_the_server_is_not_saved(&mut self) {
         self.notice = Some(Notice::ServerNotSaved);
     }
@@ -345,7 +350,7 @@ impl Chat {
 mod tests {
     use std::num::NonZeroU32;
 
-    use post_client::{Destination, Entry, Fingerprint, KnownServer, Link, Trust};
+    use post_client::{Destination, Entry, Fingerprint, KnownServer, Link, Outgoing, Trust};
     use post_proto::{
         ClientMessage, Code, ErrorCode, Invitation, Key, Name, NameError, Role, ServerMessage,
         Timestamp,
@@ -358,6 +363,12 @@ mod tests {
 
     type Outbox = Box<dyn FnMut() -> Option<ClientMessage>>;
 
+    fn sent_message(outgoing: Outgoing) -> ClientMessage {
+        match outgoing {
+            Outgoing::Message(message) => message,
+            Outgoing::Line(line) => panic!("a typed line and not a message: {line}"),
+        }
+    }
     fn name(text: &str) -> Name {
         Name::parse(text).expect(text)
     }
@@ -385,7 +396,10 @@ mod tests {
         let (link, mut messages) =
             Link::channel(name("ana"), role, Key::from_bytes([1; 32]), capacity);
         let chat = Chat::new(form, target, link);
-        (chat, Box::new(move || messages.try_recv().ok()))
+        (
+            chat,
+            Box::new(move || messages.try_recv().ok().map(sent_message)),
+        )
     }
 
     fn chat(capacity: usize) -> (Chat, Outbox) {

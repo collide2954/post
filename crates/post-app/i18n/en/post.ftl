@@ -110,6 +110,14 @@ settings-problem-syntax = The settings file is not valid TOML. Post ignores the 
 settings-problem-value = The value of "{ $key }" in the settings file is not valid. Post uses the default value.
 settings-not-saved = Post could not write the settings file.
 
+console-title = Protocol console
+console-empty = The console shows the lines of a connection.
+console-input-placeholder = A JSON line for the server
+console-send-button = Send
+console-clear-button = Clear
+console-close-button = Close
+console-not-sent = Post did not send the line. A line needs an open connection.
+
 invitations-title = Invitations
 invitations-ends-label = Ends after
 invitations-lifetime-day = 1 day

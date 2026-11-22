@@ -11,6 +11,7 @@ pub enum Message {
     Smaller,
     DefaultSize,
     ConsoleToggled(bool),
+    ConsoleFlipped,
     FileChanged(String),
     NotSaved,
 }
@@ -68,6 +69,10 @@ impl Store {
             },
             Message::ConsoleToggled(console) => Settings {
                 console,
+                ..self.values
+            },
+            Message::ConsoleFlipped => Settings {
+                console: !self.values.console,
                 ..self.values
             },
         };
@@ -143,6 +148,8 @@ mod tests {
         );
         let system = Message::LanguageSelected(None);
         assert_eq!(changed(&mut store, system).language, None);
+        assert!(!changed(&mut store, Message::ConsoleFlipped).console);
+        assert!(changed(&mut store, Message::ConsoleFlipped).console);
     }
 
     #[test]

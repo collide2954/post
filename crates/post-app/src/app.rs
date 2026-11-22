@@ -1,4 +1,5 @@
 pub mod chat;
+pub mod console;
 pub mod profiles;
 pub mod servers;
 pub mod settings;
@@ -8,6 +9,7 @@ use post_client::{Event, KnownServer, Link, ProfileId};
 use post_proto::ErrorCode;
 
 use self::chat::Chat;
+use self::console::Console;
 use self::servers::{Problem, Servers, Target};
 use self::start::StartProblem;
 use crate::i18n::Text;
@@ -20,6 +22,7 @@ pub enum Message {
     Chat(chat::Message),
     Settings(settings::Message),
     Profiles(profiles::Message),
+    Console(console::Message),
     Connection(u64, Event),
     ProfileNotSaved,
     ModeChanged(Mode),
@@ -63,6 +66,7 @@ pub struct App {
     page: Option<Page>,
     settings: settings::Store,
     profiles: profiles::Profiles,
+    console: Console,
 }
 
 #[derive(Debug)]
@@ -96,6 +100,7 @@ impl App {
             page: None,
             settings: settings::Store::default(),
             profiles: profiles::Profiles::default(),
+            console: Console::default(),
         }
     }
 
@@ -109,12 +114,18 @@ impl App {
             page: None,
             settings: settings::Store::default(),
             profiles: profiles::Profiles::default(),
+            console: Console::default(),
         }
     }
 
     #[must_use]
     pub fn profiles(&self) -> &profiles::Profiles {
         &self.profiles
+    }
+
+    #[must_use]
+    pub fn console(&self) -> Option<&Console> {
+        self.settings().console.then_some(&self.console)
     }
 
     #[must_use]
@@ -167,6 +178,10 @@ impl App {
             Message::Chat(message) => self.chat(message),
             Message::Settings(message) => self.settings.update(message),
             Message::Profiles(message) => self.profiles.update(message),
+            Message::Console(message) => {
+                self.type_in_the_console(message);
+                Effect::None
+            }
             Message::Connection(attempt, event) => self.connection(attempt, event),
             Message::ProfileNotSaved => {
                 match &mut self.screen {
@@ -204,6 +219,24 @@ impl App {
         }
     }
 
+    fn type_in_the_console(&mut self, message: console::Message) {
+        match message {
+            console::Message::DraftChanged(draft) => self.console.edit(draft),
+            console::Message::Clear => self.console.clear(),
+            console::Message::Send => {
+                let line = self.console.draft().to_owned();
+                if line.trim().is_empty() {
+                    return;
+                }
+                let sent = match &self.screen {
+                    Screen::Chat(chat) => chat.send_line(line),
+                    Screen::Servers(_) | Screen::Stopped(_) => false,
+                };
+                self.console.finish(sent);
+            }
+        }
+    }
+
     fn focus(&self) -> Effect {
         match &self.screen {
             Screen::Servers(servers)
@@ -235,6 +268,12 @@ impl App {
             return Effect::None;
         }
         match event {
+            Event::Line(line) => {
+                if self.settings().console {
+                    self.console.record(line);
+                }
+                Effect::None
+            }
             Event::Connected(link) => self.open_chat(link),
             Event::Received(message) => {
                 let Screen::Chat(chat) = &mut self.screen else {
@@ -312,14 +351,15 @@ pub fn error_text(code: ErrorCode) -> Text {
 #[cfg(test)]
 mod tests {
     use post_client::{
-        Disconnect, Entry, Event, Fingerprint, KnownServer, Link, ProfileEntry, ProfileId,
+        Direction, Disconnect, Entry, Event, Fingerprint, KnownServer, Line, Link, Outgoing,
+        ProfileEntry, ProfileId,
     };
     use post_proto::{ClientMessage, ErrorCode, Key, Name, Role, ServerMessage, Timestamp};
 
     use super::servers::Problem;
     use super::start::StartProblem;
     use super::{
-        App, Effect, Message, Page, Screen, chat, error_text, profiles, servers, settings,
+        App, Effect, Message, Page, Screen, chat, console, error_text, profiles, servers, settings,
     };
     use crate::i18n::Text;
     use crate::palette::Mode;
@@ -327,6 +367,12 @@ mod tests {
 
     type Outbox = Box<dyn FnMut() -> Option<ClientMessage>>;
 
+    fn sent_message(outgoing: Outgoing) -> ClientMessage {
+        match outgoing {
+            Outgoing::Message(message) => message,
+            Outgoing::Line(line) => panic!("a typed line and not a message: {line}"),
+        }
+    }
     fn name(text: &str) -> Name {
         Name::parse(text).expect(text)
     }
@@ -390,7 +436,10 @@ mod tests {
             Effect::Remember(server("localhost:7678", 1, who))
         );
         assert!(matches!(app.screen(), Screen::Chat(_)));
-        (app, Box::new(move || messages.try_recv().ok()))
+        (
+            app,
+            Box::new(move || messages.try_recv().ok().map(sent_message)),
+        )
     }
 
     fn form_problem(app: &App) -> Option<Problem> {
@@ -835,6 +884,124 @@ mod tests {
         assert_eq!(app.update(Message::Back), Effect::None);
         assert_eq!(app.page(), None);
         assert_eq!(app.update(Message::Back), Effect::FocusDraft);
+    }
+
+    fn line(direction: Direction, text: &str) -> Line {
+        Line {
+            time: Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid"),
+            direction,
+            text: text.to_owned(),
+        }
+    }
+
+    fn with_console(app: &mut App) {
+        let on = settings::Message::ConsoleToggled(true);
+        assert!(matches!(
+            app.update(Message::Settings(on)),
+            Effect::SaveSettings(settings) if settings.console
+        ));
+    }
+
+    fn console_texts(app: &App) -> Vec<String> {
+        let console = app.console().expect("the console shows");
+        console
+            .lines()
+            .iter()
+            .map(|line| line.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn shows_the_console_only_when_the_setting_is_on() {
+        let mut app = app();
+        assert!(app.console().is_none());
+
+        with_console(&mut app);
+        assert!(
+            app.console()
+                .is_some_and(|console| console.lines().is_empty())
+        );
+
+        let flip = || Message::Settings(settings::Message::ConsoleFlipped);
+        app.update(flip());
+        assert!(app.console().is_none());
+        app.update(flip());
+        assert!(app.console().is_some());
+    }
+
+    #[test]
+    fn records_the_lines_of_the_connection_in_the_console() {
+        let mut app = connecting("ana");
+        let hello = line(Direction::Sent, r#"{"type":"hello"}"#);
+        let message = connection(&app, Event::Line(hello.clone()));
+        assert_eq!(app.update(message), Effect::None);
+        with_console(&mut app);
+        assert_eq!(console_texts(&app), Vec::<String>::new());
+
+        let challenge = line(Direction::Received, r#"{"type":"challenge"}"#);
+        for recorded in [hello, challenge.clone()] {
+            let message = connection(&app, Event::Line(recorded));
+            assert_eq!(app.update(message), Effect::None);
+        }
+
+        assert_eq!(
+            console_texts(&app),
+            [r#"{"type":"hello"}"#, r#"{"type":"challenge"}"#]
+        );
+        let stale = Message::Connection(99, Event::Line(challenge));
+        app.update(stale);
+        assert_eq!(console_texts(&app).len(), 2);
+
+        app.update(Message::Console(console::Message::Clear));
+        assert_eq!(console_texts(&app), Vec::<String>::new());
+    }
+
+    #[test]
+    fn sends_a_line_that_the_user_types_in_the_console() {
+        let mut app = connecting("ana");
+        let (link, mut queue) = Link::channel(name("ana"), Role::Member, key(1), 1);
+        let message = connection(&app, Event::Connected(link));
+        app.update(message);
+        with_console(&mut app);
+        let typed = |text: &str| Message::Console(console::Message::DraftChanged(text.to_owned()));
+        let send = || Message::Console(console::Message::Send);
+
+        app.update(typed("  "));
+        assert_eq!(app.update(send()), Effect::None);
+        assert!(queue.try_recv().is_err());
+
+        app.update(typed(r#"{"type":"invitations"}"#));
+        assert_eq!(app.update(send()), Effect::None);
+
+        assert_eq!(
+            queue.try_recv(),
+            Ok(Outgoing::Line(r#"{"type":"invitations"}"#.to_owned()))
+        );
+        let console = app.console().expect("the console shows");
+        assert_eq!(console.draft(), "");
+        assert!(!console.not_sent());
+
+        app.update(typed("one"));
+        app.update(send());
+        app.update(typed("two"));
+        app.update(send());
+        let console = app.console().expect("the console shows");
+        assert_eq!(console.draft(), "two");
+        assert!(console.not_sent());
+    }
+
+    #[test]
+    fn does_not_send_a_line_without_a_connection() {
+        let mut app = app();
+        with_console(&mut app);
+        let draft = console::Message::DraftChanged("{}".to_owned());
+        app.update(Message::Console(draft));
+
+        app.update(Message::Console(console::Message::Send));
+
+        let console = app.console().expect("the console shows");
+        assert_eq!(console.draft(), "{}");
+        assert!(console.not_sent());
     }
 
     #[test]

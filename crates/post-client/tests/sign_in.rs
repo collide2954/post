@@ -4,9 +4,15 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use futures_util::{SinkExt, Stream, StreamExt};
-use post_client::{Destination, Disconnect, Event, Identity, Link, Trust, sign_in};
+use post_client::{
+    Destination, Direction, Disconnect, Event, Identity, Line, Link, Outgoing, Trust, sign_in,
+    sign_in_with_lines,
+};
 use post_crypto::{Exchange, Fingerprint, Seed, ServerKey};
-use post_proto::{ClientMessage, ErrorCode, Key, Name, Nonce, Part, Role, ServerMessage};
+use post_proto::{
+    ClientMessage, ErrorCode, Key, MAX_LINE_BYTES, Name, Nonce, Part, Role, ServerMessage,
+    Timestamp,
+};
 use post_server::Server;
 use post_server::config::{Config, Tls};
 use post_testing::Directory;
@@ -86,6 +92,36 @@ fn events_with(to: &str, person: u8, who: Option<&str>, trust: Trust) -> Events 
         name: who.map(name),
     };
     Box::pin(sign_in(destination(to), identity, trust))
+}
+
+fn events_with_lines(to: &str, person: u8, who: Option<&str>) -> Events {
+    let identity = Identity {
+        seed: seed(person),
+        name: who.map(name),
+    };
+    Box::pin(sign_in_with_lines(
+        destination(to),
+        identity,
+        Trust::default(),
+    ))
+}
+
+async fn line(events: &mut Events) -> Line {
+    match next(events).await {
+        Some(Event::Line(line)) => line,
+        other => panic!("not a line: {other:?}"),
+    }
+}
+
+async fn line_of(events: &mut Events, direction: Direction, kind: &str) -> Line {
+    let line = line(events).await;
+    assert_eq!(line.direction, direction, "{}", line.text);
+    assert!(
+        line.text.contains(&format!("\"type\":\"{kind}\"")),
+        "not a {kind} line: {}",
+        line.text
+    );
+    line
 }
 
 async fn next(events: &mut Events) -> Option<Event> {
@@ -716,4 +752,144 @@ async fn a_link_cannot_send_after_the_connection_stops() {
         channel: "lobby".to_owned(),
         text: "Hello".to_owned(),
     }));
+}
+
+#[tokio::test]
+async fn tells_each_line_before_the_event_that_it_causes() {
+    let server = start_server().await;
+    let before = Timestamp::now();
+    let mut ana = events_with_lines(&server.owner_link, 1, Some("ana"));
+
+    let sign_in = [
+        (Direction::Sent, "hello"),
+        (Direction::Received, "challenge"),
+        (Direction::Sent, "identify"),
+        (Direction::Received, "error"),
+        (Direction::Sent, "register"),
+        (Direction::Received, "welcome"),
+    ];
+    for (direction, kind) in sign_in {
+        let line = line_of(&mut ana, direction, kind).await;
+        assert!(line.time.unix_millis() >= before.unix_millis());
+        assert!(line.time.unix_millis() <= Timestamp::now().unix_millis());
+    }
+    let link = connected(&mut ana).await;
+    line_of(&mut ana, Direction::Received, "join").await;
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Join { .. }
+    ));
+
+    let hello = ClientMessage::Send {
+        reference: Some(7),
+        channel: "lobby".to_owned(),
+        text: "Hello".to_owned(),
+    };
+    assert!(link.send(hello.clone()));
+    let sent = line_of(&mut ana, Direction::Sent, "send").await;
+    assert_eq!(ClientMessage::decode(&sent.text).ok(), Some(hello));
+    let echo = line_of(&mut ana, Direction::Received, "message").await;
+    let message = received(&mut ana).await;
+    assert_eq!(ServerMessage::decode(&echo.text).ok(), Some(message));
+
+    let _ = server.stop.send(());
+}
+
+#[tokio::test]
+async fn sends_a_line_that_the_user_typed() {
+    let server = start_server().await;
+    let mut ana = events_with_lines(&server.owner_link, 1, Some("ana"));
+    let link = loop {
+        if let Some(Event::Connected(link)) = next(&mut ana).await {
+            break link;
+        }
+    };
+    line_of(&mut ana, Direction::Received, "join").await;
+    received(&mut ana).await;
+
+    let typed = r#"{ "type": "send", "channel": "lobby", "text": "typed" }"#;
+    assert!(link.send_line(typed.to_owned()));
+    let sent = line(&mut ana).await;
+    assert_eq!(sent.direction, Direction::Sent);
+    assert_eq!(sent.text, typed);
+    line_of(&mut ana, Direction::Received, "message").await;
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Message { text, .. } if text == "typed"
+    ));
+
+    assert!(link.send_line("not a message".to_owned()));
+    assert_eq!(line(&mut ana).await.text, "not a message");
+    let refused = line_of(&mut ana, Direction::Received, "error").await;
+    assert!(refused.text.contains("bad-message"), "{}", refused.text);
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Error {
+            code: ErrorCode::BadMessage,
+            ..
+        }
+    ));
+
+    let _ = server.stop.send(());
+}
+
+#[tokio::test]
+async fn tells_the_last_line_before_the_end_of_the_connection() {
+    let server = start_server().await;
+    let address = format!("localhost:{}", server.port);
+    let mut ana = events_with_lines(&address, 1, Some("ana"));
+
+    line_of(&mut ana, Direction::Sent, "hello").await;
+    line_of(&mut ana, Direction::Received, "challenge").await;
+    line_of(&mut ana, Direction::Sent, "identify").await;
+    let refused = line_of(&mut ana, Direction::Received, "error").await;
+    assert!(refused.text.contains("unknown-account"), "{}", refused.text);
+    assert_eq!(disconnected(&mut ana).await, Disconnect::InvitationRequired);
+
+    let _ = server.stop.send(());
+}
+
+#[tokio::test]
+async fn tells_no_lines_when_the_caller_does_not_ask_for_them() {
+    let server = start_server().await;
+    let mut ana = events(&server.owner_link, 1, Some("ana"), None);
+
+    let link = connected(&mut ana).await;
+    received(&mut ana).await;
+    assert!(link.send_line(r#"{"type":"send","channel":"lobby","text":"typed"}"#.to_owned()));
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Message { text, .. } if text == "typed"
+    ));
+
+    let _ = server.stop.send(());
+}
+
+#[test]
+fn a_link_gives_messages_and_typed_lines_to_its_queue() {
+    let (link, mut queue) = Link::channel(name("ana"), Role::Member, server_key().public(), 2);
+    let hello = ClientMessage::Send {
+        reference: None,
+        channel: "lobby".to_owned(),
+        text: "Hello".to_owned(),
+    };
+
+    assert!(link.send(hello.clone()));
+    assert!(link.send_line("{}".to_owned()));
+    assert!(!link.send_line("{}".to_owned()));
+
+    assert_eq!(queue.try_recv(), Ok(Outgoing::Message(hello)));
+    assert_eq!(queue.try_recv(), Ok(Outgoing::Line("{}".to_owned())));
+    assert!(queue.try_recv().is_err());
+}
+
+#[test]
+fn a_link_refuses_a_line_that_is_longer_than_the_protocol_permits() {
+    let (link, mut queue) = Link::channel(name("ana"), Role::Member, server_key().public(), 4);
+
+    assert!(link.send_line("x".repeat(MAX_LINE_BYTES)));
+    assert!(!link.send_line("x".repeat(MAX_LINE_BYTES + 1)));
+
+    assert!(queue.try_recv().is_ok());
+    assert!(queue.try_recv().is_err());
 }

@@ -71,6 +71,22 @@ pub fn date_and_clock(time: Timestamp, zone: &TimeZone, style: &ClockStyle) -> S
     )
 }
 
+#[must_use]
+pub fn precise_clock(time: Timestamp, zone: &TimeZone) -> String {
+    local(time, zone).map_or_else(
+        || UNKNOWN_TIME.to_owned(),
+        |local| {
+            format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                local.hour(),
+                local.minute(),
+                local.second(),
+                local.millisecond()
+            )
+        },
+    )
+}
+
 fn local(time: Timestamp, zone: &TimeZone) -> Option<DateTime> {
     let millis = i64::try_from(time.unix_millis()).ok()?;
     let instant = jiff::Timestamp::from_millisecond(millis).ok()?;
@@ -104,7 +120,7 @@ mod tests {
     use post_client::Entry;
     use post_proto::{Name, Timestamp};
 
-    use super::{ClockStyle, clock, date_and_clock, name_column, shows_name};
+    use super::{ClockStyle, clock, date_and_clock, name_column, precise_clock, shows_name};
     use crate::settings::{Clock, Settings};
 
     fn time(text: &str) -> Timestamp {
@@ -258,6 +274,22 @@ mod tests {
             date_and_clock(Timestamp::MAX, &TimeZone::UTC, &plain()),
             "--:--"
         );
+    }
+
+    #[test]
+    fn shows_a_time_with_seconds_and_milliseconds_for_the_console() {
+        let instant = time("2026-11-21T14:02:07.120Z");
+
+        assert_eq!(precise_clock(instant, &TimeZone::UTC), "14:02:07.120");
+        assert_eq!(
+            precise_clock(instant, &TimeZone::fixed(Offset::constant(-6))),
+            "08:02:07.120"
+        );
+        assert_eq!(
+            precise_clock(time("2026-11-21T00:00:00.005Z"), &TimeZone::UTC),
+            "00:00:00.005"
+        );
+        assert_eq!(precise_clock(Timestamp::MAX, &TimeZone::UTC), "--:--");
     }
 
     #[test]

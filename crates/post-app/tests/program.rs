@@ -9,7 +9,7 @@ use iced_test::emulator::{self, Emulator, Mode};
 use iced_test::futures::futures::channel::mpsc;
 use iced_test::selector::{Candidate, Selector};
 use iced_test::{Instruction, Simulator};
-use post_app::app::{Message, profiles, servers};
+use post_app::app::{Message, console, profiles, servers};
 use post_app::arguments::Arguments;
 use post_app::i18n::Language;
 use post_app::shell;
@@ -112,27 +112,42 @@ where
         }
     }
 
-    fn invite_link(&self) -> Option<String> {
+    fn text_with(&self, part: &'static str) -> Option<String> {
         Simulator::new(self.emulator.view(&self.program))
-            .find(InviteLink)
+            .find(Containing(part))
             .ok()
+    }
+
+    fn expect_text_with(&mut self, part: &'static str) -> String {
+        let start = Instant::now();
+        loop {
+            if let Some(text) = self.text_with(part) {
+                return text;
+            }
+            assert!(start.elapsed() < PATIENCE, "no text contains: {part}");
+            self.pump();
+        }
+    }
+
+    fn invite_link(&self) -> Option<String> {
+        self.text_with("/i/")
     }
 }
 
-struct InviteLink;
+struct Containing(&'static str);
 
-impl Selector for InviteLink {
+impl Selector for Containing {
     type Output = String;
 
     fn select(&mut self, candidate: Candidate<'_>) -> Option<String> {
         match candidate {
-            Candidate::Text { content, .. } if content.contains("/i/") => Some(content.to_owned()),
+            Candidate::Text { content, .. } if content.contains(self.0) => Some(content.to_owned()),
             _ => None,
         }
     }
 
     fn description(&self) -> String {
-        "the text of an invite link".to_owned()
+        format!("a text that contains {}", self.0)
     }
 }
 
@@ -258,7 +273,7 @@ fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
                     };
                     assert!(link.as_ref().is_some_and(|link| link.send(answer)));
                 }
-                Event::Received(_) => {}
+                Event::Received(_) | Event::Line(_) => {}
                 Event::Disconnected(_) => break,
             }
         }
@@ -284,7 +299,7 @@ fn join(backstage: &Backstage, link: &str, who: &str) {
                     links.push(link);
                     let _ = joined.send(());
                 }
-                Event::Received(_) => {}
+                Event::Received(_) | Event::Line(_) => {}
                 Event::Disconnected(_) => break,
             }
         }
@@ -429,6 +444,53 @@ fn the_window_tells_about_a_problem_of_the_command_line() {
 
     let mut missing = open_with(Language::English, &directory, &["--profile"]);
     missing.expect("Give the name of a profile after --profile.");
+}
+
+#[test]
+fn a_developer_reads_the_lines_and_sends_a_line_in_the_console() {
+    let backstage = start_server();
+    let directory = Directory::new();
+    let mut driver = open(Language::English, &directory);
+    driver.expect("Connect");
+    assert!(!driver.shows("Protocol console"));
+
+    driver.act("click \"Settings\"");
+    driver.act("click \"Protocol console (F12 key)\"");
+    driver.expect("The console shows the lines of a connection.");
+    driver.act("click \"Back\"");
+    driver.expect("Connect");
+    driver.sign_up(backstage.owner_link.clone(), "ana");
+    driver.expect("ana · connected");
+
+    for kind in ["hello", "challenge", "identify", "register", "welcome"] {
+        let part: &'static str = format!("\"type\":\"{kind}\"").leak();
+        driver.expect_text_with(part);
+    }
+    assert!(driver.text_with("\"name\":\"ana\"").is_some());
+
+    let typed = r#"{"type":"send","channel":"lobby","text":"from the console"}"#;
+    let draft = console::Message::DraftChanged(typed.to_owned());
+    driver.send(Message::Console(draft));
+    driver.act("click \"Send\"");
+    driver.expect("from the console");
+    driver.expect(typed);
+
+    let draft = console::Message::DraftChanged("dance".to_owned());
+    driver.send(Message::Console(draft));
+    driver.act("click \"Send\"");
+    let refused = driver.expect_text_with("bad-message");
+    assert!(refused.contains("\"type\":\"error\""), "{refused}");
+
+    driver.act("click \"Clear\"");
+    driver.expect_no(typed);
+    let settings = std::fs::read_to_string(settings_file(&directory)).expect("a settings file");
+    assert!(settings.contains("console = true\n"), "{settings}");
+
+    driver.act("click \"Close\"");
+    driver.expect_no("Protocol console");
+    driver.expect("from the console");
+    let settings = std::fs::read_to_string(settings_file(&directory)).expect("a settings file");
+    assert!(settings.contains("console = false\n"), "{settings}");
 }
 
 #[test]

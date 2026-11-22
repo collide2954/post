@@ -88,7 +88,7 @@ The server keeps its storage in a data directory. In development mode, the direc
 - `destination` reads an invite link or a server address. It decides if the connection uses TLS.
 - `home` finds the directories of the user for the settings and for the data.
 - `profile` keeps the profiles in files (D-147). A profile has a name, a seed, and a list of the servers that it knows. A lock file lets only one window use a profile.
-- `connection` opens the WebSocket, does the sign-in, and gives the events of the connection as a stream. It examines the proof of the server before it calculates the account key.
+- `connection` opens the WebSocket, does the sign-in, and gives the events of the connection as a stream. It examines the proof of the server before it calculates the account key. For the protocol console (D-094), it can also give each line that it sends or receives. It can also send a line that the user typed.
 - `tls` makes the TLS connection. It examines the certificate with the certificate check of the operating system. If that check fails, it accepts only the certificate that the user accepted before (D-073).
 - `session` holds the timeline of one connection. It makes the requests of the user, and it keeps the list of open invitations.
 
@@ -96,7 +96,7 @@ The server keeps its storage in a data directory. In development mode, the direc
 
 The application uses the iced toolkit (D-077).
 
-- `app` holds the state of the application and the update logic. It has one module for each screen: `start`, `servers`, `chat`, `settings`, and `profiles`. The `chat` module also holds the Invitations panel and the name panel. The `app` module does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the name field".
+- `app` holds the state of the application and the update logic. It has one module for each screen: `start`, `servers`, `chat`, `settings`, and `profiles`. The module `console` holds the lines and the field of the protocol console. The `chat` module also holds the Invitations panel and the name panel. The `app` module does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the name field".
 - `settings` reads the text of the settings file, and it writes new values into that text (D-087). It keeps the comments of the file.
 - `timeline` holds the rules that prepare a timeline entry for the window: the local time in the format that the settings give, the local date, and the groups of messages.
 - `palette` holds the colors of light mode and dark mode. A test examines the contrast of each color.

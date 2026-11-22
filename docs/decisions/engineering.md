@@ -395,6 +395,9 @@ Application:
 - The command `post --profile <name>` does not make a profile. If no profile has the name, the window shows the problem. The comparison of the names ignores the difference between capital letters and small letters.
 - A window cannot open or delete a profile that is open in a different window.
 - Each connection has a number. The numbers continue after a profile change, thus the application ignores an event from a connection of the earlier profile.
+- The setting for the protocol console shows and hides the console (D-094). The F12 key and the Close link of the console change the same setting.
+- The console records lines only while it shows. It keeps the last 200 lines, and it shows the time of each line with milliseconds, for example `14:02:07.120`.
+- The field of the console sends a line only while the user is signed in to a server. A line can have the maximum size that the protocol gives for a line.
 - The F12 key shows and hides the protocol console when the developer setting is on.
 
 **Reason.** Each rule is the final rule, or it is clearly temporary. The rules keep the version as small as the decisions permit.

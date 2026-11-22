@@ -1,10 +1,12 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use futures_util::{SinkExt, Stream, StreamExt, stream};
 use post_crypto::{Exchange, Fingerprint, Seed};
 use post_proto::{
     ClientMessage, ErrorCode, Host, Key, MAX_LINE_BYTES, Name, PROTOCOL_VERSION, Role,
-    ServerMessage,
+    ServerMessage, Timestamp,
 };
 use tokio::net::{TcpStream, lookup_host};
 use tokio::sync::mpsc;
@@ -26,7 +28,27 @@ type Socket = WebSocketStream<Transport>;
 pub enum Event {
     Connected(Link),
     Received(ServerMessage),
+    Line(Line),
     Disconnected(Disconnect),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Line {
+    pub time: Timestamp,
+    pub direction: Direction,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Sent,
+    Received,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Outgoing {
+    Message(ClientMessage),
+    Line(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +83,7 @@ pub struct Link {
     role: Role,
     server: Key,
     certificate: Option<Fingerprint>,
-    queue: mpsc::Sender<ClientMessage>,
+    queue: mpsc::Sender<Outgoing>,
 }
 
 impl Link {
@@ -71,7 +93,7 @@ impl Link {
         role: Role,
         server: Key,
         capacity: usize,
-    ) -> (Self, mpsc::Receiver<ClientMessage>) {
+    ) -> (Self, mpsc::Receiver<Outgoing>) {
         let (queue, messages) = mpsc::channel(capacity);
         let link = Self {
             name,
@@ -111,7 +133,12 @@ impl Link {
 
     #[must_use]
     pub fn send(&self, message: ClientMessage) -> bool {
-        self.queue.try_send(message).is_ok()
+        self.queue.try_send(Outgoing::Message(message)).is_ok()
+    }
+
+    #[must_use]
+    pub fn send_line(&self, line: String) -> bool {
+        line.len() <= MAX_LINE_BYTES && self.queue.try_send(Outgoing::Line(line)).is_ok()
     }
 }
 
@@ -125,11 +152,25 @@ struct SignIn {
     destination: Destination,
     identity: Identity,
     trust: Trust,
+    lines: Option<mpsc::UnboundedSender<Line>>,
 }
 
 struct Open {
+    wire: Wire,
+    queue: mpsc::Receiver<Outgoing>,
+}
+
+struct Wire {
     socket: Socket,
-    queue: mpsc::Receiver<ClientMessage>,
+    lines: Option<mpsc::UnboundedSender<Line>>,
+}
+
+type Step = Pin<Box<dyn Future<Output = Option<(Event, State)>> + Send>>;
+
+struct Watched {
+    lines: mpsc::UnboundedReceiver<Line>,
+    running: Option<Step>,
+    waiting: Option<Event>,
 }
 
 pub fn sign_in(
@@ -141,16 +182,62 @@ pub fn sign_in(
         destination,
         identity,
         trust,
+        lines: None,
     };
     stream::unfold(State::Start(Box::new(start)), step)
+}
+
+pub fn sign_in_with_lines(
+    destination: Destination,
+    identity: Identity,
+    trust: Trust,
+) -> impl Stream<Item = Event> + Send + 'static {
+    let (sender, lines) = mpsc::unbounded_channel();
+    let start = SignIn {
+        destination,
+        identity,
+        trust,
+        lines: Some(sender),
+    };
+    let watched = Watched {
+        lines,
+        running: Some(Box::pin(step(State::Start(Box::new(start))))),
+        waiting: None,
+    };
+    stream::unfold(watched, Watched::next)
+}
+
+impl Watched {
+    async fn next(mut self) -> Option<(Event, Self)> {
+        loop {
+            if let Ok(line) = self.lines.try_recv() {
+                return Some((Event::Line(line), self));
+            }
+            if let Some(event) = self.waiting.take() {
+                return Some((event, self));
+            }
+            let running = self.running.as_mut()?;
+            tokio::select! {
+                biased;
+                Some(line) = self.lines.recv() => return Some((Event::Line(line), self)),
+                outcome = running => {
+                    self.running = None;
+                    if let Some((event, state)) = outcome {
+                        self.waiting = Some(event);
+                        self.running = Some(Box::pin(step(state)));
+                    }
+                }
+            }
+        }
+    }
 }
 
 async fn step(state: State) -> Option<(Event, State)> {
     match state {
         State::Start(start) => Some(match start.open().await {
-            Ok((socket, link, queue)) => (
+            Ok((wire, link, queue)) => (
                 Event::Connected(link),
-                State::Open(Box::new(Open { socket, queue })),
+                State::Open(Box::new(Open { wire, queue })),
             ),
             Err(reason) => (Event::Disconnected(reason), State::End),
         }),
@@ -163,9 +250,13 @@ async fn step(state: State) -> Option<(Event, State)> {
 }
 
 impl SignIn {
-    async fn open(&self) -> Result<(Socket, Link, mpsc::Receiver<ClientMessage>), Disconnect> {
+    async fn open(&self) -> Result<(Wire, Link, mpsc::Receiver<Outgoing>), Disconnect> {
         let address = self.destination.address().to_string();
-        let (mut socket, certificate) = dial(&self.destination, self.trust.certificate).await?;
+        let (socket, certificate) = dial(&self.destination, self.trust.certificate).await?;
+        let mut wire = Wire {
+            socket,
+            lines: self.lines.clone(),
+        };
         let client = post_crypto::nonce();
         let hello = ClientMessage::Hello {
             reference: None,
@@ -174,14 +265,14 @@ impl SignIn {
             nonce: client,
             supports: Vec::new(),
         };
-        write(&mut socket, &hello).await?;
+        wire.write(&hello).await?;
         let ServerMessage::Challenge {
             key: server,
             nonce,
             proof,
             requires,
             ..
-        } = answer(&mut socket).await?
+        } = wire.answer().await?
         else {
             return Err(Disconnect::Protocol);
         };
@@ -210,8 +301,8 @@ impl SignIn {
             proof,
             invitation: invitation.cloned(),
         };
-        write(&mut socket, &identify).await?;
-        let welcome = match answer(&mut socket).await {
+        wire.write(&identify).await?;
+        let welcome = match wire.answer().await {
             Err(Disconnect::Refused(ErrorCode::UnknownAccount)) => {
                 let invitation = invitation.ok_or(Disconnect::InvitationRequired)?;
                 let name = self
@@ -226,8 +317,8 @@ impl SignIn {
                     name: name.as_str().to_owned(),
                     invitation: invitation.clone(),
                 };
-                write(&mut socket, &register).await?;
-                answer(&mut socket).await?
+                wire.write(&register).await?;
+                wire.answer().await?
             }
             other => other?,
         };
@@ -235,15 +326,7 @@ impl SignIn {
             return Err(Disconnect::Protocol);
         };
         let (link, queue) = Link::channel(name, role, server, QUEUE_MESSAGES);
-        Ok((socket, link.with_certificate(certificate), queue))
-    }
-}
-
-async fn answer(socket: &mut Socket) -> Result<ServerMessage, Disconnect> {
-    match timeout(ANSWER_TIMEOUT, read(socket)).await {
-        Ok(Ok(ServerMessage::Error { code, .. })) => Err(Disconnect::Refused(code)),
-        Ok(answer) => answer,
-        Err(_) => Err(Disconnect::Unreachable),
+        Ok((wire, link.with_certificate(certificate), queue))
     }
 }
 
@@ -295,23 +378,54 @@ impl From<tls::Problem> for Disconnect {
     }
 }
 
-async fn read(socket: &mut Socket) -> Result<ServerMessage, Disconnect> {
-    loop {
-        match socket.next().await {
-            Some(Ok(Message::Text(line))) => {
-                return ServerMessage::decode(line.as_str()).map_err(|_| Disconnect::Protocol);
+impl Wire {
+    async fn read(&mut self) -> Result<ServerMessage, Disconnect> {
+        loop {
+            match self.socket.next().await {
+                Some(Ok(Message::Text(line))) => {
+                    self.record(Direction::Received, || line.as_str().to_owned());
+                    return ServerMessage::decode(line.as_str()).map_err(|_| Disconnect::Protocol);
+                }
+                Some(Ok(Message::Binary(_))) => return Err(Disconnect::Protocol),
+                Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {}
+                Some(Ok(Message::Close(_)) | Err(_)) | None => return Err(Disconnect::Closed),
             }
-            Some(Ok(Message::Binary(_))) => return Err(Disconnect::Protocol),
-            Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {}
-            Some(Ok(Message::Close(_)) | Err(_)) | None => return Err(Disconnect::Closed),
         }
     }
-}
 
-async fn write(socket: &mut Socket, message: &ClientMessage) -> Result<(), Disconnect> {
-    match timeout(ANSWER_TIMEOUT, socket.send(Message::text(message.encode()))).await {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(_)) | Err(_) => Err(Disconnect::Closed),
+    async fn answer(&mut self) -> Result<ServerMessage, Disconnect> {
+        match timeout(ANSWER_TIMEOUT, self.read()).await {
+            Ok(Ok(ServerMessage::Error { code, .. })) => Err(Disconnect::Refused(code)),
+            Ok(answer) => answer,
+            Err(_) => Err(Disconnect::Unreachable),
+        }
+    }
+
+    async fn write(&mut self, message: &ClientMessage) -> Result<(), Disconnect> {
+        self.write_line(message.encode()).await
+    }
+
+    async fn write_line(&mut self, line: String) -> Result<(), Disconnect> {
+        let copy = self.lines.as_ref().map(|_| line.clone());
+        match timeout(ANSWER_TIMEOUT, self.socket.send(Message::text(line))).await {
+            Ok(Ok(())) => {
+                if let Some(copy) = copy {
+                    self.record(Direction::Sent, || copy);
+                }
+                Ok(())
+            }
+            Ok(Err(_)) | Err(_) => Err(Disconnect::Closed),
+        }
+    }
+
+    fn record(&self, direction: Direction, text: impl FnOnce() -> String) {
+        if let Some(lines) = &self.lines {
+            let _ = lines.send(Line {
+                time: Timestamp::now(),
+                direction,
+                text: text(),
+            });
+        }
     }
 }
 
@@ -319,13 +433,14 @@ impl Open {
     async fn next(&mut self) -> Result<ServerMessage, Disconnect> {
         loop {
             tokio::select! {
-                message = read(&mut self.socket) => return message,
-                command = self.queue.recv() => {
-                    let Some(message) = command else {
-                        let _ = timeout(ANSWER_TIMEOUT, self.socket.close(None)).await;
+                message = self.wire.read() => return message,
+                command = self.queue.recv() => match command {
+                    Some(Outgoing::Message(message)) => self.wire.write(&message).await?,
+                    Some(Outgoing::Line(line)) => self.wire.write_line(line).await?,
+                    None => {
+                        let _ = timeout(ANSWER_TIMEOUT, self.wire.socket.close(None)).await;
                         return Err(Disconnect::Closed);
-                    };
-                    write(&mut self.socket, &message).await?;
+                    }
                 }
             }
         }

@@ -295,7 +295,7 @@ fn subscription(shell: &Shell) -> Subscription<Message> {
                     seed: sign_in.seed.clone(),
                     name: sign_in.target.name.clone(),
                 };
-                post_client::sign_in(
+                post_client::sign_in_with_lines(
                     sign_in.target.destination.clone(),
                     identity,
                     sign_in.target.trust,
@@ -338,6 +338,9 @@ fn shortcut(event: &Event, status: event::Status) -> Option<Message> {
     let size = |message| Some(Message::Settings(message));
     match (key.as_ref(), status) {
         (Key::Named(Named::Escape), _) => Some(Message::Back),
+        (Key::Named(Named::F12), _) => {
+            Some(Message::Settings(app::settings::Message::ConsoleFlipped))
+        }
         (Key::Named(Named::Tab), event::Status::Ignored) => Some(if modifiers.shift() {
             Message::FocusPrevious
         } else {
@@ -420,6 +423,21 @@ mod tests {
         for status in [Status::Ignored, Status::Captured] {
             assert!(
                 matches!(shortcut(&event, status), Some(Message::Back)),
+                "{status:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_f12_key_shows_and_hides_the_console() {
+        let event = pressed(Key::Named(Named::F12), Modifiers::empty());
+
+        for status in [Status::Ignored, Status::Captured] {
+            assert!(
+                matches!(
+                    shortcut(&event, status),
+                    Some(Message::Settings(settings::Message::ConsoleFlipped))
+                ),
                 "{status:?}"
             );
         }

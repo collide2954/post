@@ -18,7 +18,7 @@ seconds = false
 # The size of the text in percent, from 80 to 200.
 text-size = 100
 
-# Show the protocol console with the F12 key. This setting is for developers.
+# Show the protocol console. The F12 key also changes this setting. It is for developers.
 console = false
 ";
 

@@ -110,6 +110,14 @@ settings-problem-syntax = El archivo de configuración no es TOML válido. Post 
 settings-problem-value = El valor de "{ $key }" en el archivo de configuración no es válido. Post usa el valor predeterminado.
 settings-not-saved = Post no pudo escribir el archivo de configuración.
 
+console-title = Consola del protocolo
+console-empty = La consola muestra las líneas de una conexión.
+console-input-placeholder = Una línea JSON para el servidor
+console-send-button = Enviar
+console-clear-button = Limpiar
+console-close-button = Cerrar
+console-not-sent = Post no envió la línea. Una línea necesita una conexión abierta.
+
 invitations-title = Invitaciones
 invitations-ends-label = Termina después de
 invitations-lifetime-day = 1 día
