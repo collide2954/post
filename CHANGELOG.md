@@ -2,6 +2,17 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.2.1 - 2026-11-22
+
+This version is the first step to version 0.3 (D-180). The server has channels. The application does not show them at this time.
+
+- Add channels to the server. A member makes a public or a private channel, joins a public channel, and leaves a channel (D-006, D-185).
+- Send a text only to the members of its channel.
+- Add the messages `channel-create`, `join`, `leave`, and `channels` to the protocol. After the sign-in, the server sends a `channel` message for each channel of the user, and then a `ready` message.
+- Add the rules for channels and their members to the proved core of the server (D-178).
+- Keep the channels in the database. The server changes the data of version 0.2 to the new form at its start.
+- Run the proofs in the commit hook only when a commit changes a proved crate.
+
 ## 0.2.0 - 2026-11-22
 
 Version 0.2 adds identity and the connection across a network (D-100, D-173). The versions 0.1.3 to 0.1.6 added the accounts, the invitations, the proved rules of the server, TLS, the Servers screen, the handle change in the protocol, and the page for an invite link.
