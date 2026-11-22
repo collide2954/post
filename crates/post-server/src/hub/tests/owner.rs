@@ -173,7 +173,7 @@ fn answers_with_a_server_error_when_it_cannot_store_a_change_of_a_channel() {
     );
 }
 
-fn rename(reference: u32, channel: &str, name: &str) -> String {
+pub(super) fn rename(reference: u32, channel: &str, name: &str) -> String {
     ClientMessage::ChannelRename {
         reference: Some(reference),
         channel: channel.to_owned(),
@@ -182,7 +182,7 @@ fn rename(reference: u32, channel: &str, name: &str) -> String {
     .encode()
 }
 
-fn renamed(reference: Option<u32>, old: &str, new: &str) -> ServerMessage {
+pub(super) fn renamed(reference: Option<u32>, old: &str, new: &str) -> ServerMessage {
     ServerMessage::ChannelRename {
         reference,
         channel: channel(old),
@@ -279,7 +279,7 @@ fn refuses_a_new_name_of_a_channel_that_breaks_a_rule() {
     }
 }
 
-fn delete(reference: u32, channel: &str) -> String {
+pub(super) fn delete(reference: u32, channel: &str) -> String {
     ClientMessage::ChannelDelete {
         reference: Some(reference),
         channel: channel.to_owned(),
@@ -287,7 +287,7 @@ fn delete(reference: u32, channel: &str) -> String {
     .encode()
 }
 
-fn deleted(reference: Option<u32>, title: &str) -> ServerMessage {
+pub(super) fn deleted(reference: Option<u32>, title: &str) -> ServerMessage {
     ServerMessage::ChannelDelete {
         reference,
         channel: channel(title),
@@ -362,7 +362,7 @@ fn refuses_to_delete_a_channel_for_a_user_who_is_not_its_owner() {
     assert_eq!(sent.len(), 2);
 }
 
-fn give(reference: u32, channel: &str, name: &str) -> String {
+pub(super) fn give(reference: u32, channel: &str, name: &str) -> String {
     ClientMessage::ChannelGive {
         reference: Some(reference),
         channel: channel.to_owned(),
@@ -371,7 +371,7 @@ fn give(reference: u32, channel: &str, name: &str) -> String {
     .encode()
 }
 
-fn given(reference: Option<u32>, title: &str, to: &str) -> ServerMessage {
+pub(super) fn given(reference: Option<u32>, title: &str, to: &str) -> ServerMessage {
     ServerMessage::ChannelGive {
         reference,
         channel: channel(title),

@@ -28,9 +28,7 @@ impl Hub {
             }),
         )
     }
-}
 
-impl Hub {
     pub(super) fn rename_channel(
         &mut self,
         request: &Request<'_>,
@@ -51,18 +49,20 @@ impl Hub {
                 ChannelRenameError::NameTaken => ErrorCode::NameTaken,
             })?;
         let channel = self.channels.by_id(id).ok_or(ErrorCode::ServerError)?;
-        Ok(
-            self.to_each_member_of(channel, |to| ServerMessage::ChannelRename {
-                reference: request.reference.filter(|_| to == request.from),
-                channel: old.clone(),
-                name: new.clone(),
-                time: request.now,
-            }),
-        )
+        Ok(self
+            .connections_that_know(channel)
+            .map(|to| Outgoing {
+                to,
+                message: ServerMessage::ChannelRename {
+                    reference: request.reference.filter(|_| to == request.from),
+                    channel: old.clone(),
+                    name: new.clone(),
+                    time: request.now,
+                },
+            })
+            .collect())
     }
-}
 
-impl Hub {
     pub(super) fn give_channel(
         &mut self,
         request: &Request<'_>,
@@ -87,21 +87,21 @@ impl Hub {
                 GiveError::TooMany => ErrorCode::TooManyChannels,
             })?;
         let channel = self.channels.by_id(id).ok_or(ErrorCode::ServerError)?;
-        Ok(
-            self.to_each_member_of(channel, |to| ServerMessage::ChannelGive {
-                reference: request.reference.filter(|_| to == request.from),
-                channel: channel.name.clone(),
-                name: name.clone(),
-                time: request.now,
-            }),
-        )
+        let mut outgoing = self.to_each_member_of(channel, |to| ServerMessage::ChannelGive {
+            reference: request.reference.filter(|_| to == request.from),
+            channel: channel.name.clone(),
+            name: name.clone(),
+            time: request.now,
+        });
+        outgoing.extend(self.invitations_of(channel));
+        Ok(outgoing)
     }
 
     pub(super) fn delete_channel(&mut self, request: &Request<'_>, channel: &str) -> Answer {
         let member = present(request.state)?;
         let found = self.visible(member.account, channel)?;
         let (id, name) = (found.id, found.name.clone());
-        let receivers: Vec<ConnectionId> = self.connections_in(found).collect();
+        let receivers: Vec<ConnectionId> = self.connections_that_know(found).collect();
         self.channels
             .delete(&mut self.store, member.account, id)
             .map_err(|_| ErrorCode::ServerError)?

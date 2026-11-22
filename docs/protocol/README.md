@@ -398,7 +398,7 @@ The `channel-rename` message changes the name of a channel.
 | `channel` | The present name of the channel. |
 | `name` | The new name of the channel. |
 
-The server answers with a `channel-rename` message or with an `error` message. Each member of the channel gets the `channel-rename` message.
+The server answers with a `channel-rename` message or with an `error` message. Each member of the channel gets the `channel-rename` message. Each user who has an invitation to the channel also gets it.
 
 - If the new name does not obey the rules for a channel name, the error is `invalid-channel-name`.
 - If the user is not the owner of the channel, the error is `not-permitted`.
@@ -420,6 +420,8 @@ The `channel-give` message gives a channel to a different member of the channel.
 
 The server answers with a `channel-give` message or with an `error` message. Each member of the channel gets the `channel-give` message.
 
+If the channel has open invitations, the server then sends a `channel-invite` message for each of them. The new owner and the invited user get that message. It gives the name of the new owner.
+
 - If the user is not the owner of the channel, the error is `not-permitted`.
 - If the server has no user with the name, the error is `no-such-user`.
 - If the user with the name is not a member of the channel, the error is `no-such-member`.
@@ -435,7 +437,7 @@ The `channel-delete` message deletes a channel. The server cannot get the channe
 | `ref` | Optional. |
 | `channel` | The name of the channel. |
 
-The server answers with a `channel-delete` message or with an `error` message. Each member of the channel gets the `channel-delete` message.
+The server answers with a `channel-delete` message or with an `error` message. Each member of the channel gets the `channel-delete` message. Each user who has an invitation to the channel also gets it.
 
 - If the user is not the owner of the channel, the error is `not-permitted`.
 
@@ -628,7 +630,12 @@ Each entry of the list is an object with these fields:
 
 ### `rename`
 
-The `rename` message tells that a user has a new name. The server sends it to each user who shares a channel with that user, and to the user with the new name.
+The `rename` message tells that a user has a new name. The server sends it to these users:
+
+- The user with the new name.
+- Each user who shares a channel with that user.
+- The owner of each private channel that the user has an invitation to.
+- Each user who has an invitation to a private channel that the user owns.
 
 | Field | Value |
 |---|---|
@@ -653,7 +660,7 @@ The `channel-topic` message tells that a channel has a new topic. The server sen
 
 ### `channel-rename`
 
-The `channel-rename` message tells that a channel has a new name. The server sends it to each member of the channel. The messages that follow use the new name.
+The `channel-rename` message tells that a channel has a new name. The server sends it to each member of the channel and to each user who has an invitation to the channel. The messages that follow use the new name.
 
 | Field | Value |
 |---|---|
@@ -677,7 +684,7 @@ The `channel-give` message tells that a channel has a new owner. The server send
 
 ### `channel-delete`
 
-The `channel-delete` message tells that the owner deleted a channel. The server sends it to each member of the channel. After this message, the channel has no members.
+The `channel-delete` message tells that the owner deleted a channel. The server sends it to each member of the channel and to each user who has an invitation to the channel. After this message, the channel has no members and no invitations.
 
 | Field | Value |
 |---|---|
@@ -691,6 +698,7 @@ The `channel-delete` message tells that the owner deleted a channel. The server 
 The `channel-invite` message tells that a user has an invitation to a private channel. The server sends it in these conditions:
 
 - When the owner invites a user. The owner and the invited user get the message.
+- When a channel that has open invitations gets a new owner. The new owner and the invited user get the message.
 - After the `welcome` message, one time for each open invitation that the user can see.
 
 | Field | Value |

@@ -115,6 +115,14 @@ impl Hub {
             if channel.is_member(account) {
                 connections.extend(self.connections_in(channel));
             }
+            if channel.owner == account {
+                let invited = channel.invited.iter();
+                connections
+                    .extend(invited.flat_map(|invited| self.connections_of(invited.account)));
+            }
+            if channel.is_invited(account) {
+                connections.extend(self.connections_of(channel.owner));
+            }
         }
         connections
     }
@@ -190,6 +198,19 @@ impl Hub {
             .members
             .iter()
             .flat_map(move |member| self.connections_of(member.account))
+    }
+
+    pub(super) fn connections_that_know(
+        &self,
+        channel: &Channel,
+    ) -> impl Iterator<Item = ConnectionId> {
+        let invited = channel.invited.iter().map(|invited| invited.account);
+        channel
+            .members
+            .iter()
+            .map(|member| member.account)
+            .chain(invited)
+            .flat_map(move |account| self.connections_of(account))
     }
 
     pub(super) fn to_each_member_of(

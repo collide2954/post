@@ -1,5 +1,5 @@
 use post_proto::{ErrorCode, Name, ServerMessage};
-use post_rules::{AccountId, ChannelInviteError, InvitationError, RefuseError};
+use post_rules::{AccountId, Channel, ChannelInviteError, InvitationError, Invited, RefuseError};
 
 use super::{Answer, ConnectionId, Hub, Outgoing, Request, present};
 
@@ -101,31 +101,44 @@ impl Hub {
 
     pub(super) fn invitation_states(&self, to: ConnectionId, account: AccountId) -> Vec<Outgoing> {
         let (channels, _) = self.channels.rows();
+        channels
+            .iter()
+            .flat_map(|channel| {
+                channel
+                    .invited
+                    .iter()
+                    .filter(move |invited| invited.account == account || channel.owner == account)
+                    .filter_map(move |invited| self.invitation_message(channel, invited))
+            })
+            .map(|message| Outgoing { to, message })
+            .collect()
+    }
+
+    pub(super) fn invitations_of(&self, channel: &Channel) -> Vec<Outgoing> {
         let mut outgoing = Vec::new();
-        for channel in channels {
-            let Some(owner) = self.rules.name_of(channel.owner) else {
+        for invited in &channel.invited {
+            let Some(message) = self.invitation_message(channel, invited) else {
                 continue;
             };
-            for invitation in &channel.invited {
-                if invitation.account != account && channel.owner != account {
-                    continue;
-                }
-                let Some(name) = self.rules.name_of(invitation.account) else {
-                    continue;
-                };
-                outgoing.push(Outgoing {
-                    to,
-                    message: ServerMessage::ChannelInvite {
-                        reference: None,
-                        channel: channel.name.clone(),
-                        name: name.clone(),
-                        owner: owner.clone(),
-                        time: invitation.created,
-                    },
-                });
-            }
+            let receivers = self
+                .connections_of(channel.owner)
+                .chain(self.connections_of(invited.account));
+            outgoing.extend(receivers.map(|to| Outgoing {
+                to,
+                message: message.clone(),
+            }));
         }
         outgoing
+    }
+
+    fn invitation_message(&self, channel: &Channel, invited: &Invited) -> Option<ServerMessage> {
+        Some(ServerMessage::ChannelInvite {
+            reference: None,
+            channel: channel.name.clone(),
+            name: self.rules.name_of(invited.account)?.clone(),
+            owner: self.rules.name_of(channel.owner)?.clone(),
+            time: invited.created,
+        })
     }
 
     fn to_the_two(

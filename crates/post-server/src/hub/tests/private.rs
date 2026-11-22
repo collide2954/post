@@ -1,6 +1,7 @@
 use post_proto::{ChannelKind, ClientMessage, ErrorCode, ListedChannel, Role, ServerMessage};
 
 use super::channels::{create, join, joined, leave, list, signed_in_again, state, with_general};
+use super::owner::{delete, deleted, give, given, rename as rename_channel, renamed};
 use super::{challenged, channel, error, identify, later, name, now, ready, to, welcome};
 use crate::hub::{ConnectionId, Hub};
 
@@ -369,4 +370,81 @@ fn refuses_to_end_an_invitation_when_a_rule_does_not_permit_it() {
             "{title}"
         );
     }
+}
+
+#[test]
+fn tells_an_invited_user_about_the_new_name_of_the_channel() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+
+    let outgoing = hub.receive(ids[0], &rename_channel(4, "secret", "hidden"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], renamed(Some(4), "secret", "hidden")),
+            to(ids[1], renamed(None, "secret", "hidden")),
+        ]
+    );
+}
+
+#[test]
+fn tells_an_invited_user_that_the_owner_deleted_the_channel() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+
+    let outgoing = hub.receive(ids[0], &delete(4, "secret"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], deleted(Some(4), "secret")),
+            to(ids[1], deleted(None, "secret")),
+        ]
+    );
+}
+
+#[test]
+fn gives_the_open_invitations_to_the_new_owner_of_a_channel() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+    hub.receive(ids[1], &join(4, "secret"), now());
+    hub.receive(ids[0], &invite(5, "secret", "cy"), later());
+
+    let outgoing = hub.receive(ids[0], &give(6, "secret", "ben"), later());
+
+    let invitation = ServerMessage::ChannelInvite {
+        reference: None,
+        channel: channel("secret"),
+        name: name("cy"),
+        owner: name("ben"),
+        time: later(),
+    };
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], given(Some(6), "secret", "ben")),
+            to(ids[1], given(None, "secret", "ben")),
+            to(ids[1], invitation.clone()),
+            to(ids[2], invitation),
+        ]
+    );
+}
+
+#[test]
+fn tells_the_owner_and_the_invited_user_about_a_new_name_of_the_other_user() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+    let receivers = |outgoing: Vec<super::Outgoing>| -> Vec<ConnectionId> {
+        outgoing.into_iter().map(|outgoing| outgoing.to).collect()
+    };
+
+    let outgoing = hub.receive(ids[1], &super::rename(4, "benito"), later());
+    assert_eq!(receivers(outgoing), [ids[0], ids[1]]);
+
+    let outgoing = hub.receive(ids[0], &super::rename(5, "anna"), later());
+    assert_eq!(receivers(outgoing), [ids[0], ids[1]]);
+
+    let outgoing = hub.receive(ids[2], &super::rename(6, "cyrus"), later());
+    assert_eq!(receivers(outgoing), [ids[2]]);
 }
