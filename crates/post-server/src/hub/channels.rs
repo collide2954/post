@@ -155,7 +155,7 @@ impl Hub {
             .collect())
     }
 
-    fn visible(&self, account: AccountId, channel: &str) -> Result<&Channel, Refused> {
+    pub(super) fn visible(&self, account: AccountId, channel: &str) -> Result<&Channel, Refused> {
         let name = ChannelName::parse(channel).map_err(|_| ErrorCode::NoSuchChannel)?;
         let channel = self
             .channels
@@ -192,7 +192,7 @@ impl Hub {
             .flat_map(move |member| self.connections_of(member.account))
     }
 
-    fn to_each_member_of(
+    pub(super) fn to_each_member_of(
         &self,
         channel: &Channel,
         message: impl Fn(ConnectionId) -> ServerMessage,

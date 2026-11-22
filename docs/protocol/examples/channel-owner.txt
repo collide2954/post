@@ -1,0 +1,28 @@
+# The owner of a channel changes the channel.
+# The lines show the connection of the user "ana". She has an account on the server.
+# "C:" is a line from the client. "S:" is a line from the server.
+
+# Ana signs in. She is the owner of the channel "general" and a member of the channel "dev".
+C: {"type":"hello","protocol":0,"address":"chat.example.org:443","nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","supports":[]}
+S: {"type":"challenge","protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI","proof":"ZeA2ResstAfHtxRGEs6knEtI14hfp-IrwWCnVdDajcWimrtB6_yXo33nRHzuebREmPcb2GQo1XPcZONrCBKXCw","requires":[]}
+C: {"type":"identify","key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
+S: {"type":"welcome","name":"ana","role":"member"}
+S: {"type":"channel","channel":"dev","kind":"public","topic":"","owner":"ben","created":"2026-11-21T13:00:00.000Z"}
+S: {"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T13:30:00.000Z"}
+S: {"type":"ready"}
+
+# Ana gives a topic to her channel. Each member of the channel gets the message.
+C: {"type":"channel-topic","ref":1,"channel":"general","topic":"Plans for the week"}
+S: {"type":"channel-topic","ref":1,"channel":"general","topic":"Plans for the week","by":"ana","time":"2026-11-21T14:06:00.000Z"}
+
+# A topic is one line of text.
+C: {"type":"channel-topic","ref":2,"channel":"general","topic":"two\nlines"}
+S: {"type":"error","ref":2,"code":"invalid-topic","text":"A topic is one line of text with a maximum of 300 characters."}
+
+# Ben is the owner of the channel "dev", thus Ana cannot change its topic.
+C: {"type":"channel-topic","ref":3,"channel":"dev","topic":"Plans"}
+S: {"type":"error","ref":3,"code":"not-permitted","text":"Your account does not have the permission for this request."}
+
+# An empty text removes the topic.
+C: {"type":"channel-topic","ref":4,"channel":"general","topic":""}
+S: {"type":"channel-topic","ref":4,"channel":"general","topic":"","by":"ana","time":"2026-11-21T14:07:00.000Z"}

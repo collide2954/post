@@ -183,6 +183,7 @@ A member of the server can make a channel. That member is the owner of the chann
 - A public channel is in the channel list of the server. A private channel is not in the list.
 - A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel.
 - An account can be the owner of a maximum of 10 channels.
+- A channel has a topic. The topic is one line of text with a maximum of 300 characters. It can be empty. Only the owner changes the topic.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
 
 After the `welcome` message, the server sends one `channel` message for each channel that the user is a member of. Then it sends a `ready` message.
@@ -360,6 +361,22 @@ The `channels` message asks for the channel list of the server.
 
 The server answers with one or more `channels` messages, or with an `error` message.
 
+### `channel-topic`
+
+The `channel-topic` message changes the topic of a channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-topic"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+| `topic` | The new topic. An empty text removes the topic. |
+
+The server answers with a `channel-topic` message or with an `error` message. Each member of the channel gets the `channel-topic` message.
+
+- If the topic has a line break or a different control character, or if it has more than 300 characters, the error is `invalid-topic`.
+- If the user is not the owner of the channel, the error is `not-permitted`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -509,6 +526,19 @@ The `rename` message tells that a user has a new name. The server sends it to ea
 | `new` | The new name of the user. |
 | `time` | The time of the change. |
 
+### `channel-topic`
+
+The `channel-topic` message tells that a channel has a new topic. The server sends it to each member of the channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-topic"` |
+| `ref` | The value from the `channel-topic` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The name of the channel. |
+| `topic` | The new topic of the channel. The topic can be empty. |
+| `by` | The name of the user who changed the topic. |
+| `time` | The time of the change. |
+
 ### `error`
 
 The `error` message refuses a message from the client. The connection stays open.
@@ -548,6 +578,7 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `already-member` | The user is already a member of the channel. |
 | `not-member` | The user is not a member of the channel. |
 | `owner-cannot-leave` | The owner of a channel cannot leave it. |
+| `invalid-topic` | The topic does not obey the rules for a topic. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations

@@ -530,6 +530,8 @@ Protocol:
 - A message identifies a channel by its name. The protocol does not show the number of a channel.
 - The type of a message that manages a channel starts with `channel-`, for example `channel-create`.
 - After the sign-in, the server sends the state of each channel of the user. A `ready` message then tells that the state is complete.
+- A private channel that the user cannot see gives the same error as a channel that does not exist.
+- A topic that is empty removes the topic of the channel.
 
 Presence and the typing indicator:
 
@@ -541,6 +543,8 @@ Presence and the typing indicator:
 Application:
 
 - After a connection stops, the application waits 1 second and then tries again. Each later wait is two times the wait before it, to a maximum of 60 seconds.
+- After the sign-in, the application shows the first channel of the user in the sequence of the names. If the user is not a member of a channel, the application opens the Channels panel.
+- If the user leaves the channel that the window shows, the window shows the first channel that stays.
 - Hide and mute (D-150) come in version 0.4 with the unread counts.
 - The quick switcher (D-079) comes in version 0.3.
 - The member list shows the members of the chat in the pane that has the focus.

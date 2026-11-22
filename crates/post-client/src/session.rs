@@ -285,7 +285,9 @@ impl Session {
             ServerMessage::Invitations { list, .. } => self.invitations = Some(list),
             ServerMessage::Rename { old, new, time, .. } => self.renamed(&old, &new, time),
             ServerMessage::Error { code, .. } => self.problem = Some(code),
-            ServerMessage::Welcome { .. } | ServerMessage::Challenge { .. } => {}
+            ServerMessage::Welcome { .. }
+            | ServerMessage::Challenge { .. }
+            | ServerMessage::ChannelTopic { .. } => {}
         }
     }
 

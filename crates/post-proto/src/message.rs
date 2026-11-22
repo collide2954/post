@@ -131,6 +131,16 @@ pub enum ClientMessage {
         #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
         reference: Option<u32>,
     },
+    /// Changes the topic of a channel. Only the owner of the channel can change it.
+    ChannelTopic {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+        /// The new topic. An empty text removes the topic.
+        topic: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -247,6 +257,20 @@ pub enum ServerMessage {
         /// The time of the change.
         time: Timestamp,
     },
+    /// Tells that a channel has a new topic.
+    ChannelTopic {
+        /// The number from the `channel-topic` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The new topic of the channel. The topic can be empty.
+        topic: String,
+        /// The name of the user who changed the topic.
+        by: Name,
+        /// The time of the change.
+        time: Timestamp,
+    },
     /// Refuses a message from the client.
     Error {
         /// The number from the refused message, if it had one.
@@ -345,6 +369,8 @@ pub enum ErrorCode {
     NotMember,
     /// The owner of a channel cannot leave it.
     OwnerCannotLeave,
+    /// The topic does not obey the rules for a topic.
+    InvalidTopic,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -384,7 +410,8 @@ impl ClientMessage {
             | Self::ChannelCreate { reference, .. }
             | Self::Join { reference, .. }
             | Self::Leave { reference, .. }
-            | Self::Channels { reference } => *reference,
+            | Self::Channels { reference }
+            | Self::ChannelTopic { reference, .. } => *reference,
         }
     }
 
@@ -452,6 +479,7 @@ impl ErrorCode {
             Self::AlreadyMember => "The user is already a member of this channel.",
             Self::NotMember => "You are not a member of this channel.",
             Self::OwnerCannotLeave => "The owner of a channel cannot leave it.",
+            Self::InvalidTopic => "A topic is one line of text with a maximum of 300 characters.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }

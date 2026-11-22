@@ -343,6 +343,7 @@ pub fn error_text(code: ErrorCode) -> Text {
         ErrorCode::AlreadyMember => Text::ErrorAlreadyMember,
         ErrorCode::NotMember => Text::ErrorNotMember,
         ErrorCode::OwnerCannotLeave => Text::ErrorOwnerCannotLeave,
+        ErrorCode::InvalidTopic => Text::ErrorInvalidTopic,
         ErrorCode::BadMessage
         | ErrorCode::HelloRequired
         | ErrorCode::DuplicateHello
@@ -1151,6 +1152,7 @@ mod tests {
             (ErrorCode::AlreadyMember, Text::ErrorAlreadyMember),
             (ErrorCode::NotMember, Text::ErrorNotMember),
             (ErrorCode::OwnerCannotLeave, Text::ErrorOwnerCannotLeave),
+            (ErrorCode::InvalidTopic, Text::ErrorInvalidTopic),
             (ErrorCode::BadMessage, Text::ErrorOther),
             (ErrorCode::HelloRequired, Text::ErrorOther),
             (ErrorCode::DuplicateHello, Text::ErrorOther),

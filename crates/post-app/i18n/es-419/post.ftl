@@ -56,6 +56,7 @@ error-too-many-channels = La cuenta ya es dueña del número máximo de canales.
 error-already-member = El usuario ya es miembro de este canal.
 error-not-member = No eres miembro de este canal.
 error-owner-cannot-leave = El dueño de un canal no puede salir de él.
+error-invalid-topic = Un tema es una línea de texto con un máximo de 300 caracteres.
 error-empty-text = Un mensaje debe tener texto.
 error-text-too-long = Un mensaje puede tener 4000 caracteres como máximo.
 error-other = El servidor rechazó la solicitud.

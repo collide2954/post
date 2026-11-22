@@ -12,6 +12,7 @@ use super::{ConnectionId, Hub, Outgoing, Random, Settings};
 use crate::store::{Store, StoreError};
 
 mod channels;
+mod owner;
 
 fn ready() -> ServerMessage {
     ServerMessage::Ready {}

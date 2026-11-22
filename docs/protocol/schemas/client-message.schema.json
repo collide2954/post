@@ -402,6 +402,39 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Changes the topic of a channel. Only the owner of the channel can change it.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "topic": {
+          "description": "The new topic. An empty text removes the topic.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-topic"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "topic"
+      ]
     }
   ],
   "$defs": {

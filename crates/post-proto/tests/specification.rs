@@ -125,6 +125,7 @@ fn the_schemas_list_each_message_type() {
         client,
         [
             "channel-create",
+            "channel-topic",
             "channels",
             "hello",
             "identify",
@@ -147,6 +148,7 @@ fn the_schemas_list_each_message_type() {
         [
             "challenge",
             "channel",
+            "channel-topic",
             "channels",
             "error",
             "invitations",

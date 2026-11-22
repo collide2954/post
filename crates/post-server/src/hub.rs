@@ -15,6 +15,7 @@ use post_rules::{
 use crate::store::{Store, StoreError, Stored};
 
 mod channels;
+mod owner;
 
 pub use channels::CHANNEL_LIMITS;
 
@@ -221,6 +222,9 @@ impl Hub {
             ClientMessage::Join { channel, .. } => self.join_channel(request, &channel),
             ClientMessage::Leave { channel, .. } => self.leave_channel(request, &channel),
             ClientMessage::Channels { .. } => self.list_channels(request),
+            ClientMessage::ChannelTopic { channel, topic, .. } => {
+                self.set_topic(request, &channel, &topic)
+            }
         }
     }
 

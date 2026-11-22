@@ -46,8 +46,30 @@ fn channel(text: &str) -> ChannelName {
 
 fn client_examples() -> Vec<(ClientMessage, &'static str)> {
     let mut examples = channel_requests();
+    examples.extend(owner_requests());
     examples.extend(other_requests());
     examples
+}
+
+fn owner_requests() -> Vec<(ClientMessage, &'static str)> {
+    vec![
+        (
+            ClientMessage::ChannelTopic {
+                reference: Some(9),
+                channel: "general".to_owned(),
+                topic: "Plans for the week".to_owned(),
+            },
+            r#"{"type":"channel-topic","ref":9,"channel":"general","topic":"Plans for the week"}"#,
+        ),
+        (
+            ClientMessage::ChannelTopic {
+                reference: None,
+                channel: "general".to_owned(),
+                topic: String::new(),
+            },
+            r#"{"type":"channel-topic","channel":"general","topic":""}"#,
+        ),
+    ]
 }
 
 fn channel_requests() -> Vec<(ClientMessage, &'static str)> {
@@ -270,7 +292,33 @@ fn server_examples() -> Vec<(ServerMessage, &'static str)> {
 fn all_server_examples() -> Vec<(ServerMessage, &'static str)> {
     let mut examples = server_examples();
     examples.extend(server_list_examples());
+    examples.extend(owner_events());
     examples
+}
+
+fn owner_events() -> Vec<(ServerMessage, &'static str)> {
+    vec![
+        (
+            ServerMessage::ChannelTopic {
+                reference: Some(9),
+                channel: channel("general"),
+                topic: "Plans for the week".to_owned(),
+                by: name("ana"),
+                time: time("2026-11-21T14:06:00.000Z"),
+            },
+            r#"{"type":"channel-topic","ref":9,"channel":"general","topic":"Plans for the week","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelTopic {
+                reference: None,
+                channel: channel("general"),
+                topic: String::new(),
+                by: name("ana"),
+                time: time("2026-11-21T14:06:00.000Z"),
+            },
+            r#"{"type":"channel-topic","channel":"general","topic":"","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
+        ),
+    ]
 }
 
 fn server_list_examples() -> Vec<(ServerMessage, &'static str)> {
@@ -683,6 +731,18 @@ fn each_error_code_has_a_word_form_and_a_text() {
             "too-soon",
             "You changed your name a short time ago. Try again later.",
         ),
+    ];
+    examine_error_codes(&codes);
+}
+
+#[test]
+fn each_error_code_of_a_channel_has_a_word_form_and_a_text() {
+    let codes = [
+        (
+            ErrorCode::InvalidTopic,
+            "invalid-topic",
+            "A topic is one line of text with a maximum of 300 characters.",
+        ),
         (
             ErrorCode::InvalidChannelName,
             "invalid-channel-name",
@@ -773,6 +833,10 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"leave","channel":"general","name":"ben"}"#,
         r#"{"type":"channels","list":[]}"#,
         r#"{"type":"channels","more":true}"#,
+        r#"{"type":"channel-topic","channel":"general"}"#,
+        r#"{"type":"channel-topic","topic":"Plans"}"#,
+        r#"{"type":"channel-topic","channel":"general","topic":7}"#,
+        r#"{"type":"channel-topic","channel":"general","topic":"Plans","by":"ana"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -818,6 +882,10 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channels","list":[{"channel":"General","kind":"public","topic":"","members":1}]}"#,
         r#"{"type":"channels","list":[{"channel":"general","kind":"public","topic":"","members":1,"owner":"ana"}]}"#,
         r#"{"type":"channel-create","channel":"general","kind":"public"}"#,
+        r#"{"type":"channel-topic","channel":"general","topic":"Plans"}"#,
+        r#"{"type":"channel-topic","channel":"general","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
+        r#"{"type":"channel-topic","channel":"General","topic":"Plans","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
+        r#"{"type":"channel-topic","channel":"general","topic":"Plans","by":"Ana","time":"2026-11-21T14:06:00.000Z"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

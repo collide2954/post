@@ -366,6 +366,49 @@
       ]
     },
     {
+      "description": "Tells that a channel has a new topic.",
+      "type": "object",
+      "properties": {
+        "by": {
+          "description": "The name of the user who changed the topic.",
+          "$ref": "#/$defs/Name"
+        },
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "ref": {
+          "description": "The number from the `channel-topic` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time of the change.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "topic": {
+          "description": "The new topic of the channel. The topic can be empty.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-topic"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "topic",
+        "by",
+        "time"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {
@@ -547,6 +590,11 @@
           "description": "The owner of a channel cannot leave it.",
           "type": "string",
           "const": "owner-cannot-leave"
+        },
+        {
+          "description": "The topic does not obey the rules for a topic.",
+          "type": "string",
+          "const": "invalid-topic"
         },
         {
           "description": "The server has a problem and cannot do the task.",

@@ -9,7 +9,7 @@ use super::{
 use crate::hub::{ConnectionId, Hub};
 use crate::store::{Store, StoreError};
 
-fn create(reference: u32, channel: &str, kind: ChannelKind) -> String {
+pub(super) fn create(reference: u32, channel: &str, kind: ChannelKind) -> String {
     ClientMessage::ChannelCreate {
         reference: Some(reference),
         channel: channel.to_owned(),
@@ -29,7 +29,7 @@ fn state(reference: Option<u32>, title: &str, kind: ChannelKind, owner: &str) ->
     }
 }
 
-fn signed_in_again(hub: &mut Hub, person: u8) -> ConnectionId {
+pub(super) fn signed_in_again(hub: &mut Hub, person: u8) -> ConnectionId {
     let id = hub.connect();
     let server = challenged(hub, id, &[]);
     let line = identify(hub, person, &server, None);
@@ -221,7 +221,7 @@ fn does_not_start_with_channel_data_that_breaks_a_rule() {
     assert!(matches!(result, Err(StoreError::BrokenRules)));
 }
 
-fn join(reference: u32, channel: &str) -> String {
+pub(super) fn join(reference: u32, channel: &str) -> String {
     ClientMessage::Join {
         reference: Some(reference),
         channel: channel.to_owned(),
@@ -245,7 +245,7 @@ fn joined(title: &str, who: &str) -> ServerMessage {
     }
 }
 
-fn with_general() -> (Hub, Vec<ConnectionId>) {
+pub(super) fn with_general() -> (Hub, Vec<ConnectionId>) {
     let (mut hub, ids) = hub_with(&["ana", "ben", "cy"]);
     hub.receive(ids[0], &create(1, "general", ChannelKind::Public), now());
     (hub, ids)
@@ -487,7 +487,7 @@ fn examines_the_text_of_a_message_to_a_channel() {
     );
 }
 
-fn list(reference: u32) -> String {
+pub(super) fn list(reference: u32) -> String {
     ClientMessage::Channels {
         reference: Some(reference),
     }

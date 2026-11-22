@@ -75,6 +75,7 @@ texts! {
     ErrorAlreadyMember => "error-already-member",
     ErrorNotMember => "error-not-member",
     ErrorOwnerCannotLeave => "error-owner-cannot-leave",
+    ErrorInvalidTopic => "error-invalid-topic",
     ErrorInvalidName => "error-invalid-name",
     ErrorNameTaken => "error-name-taken",
     ErrorNoSuchChannel => "error-no-such-channel",
