@@ -267,6 +267,12 @@ impl Problem {
             Self::Disconnected(Disconnect::Unreachable) => Text::ProblemUnreachable,
             Self::Disconnected(Disconnect::Closed) => Text::ProblemClosed,
             Self::Disconnected(Disconnect::Protocol) => Text::ProblemProtocol,
+            Self::Disconnected(Disconnect::FalseServer) => Text::ProblemFalseServer,
+            Self::Disconnected(Disconnect::DifferentServer) => Text::ProblemDifferentServer,
+            Self::Disconnected(Disconnect::MissingParts) => Text::ProblemMissingParts,
+            Self::Disconnected(Disconnect::NameRequired) => Text::ProblemNameRequired,
+            Self::Disconnected(Disconnect::InvitationRequired) => Text::ProblemInvitationRequired,
+            Self::Disconnected(Disconnect::NoTls) => Text::ProblemNoTls,
             Self::Disconnected(Disconnect::Refused(code)) => error_text(code),
         }
     }
@@ -281,18 +287,18 @@ pub fn error_text(code: ErrorCode) -> Text {
         ErrorCode::NoSuchChannel => Text::ErrorNoSuchChannel,
         ErrorCode::EmptyText => Text::ErrorEmptyText,
         ErrorCode::TextTooLong => Text::ErrorTextTooLong,
+        ErrorCode::WrongAddress => Text::ErrorWrongAddress,
+        ErrorCode::AccountExists => Text::ErrorAccountExists,
+        ErrorCode::InvalidInvitation => Text::ErrorInvalidInvitation,
+        ErrorCode::MissingPart => Text::ProblemMissingParts,
+        ErrorCode::ServerError => Text::ErrorServer,
         ErrorCode::BadMessage
         | ErrorCode::HelloRequired
         | ErrorCode::DuplicateHello
-        | ErrorCode::WrongAddress
         | ErrorCode::IdentifyRequired
         | ErrorCode::DuplicateIdentify
         | ErrorCode::InvalidProof
-        | ErrorCode::UnknownAccount
-        | ErrorCode::AccountExists
-        | ErrorCode::InvalidInvitation
-        | ErrorCode::MissingPart
-        | ErrorCode::ServerError => Text::ErrorOther,
+        | ErrorCode::UnknownAccount => Text::ErrorOther,
     }
 }
 
@@ -768,6 +774,27 @@ mod tests {
                 Text::ProblemProtocol,
             ),
             (
+                Problem::Disconnected(Disconnect::FalseServer),
+                Text::ProblemFalseServer,
+            ),
+            (
+                Problem::Disconnected(Disconnect::DifferentServer),
+                Text::ProblemDifferentServer,
+            ),
+            (
+                Problem::Disconnected(Disconnect::MissingParts),
+                Text::ProblemMissingParts,
+            ),
+            (
+                Problem::Disconnected(Disconnect::NameRequired),
+                Text::ProblemNameRequired,
+            ),
+            (
+                Problem::Disconnected(Disconnect::InvitationRequired),
+                Text::ProblemInvitationRequired,
+            ),
+            (Problem::Disconnected(Disconnect::NoTls), Text::ProblemNoTls),
+            (
                 Problem::Disconnected(Disconnect::Refused(ErrorCode::NameTaken)),
                 Text::ErrorNameTaken,
             ),
@@ -789,9 +816,18 @@ mod tests {
             (ErrorCode::NoSuchChannel, Text::ErrorNoSuchChannel),
             (ErrorCode::EmptyText, Text::ErrorEmptyText),
             (ErrorCode::TextTooLong, Text::ErrorTextTooLong),
+            (ErrorCode::WrongAddress, Text::ErrorWrongAddress),
+            (ErrorCode::AccountExists, Text::ErrorAccountExists),
+            (ErrorCode::InvalidInvitation, Text::ErrorInvalidInvitation),
+            (ErrorCode::MissingPart, Text::ProblemMissingParts),
+            (ErrorCode::ServerError, Text::ErrorServer),
             (ErrorCode::BadMessage, Text::ErrorOther),
             (ErrorCode::HelloRequired, Text::ErrorOther),
             (ErrorCode::DuplicateHello, Text::ErrorOther),
+            (ErrorCode::IdentifyRequired, Text::ErrorOther),
+            (ErrorCode::DuplicateIdentify, Text::ErrorOther),
+            (ErrorCode::InvalidProof, Text::ErrorOther),
+            (ErrorCode::UnknownAccount, Text::ErrorOther),
         ];
         for (code, text) in codes {
             assert_eq!(error_text(code), text, "{code:?}");

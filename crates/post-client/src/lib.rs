@@ -6,7 +6,7 @@ mod profile;
 mod session;
 
 pub use address::{AddressError, ServerAddress};
-pub use connection::{Disconnect, Event, Link, connect};
+pub use connection::{Disconnect, Event, Identity, Link, connect, sign_in};
 pub use destination::{Destination, DestinationError, Security, TLS_PORT};
 pub use home::{Home, System};
 pub use profile::{

@@ -52,6 +52,12 @@ impl Seed {
     }
 }
 
+impl Clone for Seed {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
 impl Drop for Seed {
     fn drop(&mut self) {
         self.0.zeroize();
@@ -92,6 +98,18 @@ mod tests {
     fn server() -> Key {
         let public = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
         Key::from_bytes(hex::decode(public.as_bytes()).expect("valid hexadecimal text"))
+    }
+
+    #[test]
+    fn makes_a_copy_that_gives_the_same_account_key() {
+        let seed = counted();
+
+        let copy = seed.clone();
+
+        assert_eq!(
+            copy.account_key(&server()).public(),
+            seed.account_key(&server()).public()
+        );
     }
 
     #[test]

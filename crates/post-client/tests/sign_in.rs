@@ -1,0 +1,459 @@
+use std::future::Future;
+use std::net::Ipv4Addr;
+use std::pin::Pin;
+use std::time::Duration;
+
+use futures_util::{SinkExt, Stream, StreamExt};
+use post_client::{Destination, Disconnect, Event, Identity, Link, sign_in};
+use post_crypto::{Exchange, Seed, ServerKey};
+use post_proto::{ClientMessage, ErrorCode, Key, Name, Nonce, Part, Role, ServerMessage};
+use post_server::Server;
+use post_server::config::Config;
+use post_testing::Directory;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::oneshot;
+use tokio::time::timeout;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{WebSocketStream, accept_async};
+
+const PATIENCE: Duration = Duration::from_secs(20);
+
+type Events = Pin<Box<dyn Stream<Item = Event> + Send>>;
+type Socket = WebSocketStream<TcpStream>;
+
+struct Running {
+    port: u16,
+    owner_link: String,
+    _stop: oneshot::Sender<()>,
+    _data: Directory,
+}
+
+fn name(text: &str) -> Name {
+    Name::parse(text).expect(text)
+}
+
+fn seed(person: u8) -> Seed {
+    Seed::from_bytes([person; 32])
+}
+
+fn destination(text: &str) -> Destination {
+    Destination::parse(text).expect(text)
+}
+
+async fn start_server() -> Running {
+    let data = Directory::new();
+    let config = Config {
+        data: data.path().to_owned(),
+        ..Config::development(0)
+    };
+    let server = Server::bind(&config).await.expect("the server can bind");
+    let port = server.addresses()[0].port();
+    let owner_link = server
+        .owner_link()
+        .expect("a new server has no owner")
+        .to_owned();
+    let (stop, stopped) = oneshot::channel::<()>();
+    tokio::spawn(server.run(async {
+        let _ = stopped.await;
+    }));
+    Running {
+        port,
+        owner_link,
+        _stop: stop,
+        _data: data,
+    }
+}
+
+fn events(to: &str, person: u8, who: Option<&str>, known: Option<Key>) -> Events {
+    let identity = Identity {
+        seed: seed(person),
+        name: who.map(name),
+    };
+    Box::pin(sign_in(destination(to), identity, known))
+}
+
+async fn next(events: &mut Events) -> Option<Event> {
+    timeout(PATIENCE, events.next())
+        .await
+        .expect("an event comes in time")
+}
+
+async fn received(events: &mut Events) -> ServerMessage {
+    match next(events).await {
+        Some(Event::Received(message)) => message,
+        other => panic!("not a message from the server: {other:?}"),
+    }
+}
+
+async fn connected(events: &mut Events) -> Link {
+    match next(events).await {
+        Some(Event::Connected(link)) => link,
+        other => panic!("not connected: {other:?}"),
+    }
+}
+
+async fn disconnected(events: &mut Events) -> Disconnect {
+    let Some(Event::Disconnected(reason)) = next(events).await else {
+        panic!("the connection stops");
+    };
+    assert!(next(events).await.is_none(), "the stream stops");
+    reason
+}
+
+async fn fake_server<F, Fut>(script: F) -> String
+where
+    F: FnOnce(Socket, String, Nonce) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send,
+{
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("the fake server can bind");
+    let port = listener.local_addr().expect("a local address").port();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("a client connects");
+        let mut socket = accept_async(stream).await.expect("a WebSocket client");
+        let hello = socket.next().await.expect("a hello").expect("a frame");
+        let Ok(ClientMessage::Hello {
+            protocol: 0,
+            address,
+            nonce,
+            ..
+        }) = ClientMessage::decode(hello.to_text().expect("text"))
+        else {
+            panic!("the first message is a hello message");
+        };
+        script(socket, address, nonce).await;
+    });
+    format!("127.0.0.1:{port}")
+}
+
+async fn say(socket: &mut Socket, message: &ServerMessage) {
+    socket
+        .send(Message::text(message.encode()))
+        .await
+        .expect("the socket is open");
+}
+
+async fn hold(mut socket: Socket) {
+    while let Some(Ok(_)) = socket.next().await {}
+}
+
+fn challenge(key: &ServerKey, address: &str, client: &Nonce, requires: &[&str]) -> ServerMessage {
+    let nonce = Nonce::from_bytes([8; 32]);
+    let exchange = Exchange {
+        address,
+        client,
+        server: &nonce,
+    };
+    ServerMessage::Challenge {
+        reference: None,
+        protocol: 0,
+        key: key.public(),
+        proof: key.prove(&exchange),
+        nonce,
+        requires: requires
+            .iter()
+            .map(|part| Part::parse(part).expect("a valid part"))
+            .collect(),
+    }
+}
+
+fn server_key() -> ServerKey {
+    ServerKey::from_bytes(&[9; 32])
+}
+
+#[tokio::test]
+async fn a_new_user_makes_an_account_and_signs_in_again() {
+    let server = start_server().await;
+    let address = format!("127.0.0.1:{}", server.port);
+
+    let mut first = events(&server.owner_link, 1, Some("ana"), None);
+    let link = connected(&mut first).await;
+    assert_eq!(link.name(), &name("ana"));
+    assert_eq!(link.role(), Role::Owner);
+    let key = *link.server().expect("a server key");
+    assert!(matches!(
+        received(&mut first).await,
+        ServerMessage::Join { name: joined, .. } if joined == name("ana")
+    ));
+    drop(link);
+    assert_eq!(disconnected(&mut first).await, Disconnect::Closed);
+
+    let mut second = events(&address, 1, None, Some(key));
+    let link = connected(&mut second).await;
+    assert_eq!(link.name(), &name("ana"));
+    assert_eq!(link.role(), Role::Owner);
+    assert_eq!(link.server(), Some(&key));
+}
+
+#[tokio::test]
+async fn two_connections_of_one_account_exchange_text() {
+    let server = start_server().await;
+    let mut first = events(&server.owner_link, 1, Some("ana"), None);
+    let first_link = connected(&mut first).await;
+    received(&mut first).await;
+    let mut second = events(&format!("localhost:{}", server.port), 1, None, None);
+    let _second_link = connected(&mut second).await;
+
+    assert!(first_link.send(ClientMessage::Send {
+        reference: Some(1),
+        channel: "lobby".to_owned(),
+        text: "Hello".to_owned(),
+    }));
+
+    assert!(matches!(
+        received(&mut first).await,
+        ServerMessage::Message { reference: Some(1), from, text, .. }
+            if from == name("ana") && text == "Hello"
+    ));
+    assert!(matches!(
+        received(&mut second).await,
+        ServerMessage::Message { reference: None, from, text, .. }
+            if from == name("ana") && text == "Hello"
+    ));
+}
+
+#[tokio::test]
+async fn gives_an_error_of_the_server_as_a_message_after_the_sign_in() {
+    let server = start_server().await;
+    let mut ana = events(&server.owner_link, 1, Some("ana"), None);
+    let link = connected(&mut ana).await;
+    received(&mut ana).await;
+
+    assert!(link.send(ClientMessage::Send {
+        reference: Some(7),
+        channel: "no-such-channel".to_owned(),
+        text: "Hello".to_owned(),
+    }));
+
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Error {
+            reference: Some(7),
+            code: ErrorCode::NoSuchChannel,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn tells_that_a_new_account_needs_an_invitation() {
+    let server = start_server().await;
+
+    let mut ana = events(&format!("127.0.0.1:{}", server.port), 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::InvitationRequired);
+}
+
+#[tokio::test]
+async fn tells_that_a_new_account_needs_a_name() {
+    let server = start_server().await;
+
+    let mut ana = events(&server.owner_link, 1, None, None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::NameRequired);
+}
+
+#[tokio::test]
+async fn tells_why_the_server_refused_the_new_account() {
+    let server = start_server().await;
+    let link = format!("http://127.0.0.1:{}/i/AAAAAAAAAAAA", server.port);
+
+    let mut ana = events(&link, 1, Some("ana"), None);
+
+    assert_eq!(
+        disconnected(&mut ana).await,
+        Disconnect::Refused(ErrorCode::InvalidInvitation)
+    );
+}
+
+#[tokio::test]
+async fn refuses_a_server_that_does_not_prove_its_key() {
+    let address = fake_server(|mut socket, address, client| async move {
+        let different = Nonce::from_bytes([3; 32]);
+        say(
+            &mut socket,
+            &challenge(&server_key(), &address, &different, &[]),
+        )
+        .await;
+        let _ = client;
+        hold(socket).await;
+    })
+    .await;
+
+    let mut ana = events(&address, 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::FalseServer);
+}
+
+#[tokio::test]
+async fn refuses_a_server_that_has_a_different_key_than_before() {
+    let address = fake_server(|mut socket, address, client| async move {
+        say(
+            &mut socket,
+            &challenge(&server_key(), &address, &client, &[]),
+        )
+        .await;
+        hold(socket).await;
+    })
+    .await;
+    let known = ServerKey::from_bytes(&[4; 32]).public();
+
+    let mut ana = events(&address, 1, Some("ana"), Some(known));
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::DifferentServer);
+}
+
+#[tokio::test]
+async fn refuses_a_server_that_requires_a_part_that_it_does_not_have() {
+    let address = fake_server(|mut socket, address, client| async move {
+        say(
+            &mut socket,
+            &challenge(&server_key(), &address, &client, &["sealed"]),
+        )
+        .await;
+        hold(socket).await;
+    })
+    .await;
+
+    let mut ana = events(&address, 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::MissingParts);
+}
+
+#[tokio::test]
+async fn sends_the_proof_of_its_account_key_for_this_server() {
+    let (seen, proof) = oneshot::channel();
+    let address = fake_server(|mut socket, address, client| async move {
+        let key = server_key();
+        let challenge = challenge(&key, &address, &client, &[]);
+        let ServerMessage::Challenge { nonce, .. } = &challenge else {
+            unreachable!("a challenge message");
+        };
+        let nonce = *nonce;
+        say(&mut socket, &challenge).await;
+        let identify = socket.next().await.expect("a message").expect("a frame");
+        let Ok(ClientMessage::Identify {
+            key: account,
+            proof,
+            invitation: None,
+            ..
+        }) = ClientMessage::decode(identify.to_text().expect("text"))
+        else {
+            panic!("the second message is an identify message");
+        };
+        let exchange = Exchange {
+            address: &address,
+            client: &client,
+            server: &nonce,
+        };
+        let is_valid = exchange.account_proof_is_valid(&account, &key.public(), &proof);
+        let expected = seed(1).account_key(&key.public()).public();
+        seen.send(is_valid && account == expected)
+            .expect("the test waits");
+        say(
+            &mut socket,
+            &ServerMessage::Welcome {
+                reference: None,
+                name: name("ana"),
+                role: Role::Member,
+            },
+        )
+        .await;
+        hold(socket).await;
+    })
+    .await;
+
+    let mut ana = events(&address, 1, None, None);
+    let link = connected(&mut ana).await;
+
+    assert!(proof.await.expect("the fake server answers"));
+    assert_eq!(link.role(), Role::Member);
+    assert_eq!(link.server(), Some(&server_key().public()));
+}
+
+#[tokio::test]
+async fn tells_that_no_server_is_at_the_address() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("a free port");
+    let port = listener.local_addr().expect("a local address").port();
+    drop(listener);
+
+    let mut ana = events(&format!("127.0.0.1:{port}"), 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::Unreachable);
+}
+
+#[tokio::test]
+async fn does_not_connect_to_a_server_with_tls_at_this_time() {
+    let mut ana = events("chat.example.org", 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::NoTls);
+}
+
+#[tokio::test]
+async fn tells_that_the_server_refused_the_hello_message() {
+    let address = fake_server(|mut socket, _address, _client| async move {
+        say(
+            &mut socket,
+            &ServerMessage::error(None, ErrorCode::WrongAddress),
+        )
+        .await;
+        hold(socket).await;
+    })
+    .await;
+
+    let mut ana = events(&address, 1, Some("ana"), None);
+
+    assert_eq!(
+        disconnected(&mut ana).await,
+        Disconnect::Refused(ErrorCode::WrongAddress)
+    );
+}
+
+#[tokio::test]
+async fn refuses_an_answer_that_is_not_a_step_of_the_sign_in() {
+    let join = ServerMessage::Welcome {
+        reference: None,
+        name: name("ana"),
+        role: Role::Member,
+    };
+    let first = join.clone();
+    let before_the_challenge = fake_server(|mut socket, _address, _client| async move {
+        say(&mut socket, &first).await;
+        hold(socket).await;
+    })
+    .await;
+    let after_the_challenge = fake_server(|mut socket, address, client| async move {
+        let challenge = challenge(&server_key(), &address, &client, &[]);
+        say(&mut socket, &challenge).await;
+        socket.next().await;
+        say(&mut socket, &challenge).await;
+        hold(socket).await;
+    })
+    .await;
+
+    for address in [before_the_challenge, after_the_challenge] {
+        let mut ana = events(&address, 1, Some("ana"), None);
+
+        assert_eq!(disconnected(&mut ana).await, Disconnect::Protocol);
+    }
+}
+
+#[tokio::test]
+async fn tells_that_the_server_closed_the_connection_before_the_welcome() {
+    let address = fake_server(|mut socket, address, client| async move {
+        say(
+            &mut socket,
+            &challenge(&server_key(), &address, &client, &[]),
+        )
+        .await;
+        socket.close(None).await.expect("the socket closes");
+    })
+    .await;
+
+    let mut ana = events(&address, 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut ana).await, Disconnect::Closed);
+}
