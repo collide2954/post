@@ -413,6 +413,8 @@ Verus is under active development, and its makers say that functions can be brok
 - A change has three steps. The core calculates the new state and the list of changes. The server writes the changes to SQLite in one transaction. Only then does the new state replace the old state.
 - SQLite stores the data (D-051). It makes no decisions.
 - At the start, the server loads the data and examines it against the rules. If the data does not obey the rules, the server does not start.
+- Only one program uses the data of a server at one time. A lock file stops a second program.
+- The first form of the core keeps its rows in lists and examines them in sequence. An index comes when a measurement shows the need.
 - The messages of the channels are not a part of the core.
 
 As a minimum, Verus proves these rules:

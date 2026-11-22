@@ -47,7 +47,6 @@ A hole is code or an assumption that has no proof. Each hole is in this list.
 |---|---|
 | The rule for the text of a message. The white space and the count of characters come from the standard library. | Open |
 | The rules for addresses. | Open |
-| The connection of the server to the rules core. The server does not use the core yet. | Open |
 | The agreement between the state of the rules core and the changes that it gives to the storage. Tests examine it. | Open |
 | The steps of the sign-in in the server and in the client. | Open |
 | The readers of the client for invite links, server addresses, and profile names. | Open |

@@ -201,10 +201,10 @@ impl Rules {
         name: &Name,
         code: &Code,
         now: Timestamp,
-    ) -> (result: Result<Result<AccountId, RegisterError>, S::Error>)
+    ) -> (result: Result<Result<Account, RegisterError>, S::Error>)
         ensures
             !(result matches Ok(Ok(_))) ==> final(self).same_as(*old(self)),
-            result matches Ok(Ok(id)) ==> {
+            result matches Ok(Ok(account)) ==> {
                 &&& forall|i: int|
                     0 <= i < old(self).accounts().len() ==> (#[trigger] old(self).accounts()[i]).key@
                         != key@
@@ -221,9 +221,9 @@ impl Rules {
                     ).reservations()[i]).name@ == name@ ==> old(self).reservations()[i].until.millis()
                         <= now.millis()
                 &&& final(self).accounts().len() == old(self).accounts().len() + 1
-                &&& final(self).accounts().last().id == id
-                &&& final(self).accounts().last().key@ == key@
-                &&& final(self).accounts().last().name@ == name@
+                &&& final(self).accounts().last().same(account)
+                &&& account.key@ == key@
+                &&& account.name@ == name@
             },
     {
         proof {
@@ -252,10 +252,9 @@ impl Rules {
         if self.next == u64::MAX {
             return Ok(Err(RegisterError::Full));
         }
-        let id = AccountId(self.next);
         let owner = self.invitations[at].owner;
         let account = Account {
-            id,
+            id: AccountId(self.next),
             key: *key,
             name: name.clone(),
             owner,
@@ -291,10 +290,11 @@ impl Rules {
         if let (Some(previous), Some(member)) = (previous, member) {
             accounts.set(previous, member);
         }
+        let registered = account.clone();
         accounts.push(account);
         *self = Self { accounts, invitations, reservations, next: next + 1, limits };
         assert(is_open(old(self).invitations()[at as int], now.millis()));
-        Ok(Ok(id))
+        Ok(Ok(registered))
     }
 
     pub fn claim<S: Storage>(

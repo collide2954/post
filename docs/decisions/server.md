@@ -297,6 +297,8 @@ Each limit has a safe default. The same limits apply to all members.
 
 **Reason.** A server owner can lose the key, and no recovery phrase exists before version 0.11. Only a person with access to the server computer can run the command, and that person already controls the server.
 
+**History.** On 2026-11-21, the rules of the server moved into memory (D-178). From that day, the operator stops the server before the command, because only one program can use the data of a server.
+
 **Not selected.**
 
 - No such command before the operator tools in version 0.16. The operator must then delete the server data and start again.

@@ -2931,6 +2931,7 @@ dependencies = [
  "futures-util",
  "post-crypto",
  "post-proto",
+ "post-rules",
  "post-testing",
  "rusqlite",
  "serde",

@@ -12,7 +12,7 @@ If the file does not exist, the server runs in development mode on this computer
 
   --config FILE   read this configuration file
   --port PORT     run in development mode with this port
-  owner-link      make a new owner link for the server and stop";
+  owner-link      make a new owner link; stop the server before this command";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {

@@ -61,5 +61,6 @@ fn owner_link(source: &Source) -> Result<(), Box<dyn Error>> {
     let link = new_owner_link(&config)?;
     println!("The person who pastes this link into Post becomes the server owner:");
     println!("{link}");
+    println!("Start the server again. The link works when the server is in operation.");
     Ok(())
 }

@@ -17,7 +17,7 @@ use tokio::task::JoinSet;
 use tokio::time::timeout;
 
 use crate::config::{Config, Listen, Tls};
-use crate::hub::{Hub, Random, Settings};
+use crate::hub::{Hub, LIMITS, Random, Settings};
 use crate::sessions::Sessions;
 use crate::store::{Store, StoreError};
 
@@ -119,7 +119,11 @@ impl Server {
 
 pub fn new_owner_link(config: &Config) -> Result<String, StartError> {
     let code = post_crypto::code();
-    open_store(config)?.new_owner_code(&code, Timestamp::now())?;
+    let mut store = open_store(config)?;
+    let mut rules = store.rules(LIMITS)?;
+    rules
+        .new_owner_code(&mut store, &code, Timestamp::now())?
+        .map_err(|_| StoreError::CodeInUse)?;
     Ok(format!("{}/i/{code}", config.link(config.port())))
 }
 

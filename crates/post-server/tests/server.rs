@@ -7,6 +7,7 @@ use post_proto::{
     ClientMessage, Code, ErrorCode, Key, MAX_LINE_BYTES, Name, Role, ServerMessage, Signature,
 };
 use post_server::config::{Config, Listen, Tls};
+use post_server::store::StoreError;
 use post_server::{Server, StartError, new_owner_link};
 use post_testing::Directory;
 use tokio::net::TcpStream;
@@ -273,7 +274,7 @@ async fn keeps_the_accounts_when_it_starts_again() {
 }
 
 #[tokio::test]
-async fn makes_a_new_owner_link_for_a_server_that_runs() {
+async fn makes_a_new_owner_link_for_a_server_that_does_not_run() {
     let server = start().await;
     let owner_link = server
         .owner_link
@@ -281,15 +282,22 @@ async fn makes_a_new_owner_link_for_a_server_that_runs() {
         .expect("a new server has no owner");
     let ana = Seed::from_bytes([7; 32]);
     register(server.port, &ana, "ana", &owner_link).await;
-
     let config = Config {
-        listen: Listen::Loopback(server.port),
+        listen: Listen::Loopback(4321),
         ..server.config.clone()
     };
-    let link = new_owner_link(&config).expect("the storage is open");
+    assert!(matches!(
+        new_owner_link(&config),
+        Err(StartError::Store(StoreError::InUse))
+    ));
 
-    assert!(link.starts_with(&format!("http://localhost:{}/i/", server.port)));
+    let data = server.stop().await;
+    let link = new_owner_link(&config).expect("the storage is free");
+
+    assert!(link.starts_with("http://localhost:4321/i/"));
     assert_ne!(link, owner_link);
+    let server = start_with(data).await;
+    assert_eq!(server.owner_link, None);
     let ben = Seed::from_bytes([8; 32]);
     assert_eq!(
         register(server.port, &ben, "ben", &link).await,

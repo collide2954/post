@@ -94,7 +94,7 @@ impl Server {
             .register(&mut self.memory, &key(person), &name(who), invitation, now)
             .expect("stored");
         self.examine();
-        result
+        result.map(|account| account.id)
     }
 
     fn claim(&mut self, account: AccountId, invitation: &Code, now: Timestamp) -> bool {
@@ -346,6 +346,28 @@ fn counts_each_use_of_an_invitation() {
         Err(RegisterError::InvalidInvitation)
     );
     assert!(!server.rules.code_is_open(&invitation.code, day(0)));
+}
+
+#[test]
+fn lets_many_users_use_an_invitation_without_a_limit() {
+    let (mut server, owner) = Server::with_owner();
+    let invitation = server.invite(owner, 1, None, None, day(0)).expect("made");
+
+    for person in 2..12 {
+        let result = server.register(person, &format!("user-{person}"), &invitation.code, day(0));
+
+        assert!(result.is_ok(), "{person}");
+    }
+    assert_eq!(server.rules.open_invitations(day(0))[0].used, 10);
+}
+
+#[test]
+fn examines_the_invitation_before_the_name() {
+    let (mut server, _owner) = Server::with_owner();
+
+    let result = server.register(2, "ana", &code(99), day(0));
+
+    assert_eq!(result, Err(RegisterError::InvalidInvitation));
 }
 
 #[test]
@@ -718,7 +740,7 @@ fn loads_rows_and_continues_after_the_highest_identifier() {
         .register(&mut memory, &key(3), &name("cora"), &code(1), day(1))
         .expect("stored");
 
-    assert_eq!(cora, Ok(AccountId(8)));
+    assert_eq!(cora.map(|account| account.id), Ok(AccountId(8)));
     assert_eq!(
         rules.register(&mut memory, &key(4), &name("ana-old"), &code(1), day(1)),
         Ok(Err(RegisterError::NameTaken))

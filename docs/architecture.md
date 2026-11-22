@@ -10,7 +10,7 @@ The repository is one Cargo workspace (decision record D-097). Each crate depend
 |---|---|---|
 | `post-app` | The application with its window. The program has the name `post`. | `post-client`, `post-proto` |
 | `post-client` | The client logic without an interface | `post-proto` |
-| `post-server` | The server. The program has the name `post-server`. | `post-crypto`, `post-proto` |
+| `post-server` | The server. The program has the name `post-server`. | `post-crypto`, `post-proto`, `post-rules` |
 | `post-crypto` | Keys and proofs of accounts and servers | `post-proto` |
 | `post-rules` | The proved rules of a server for accounts, handles, and invitations | `post-proto` |
 | `post-proto` | Message types, codec, and protocol rules | No other crate of Post |
@@ -68,16 +68,15 @@ Verus proves `transcript`, `hex`, the text form of the seed, and the generator o
 - `rule` holds the rules as specifications, and the small decisions about time.
 - `rules` holds the state and one function for each operation. An operation examines the rules, gives the changes to the storage, and only then changes the state.
 
-The server does not use this crate yet. At this time, the SQL statements of the server make these decisions.
 
 ## The server crate
 
-- `hub` does the sign-in and decides who gets which message. It has no network code and no clock. Each function gets the present time as a value, and a test can give it fixed random values. Thus a test controls all inputs.
-- `store` keeps the server key, the accounts, the reserved names, and the invitations in SQLite (D-051). The other modules do not use SQL.
+- `hub` does the sign-in and decides who gets which message. It asks the rules core for each decision about an account or an invitation. It has no network code and no clock. Each function gets the present time as a value, and a test can give it fixed random values. Thus a test controls all inputs.
+- `store` keeps the server key in SQLite (D-051). It writes the changes of the rules core, and it loads the rows when the server starts. It makes no decisions. A lock file lets only one program use the data. The other modules do not use SQL.
 - `config` reads the configuration file of the server. Without a file, the server operates in development mode on the local computer.
 - `sessions` connects the hub to one queue for each connection. If a queue is full, the server closes that connection.
 - `server` holds the network code. It accepts WebSocket connections on the loopback addresses and moves lines between a socket and its queue.
-- `cli` reads the arguments of the program. The command `owner-link` makes a new owner link (D-172).
+- `cli` reads the arguments of the program. The command `owner-link` makes a new owner link (D-172). The operator stops the server before this command.
 
 The server keeps its storage in a data directory. In development mode, the directory has the name `post-server-data`. At this time, the server cannot use TLS.
 

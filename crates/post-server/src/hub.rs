@@ -6,7 +6,15 @@ use post_proto::{
     ServerMessage, Signature, TextError, Timestamp, check_text,
 };
 
-use crate::store::{Account, AccountId, RegisterError, Store, Stored};
+use post_rules::{Account, AccountId, Limits, RegisterError, Rules};
+
+use crate::store::{Store, StoreError, Stored};
+
+const DAY: u64 = 24 * 60 * 60 * 1000;
+pub const LIMITS: Limits = Limits {
+    rename_interval: 30 * DAY,
+    name_reserved: 30 * DAY,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ConnectionId(u64);
@@ -31,6 +39,7 @@ pub struct Random {
 
 pub struct Hub {
     store: Store,
+    rules: Rules,
     key: ServerKey,
     settings: Settings,
     random: Random,
@@ -79,8 +88,10 @@ impl Default for Random {
 impl Hub {
     pub fn new(mut store: Store, settings: Settings, random: Random) -> Stored<Self> {
         let key = store.server_key()?;
+        let rules = store.rules(LIMITS)?;
         Ok(Self {
             store,
+            rules,
             key,
             settings,
             random,
@@ -91,7 +102,10 @@ impl Hub {
 
     pub fn owner_link(&mut self, now: Timestamp) -> Stored<Option<String>> {
         let fresh = (self.random.code)();
-        let code = self.store.owner_code(&fresh, now)?;
+        let code = self
+            .rules
+            .owner_code(&mut self.store, &fresh, now)?
+            .map_err(|_| StoreError::CodeInUse)?;
         Ok(code.map(|code| format!("{}/i/{code}", self.settings.link)))
     }
 
@@ -238,19 +252,22 @@ impl Hub {
     ) -> Result<Member, Refused> {
         self.examine(state, credentials)?;
         let account = self
-            .store
-            .account(&credentials.key)
-            .map_err(|_| ErrorCode::ServerError)?
+            .rules
+            .account(credentials.key.as_bytes())
             .ok_or(ErrorCode::UnknownAccount)?;
+        let id = account.id;
+        let mut member = Member::of(account);
         self.examine_parts(state)?;
-        let is_new_owner = match invitation {
-            Some(code) => self
-                .store
-                .claim(account.id, code, now)
-                .map_err(|_| ErrorCode::ServerError)?,
-            None => false,
-        };
-        Ok(Member::of(account, is_new_owner))
+        if let Some(code) = invitation {
+            let is_new_owner = self
+                .rules
+                .claim(&mut self.store, id, code, now)
+                .map_err(|_| ErrorCode::ServerError)?;
+            if is_new_owner {
+                member.role = Role::Owner;
+            }
+        }
+        Ok(member)
     }
 
     fn register(
@@ -264,14 +281,21 @@ impl Hub {
         self.examine(state, credentials)?;
         self.examine_parts(state)?;
         let name = Name::parse(name).map_err(|_| ErrorCode::InvalidName)?;
-        self.store
-            .register(&credentials.key, &name, invitation, now)
+        self.rules
+            .register(
+                &mut self.store,
+                credentials.key.as_bytes(),
+                &name,
+                invitation,
+                now,
+            )
             .map_err(|_| ErrorCode::ServerError)?
-            .map(|account| Member::of(account, false))
+            .map(|account| Member::of(&account))
             .map_err(|error| match error {
                 RegisterError::AccountExists => ErrorCode::AccountExists,
                 RegisterError::InvalidInvitation => ErrorCode::InvalidInvitation,
                 RegisterError::NameTaken => ErrorCode::NameTaken,
+                RegisterError::Full => ErrorCode::ServerError,
             })
     }
 
@@ -410,14 +434,14 @@ impl Challenge {
 }
 
 impl Member {
-    fn of(account: Account, is_new_owner: bool) -> Self {
+    fn of(account: &Account) -> Self {
         Self {
             account: Some(account.id),
-            name: account.name,
-            role: if is_new_owner {
+            name: account.name.clone(),
+            role: if account.owner {
                 Role::Owner
             } else {
-                account.role
+                Role::Member
             },
         }
     }
@@ -454,8 +478,10 @@ mod tests {
         Signature, Timestamp,
     };
 
+    use post_rules::{Change, Invitation, Storage as _};
+
     use super::{ConnectionId, Hub, Outgoing, Random, Settings};
-    use crate::store::Store;
+    use crate::store::{Store, StoreError};
 
     fn now() -> Timestamp {
         Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid")
@@ -948,14 +974,23 @@ mod tests {
     fn invitation(hub: &mut Hub, number: u32) -> Code {
         let owner = seed(1).account_key(&hub.key.public()).public();
         let owner = hub
-            .store
-            .account(&owner)
+            .rules
+            .account(owner.as_bytes())
+            .expect("the owner has an account")
+            .id;
+        hub.rules
+            .invite(&mut hub.store, owner, &code(number), None, None, now())
             .expect("stored")
-            .expect("the owner has an account");
-        hub.store
-            .invite(owner.id, &code(number), None, None, now())
-            .expect("stored")
+            .expect("the owner can invite")
             .code
+    }
+
+    fn new_owner_code(hub: &mut Hub, number: u32) -> Code {
+        hub.rules
+            .new_owner_code(&mut hub.store, &code(number), now())
+            .expect("stored")
+            .expect("the code is new");
+        code(number)
     }
 
     fn registered(hub: &mut Hub, person: u8, who: &str, invitation: &Code) -> ConnectionId {
@@ -1258,7 +1293,7 @@ mod tests {
         let ben = registered(&mut hub, 2, "ben", &open);
         hub.disconnect(ana, now());
         hub.disconnect(ben, now());
-        hub.store.new_owner_code(&code(60), now()).expect("stored");
+        new_owner_code(&mut hub, 60);
 
         let id = hub.connect();
         let server = challenged(&mut hub, id, &[]);
@@ -1297,8 +1332,7 @@ mod tests {
                 to(id, join("ben")),
             ]
         );
-        let used = hub.store.invitations(now()).expect("stored")[0].used;
-        assert_eq!(used, 1);
+        assert_eq!(hub.rules.open_invitations(now())[0].used, 1);
     }
 
     #[test]
@@ -1381,14 +1415,16 @@ mod tests {
 
     #[test]
     fn answers_with_a_server_error_when_the_storage_fails() {
-        let (mut hub, _ana) = with_owner();
+        let (mut hub, ana) = with_owner();
         let open = invitation(&mut hub, 50);
+        let link = new_owner_code(&mut hub, 60);
+        hub.disconnect(ana, now());
         let id = hub.connect();
         let server = challenged(&mut hub, id, &[]);
         hub.store.lose_its_tables();
 
         for line in [
-            identify(&hub, 1, &server, None),
+            identify(&hub, 1, &server, Some(&link)),
             register(&hub, 2, &server, "ben", &open),
         ] {
             assert_eq!(
@@ -1396,6 +1432,68 @@ mod tests {
                 [to(id, error(Some(2), ErrorCode::ServerError))]
             );
         }
-        assert!(hub.owner_link(now()).is_err());
+    }
+
+    #[test]
+    fn needs_no_storage_for_a_sign_in_that_changes_nothing() {
+        let (mut hub, ana) = with_owner();
+        hub.disconnect(ana, now());
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        hub.store.lose_its_tables();
+
+        let line = identify(&hub, 1, &server, None);
+
+        assert_eq!(
+            hub.receive(id, &line, now())[0],
+            to(id, welcome("ana", Role::Owner))
+        );
+    }
+
+    #[test]
+    fn reports_an_owner_link_that_it_cannot_store() {
+        let mut hub = new_hub();
+        hub.store.lose_its_tables();
+
+        assert!(matches!(
+            hub.owner_link(now()),
+            Err(StoreError::Database(_))
+        ));
+    }
+
+    #[test]
+    fn reports_a_new_code_that_an_invitation_has() {
+        let mut store = Store::in_memory().expect("a database in memory");
+        store
+            .write(&[Change::PutInvitation(stored_invitation(1, Some(5), 0))])
+            .expect("stored");
+        let mut hub = Hub::new(store, settings(), random()).expect("a hub");
+
+        assert!(matches!(hub.owner_link(now()), Err(StoreError::CodeInUse)));
+    }
+
+    #[test]
+    fn does_not_start_with_data_that_breaks_a_rule() {
+        let mut store = Store::in_memory().expect("a database in memory");
+        store
+            .write(&[Change::PutInvitation(stored_invitation(1, Some(1), 2))])
+            .expect("stored");
+
+        let result = Hub::new(store, settings(), random());
+
+        assert!(matches!(result, Err(StoreError::BrokenRules)));
+    }
+
+    fn stored_invitation(number: u32, limit: Option<u32>, used: u32) -> Invitation {
+        Invitation {
+            code: code(number),
+            owner: false,
+            maker: None,
+            created: now(),
+            end: None,
+            uses: limit,
+            used,
+            revoked: None,
+        }
     }
 }

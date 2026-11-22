@@ -23,6 +23,7 @@ jiff = "1.0.1"
 post-client = { path = "crates/post-client" }
 post-crypto = { path = "crates/post-crypto" }
 post-proto = { path = "crates/post-proto" }
+post-rules = { path = "crates/post-rules" }
 post-server = { path = "crates/post-server" }
 post-testing = { path = "crates/post-testing" }
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
