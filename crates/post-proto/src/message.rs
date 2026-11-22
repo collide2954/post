@@ -274,6 +274,20 @@ pub enum Role {
 
 impl ClientMessage {
     #[must_use]
+    pub fn reference(&self) -> Option<u32> {
+        match self {
+            Self::Hello { reference, .. }
+            | Self::Identify { reference, .. }
+            | Self::Register { reference, .. }
+            | Self::Send { reference, .. }
+            | Self::Invite { reference, .. }
+            | Self::Invitations { reference }
+            | Self::Revoke { reference, .. }
+            | Self::Rename { reference, .. } => *reference,
+        }
+    }
+
+    #[must_use]
     pub fn encode(&self) -> String {
         codec::encode(self)
     }

@@ -375,6 +375,25 @@ fn writes_each_client_message_as_one_line() {
 }
 
 #[test]
+fn gives_the_number_that_a_client_message_carries() {
+    let hello = |reference| ClientMessage::Hello {
+        reference,
+        protocol: 0,
+        address: "localhost:7678".to_owned(),
+        nonce: Nonce::from_bytes([0xfb; 32]),
+        supports: Vec::new(),
+    };
+    assert_eq!(hello(Some(4_294_967_295)).reference(), Some(4_294_967_295));
+    assert_eq!(hello(None).reference(), None);
+
+    for (message, line) in client_examples() {
+        let value: serde_json::Value = serde_json::from_str(line).expect(line);
+        let number = value.get("ref").and_then(serde_json::Value::as_u64);
+        assert_eq!(message.reference().map(u64::from), number, "{line}");
+    }
+}
+
+#[test]
 fn reads_each_client_message() {
     for (message, line) in client_examples() {
         assert_eq!(ClientMessage::decode(line).expect(line), message);

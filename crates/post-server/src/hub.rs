@@ -72,12 +72,20 @@ struct Member {
     role: Role,
 }
 
+struct Request<'a> {
+    from: ConnectionId,
+    reference: Option<u32>,
+    state: &'a State,
+    now: Timestamp,
+}
+
 struct Credentials {
     key: Key,
     proof: Signature,
 }
 
 type Refused = ErrorCode;
+type Answer = Result<Vec<Outgoing>, Refused>;
 
 impl Default for Random {
     fn default() -> Self {
@@ -131,73 +139,14 @@ impl Hub {
         let Ok(message) = ClientMessage::decode(line) else {
             return refusal(from, None, ErrorCode::BadMessage);
         };
-        let (reference, result) = match message {
-            ClientMessage::Hello {
-                reference,
-                protocol,
-                address,
-                nonce,
-                supports,
-            } => (
-                reference,
-                self.challenge(from, reference, &state, protocol, address, nonce, supports),
-            ),
-            ClientMessage::Identify {
-                reference,
-                key,
-                proof,
-                invitation,
-            } => (
-                reference,
-                self.identify(
-                    &state,
-                    &Credentials { key, proof },
-                    invitation.as_ref(),
-                    now,
-                )
-                .map(|member| self.enter(from, reference, member, now)),
-            ),
-            ClientMessage::Register {
-                reference,
-                key,
-                proof,
-                name,
-                invitation,
-            } => (
-                reference,
-                self.register(&state, &Credentials { key, proof }, &name, &invitation, now)
-                    .map(|member| self.enter(from, reference, member, now)),
-            ),
-
-            ClientMessage::Send {
-                reference,
-                channel,
-                text,
-            } => (
-                reference,
-                examine_text(&state, &channel, &text)
-                    .map(|member| self.deliver(from, reference, &member.name, &text, now)),
-            ),
-            ClientMessage::Invite {
-                reference,
-                lifetime,
-                uses,
-            } => (
-                reference,
-                self.invite(from, reference, &state, lifetime, uses, now),
-            ),
-            ClientMessage::Invitations { reference } => (
-                reference,
-                self.list_invitations(from, reference, &state, now),
-            ),
-            ClientMessage::Revoke { reference, code } => {
-                (reference, self.revoke(from, reference, &state, &code, now))
-            }
-            ClientMessage::Rename { reference, name } => {
-                (reference, self.rename(from, reference, &state, &name, now))
-            }
+        let request = Request {
+            from,
+            reference: message.reference(),
+            state: &state,
+            now,
         };
-        result.unwrap_or_else(|code| refusal(from, reference, code))
+        self.answer(&request, message)
+            .unwrap_or_else(|code| refusal(from, request.reference, code))
     }
 
     #[must_use]
@@ -223,18 +172,53 @@ impl Hub {
         })
     }
 
-    #[expect(clippy::too_many_arguments, reason = "the fields of one message")]
+    fn answer(&mut self, request: &Request<'_>, message: ClientMessage) -> Answer {
+        match message {
+            ClientMessage::Hello {
+                protocol,
+                address,
+                nonce,
+                supports,
+                ..
+            } => self.challenge(request, protocol, address, nonce, supports),
+            ClientMessage::Identify {
+                key,
+                proof,
+                invitation,
+                ..
+            } => {
+                let credentials = Credentials { key, proof };
+                let member = self.identify(request, &credentials, invitation.as_ref())?;
+                Ok(self.enter(request, member))
+            }
+            ClientMessage::Register {
+                key,
+                proof,
+                name,
+                invitation,
+                ..
+            } => {
+                let credentials = Credentials { key, proof };
+                let member = self.register(request, &credentials, &name, &invitation)?;
+                Ok(self.enter(request, member))
+            }
+            ClientMessage::Send { channel, text, .. } => self.send(request, &channel, &text),
+            ClientMessage::Invite { lifetime, uses, .. } => self.invite(request, lifetime, uses),
+            ClientMessage::Invitations { .. } => self.list_invitations(request),
+            ClientMessage::Revoke { code, .. } => self.revoke(request, &code),
+            ClientMessage::Rename { name, .. } => self.rename(request, &name),
+        }
+    }
+
     fn challenge(
         &mut self,
-        from: ConnectionId,
-        reference: Option<u32>,
-        state: &State,
+        request: &Request<'_>,
         protocol: u32,
         address: String,
         client: Nonce,
         supports: Vec<Part>,
-    ) -> Result<Vec<Outgoing>, Refused> {
-        if !matches!(state, State::New) {
+    ) -> Answer {
+        if !matches!(request.state, State::New) {
             return Err(ErrorCode::DuplicateHello);
         }
         if protocol != PROTOCOL_VERSION {
@@ -250,36 +234,39 @@ impl Hub {
             supports,
         };
         let message = ServerMessage::Challenge {
-            reference,
+            reference: request.reference,
             protocol: PROTOCOL_VERSION,
             key: self.key.public(),
             nonce: challenge.server,
             proof: self.key.prove(&challenge.exchange()),
             requires: self.settings.requires.clone(),
         };
-        self.connections.insert(from, State::Challenged(challenge));
-        Ok(vec![Outgoing { to: from, message }])
+        self.connections
+            .insert(request.from, State::Challenged(challenge));
+        Ok(vec![Outgoing {
+            to: request.from,
+            message,
+        }])
     }
 
     fn identify(
         &mut self,
-        state: &State,
+        request: &Request<'_>,
         credentials: &Credentials,
         invitation: Option<&Code>,
-        now: Timestamp,
     ) -> Result<Member, Refused> {
-        self.examine(state, credentials)?;
+        self.examine(request.state, credentials)?;
         let account = self
             .rules
             .account(credentials.key.as_bytes())
             .ok_or(ErrorCode::UnknownAccount)?;
         let id = account.id;
         let mut member = Member::of(account);
-        self.examine_parts(state)?;
+        self.examine_parts(request.state)?;
         if let Some(code) = invitation {
             let is_new_owner = self
                 .rules
-                .claim(&mut self.store, id, code, now)
+                .claim(&mut self.store, id, code, request.now)
                 .map_err(|_| ErrorCode::ServerError)?;
             if is_new_owner {
                 member.role = Role::Owner;
@@ -290,14 +277,13 @@ impl Hub {
 
     fn register(
         &mut self,
-        state: &State,
+        request: &Request<'_>,
         credentials: &Credentials,
         name: &str,
         invitation: &Code,
-        now: Timestamp,
     ) -> Result<Member, Refused> {
-        self.examine(state, credentials)?;
-        self.examine_parts(state)?;
+        self.examine(request.state, credentials)?;
+        self.examine_parts(request.state)?;
         let name = Name::parse(name).map_err(|_| ErrorCode::InvalidName)?;
         self.rules
             .register(
@@ -305,7 +291,7 @@ impl Hub {
                 credentials.key.as_bytes(),
                 &name,
                 invitation,
-                now,
+                request.now,
             )
             .map_err(|_| ErrorCode::ServerError)?
             .map(|account| Member::of(&account))
@@ -352,62 +338,55 @@ impl Hub {
         }
     }
 
-    fn enter(
-        &mut self,
-        id: ConnectionId,
-        reference: Option<u32>,
-        member: Member,
-        now: Timestamp,
-    ) -> Vec<Outgoing> {
+    fn enter(&mut self, request: &Request<'_>, member: Member) -> Vec<Outgoing> {
         let is_first_connection = !self.has_a_connection(&member);
         let mut outgoing = vec![Outgoing {
-            to: id,
+            to: request.from,
             message: ServerMessage::Welcome {
-                reference,
+                reference: request.reference,
                 name: member.name.clone(),
                 role: member.role,
             },
         }];
         let name = member.name.clone();
-        self.connections.insert(id, State::Present(member));
+        self.connections
+            .insert(request.from, State::Present(member));
         if is_first_connection {
             outgoing.extend(self.to_each_member(|_| ServerMessage::Join {
                 channel: LOBBY.to_owned(),
                 name: name.clone(),
-                time: now,
+                time: request.now,
             }));
         }
         outgoing
     }
 
-    fn deliver(
-        &self,
-        from: ConnectionId,
-        reference: Option<u32>,
-        name: &Name,
-        text: &str,
-        now: Timestamp,
-    ) -> Vec<Outgoing> {
-        self.to_each_member(|to| ServerMessage::Message {
-            reference: reference.filter(|_| to == from),
+    fn send(&self, request: &Request<'_>, channel: &str, text: &str) -> Answer {
+        let member = present(request.state)?;
+        if channel != LOBBY {
+            return Err(ErrorCode::NoSuchChannel);
+        }
+        check_text(text).map_err(|error| match error {
+            TextError::Empty => ErrorCode::EmptyText,
+            TextError::TooLong => ErrorCode::TextTooLong,
+        })?;
+        Ok(self.to_each_member(|to| ServerMessage::Message {
+            reference: request.reference.filter(|_| to == request.from),
             channel: LOBBY.to_owned(),
-            from: name.clone(),
-            time: now,
+            from: member.name.clone(),
+            time: request.now,
             text: text.to_owned(),
-        })
+        }))
     }
 
     fn invite(
         &mut self,
-        from: ConnectionId,
-        reference: Option<u32>,
-        state: &State,
+        request: &Request<'_>,
         lifetime: Option<NonZeroU32>,
         uses: Option<NonZeroU32>,
-        now: Timestamp,
-    ) -> Result<Vec<Outgoing>, Refused> {
-        let account = account_of(state)?;
-        let end = lifetime.map(|seconds| later(now, u64::from(seconds.get()) * 1000));
+    ) -> Answer {
+        let account = account_of(request.state)?;
+        let end = lifetime.map(|seconds| later(request.now, u64::from(seconds.get()) * 1000));
         let code = (self.random.code)();
         self.rules
             .invite(
@@ -416,57 +395,39 @@ impl Hub {
                 &code,
                 end,
                 uses.map(NonZeroU32::get),
-                now,
+                request.now,
             )
             .map_err(|_| ErrorCode::ServerError)?
             .map_err(|error| match error {
                 InviteError::NotPermitted => ErrorCode::NotPermitted,
                 InviteError::CodeTaken => ErrorCode::ServerError,
             })?;
-        Ok(self.invitations(from, reference, now))
+        Ok(self.invitations(request))
     }
 
-    fn list_invitations(
-        &self,
-        from: ConnectionId,
-        reference: Option<u32>,
-        state: &State,
-        now: Timestamp,
-    ) -> Result<Vec<Outgoing>, Refused> {
-        if !self.rules.is_owner(account_of(state)?) {
+    fn list_invitations(&self, request: &Request<'_>) -> Answer {
+        if !self.rules.is_owner(account_of(request.state)?) {
             return Err(ErrorCode::NotPermitted);
         }
-        Ok(self.invitations(from, reference, now))
+        Ok(self.invitations(request))
     }
 
-    fn revoke(
-        &mut self,
-        from: ConnectionId,
-        reference: Option<u32>,
-        state: &State,
-        code: &Code,
-        now: Timestamp,
-    ) -> Result<Vec<Outgoing>, Refused> {
-        let account = account_of(state)?;
+    fn revoke(&mut self, request: &Request<'_>, code: &Code) -> Answer {
+        let account = account_of(request.state)?;
         self.rules
-            .revoke(&mut self.store, account, code, now)
+            .revoke(&mut self.store, account, code, request.now)
             .map_err(|_| ErrorCode::ServerError)?
             .map_err(|error| match error {
                 RevokeError::NotPermitted => ErrorCode::NotPermitted,
                 RevokeError::NotOpen => ErrorCode::InvalidInvitation,
             })?;
-        Ok(self.invitations(from, reference, now))
+        Ok(self.invitations(request))
     }
 
-    fn invitations(
-        &self,
-        to: ConnectionId,
-        reference: Option<u32>,
-        now: Timestamp,
-    ) -> Vec<Outgoing> {
+    fn invitations(&self, request: &Request<'_>) -> Vec<Outgoing> {
         let list = self
             .rules
-            .open_invitations(now)
+            .open_invitations(request.now)
             .into_iter()
             .rev()
             .map(|open| Invitation {
@@ -478,23 +439,21 @@ impl Hub {
                 used: open.used,
             })
             .collect();
-        let message = ServerMessage::Invitations { reference, list };
-        vec![Outgoing { to, message }]
+        vec![Outgoing {
+            to: request.from,
+            message: ServerMessage::Invitations {
+                reference: request.reference,
+                list,
+            },
+        }]
     }
 
-    fn rename(
-        &mut self,
-        from: ConnectionId,
-        reference: Option<u32>,
-        state: &State,
-        wanted: &str,
-        now: Timestamp,
-    ) -> Result<Vec<Outgoing>, Refused> {
-        let account = account_of(state)?;
+    fn rename(&mut self, request: &Request<'_>, wanted: &str) -> Answer {
+        let account = account_of(request.state)?;
         let new = Name::parse(wanted).map_err(|_| ErrorCode::InvalidName)?;
         let old = self
             .rules
-            .rename(&mut self.store, account, &new, now)
+            .rename(&mut self.store, account, &new, request.now)
             .map_err(|_| ErrorCode::ServerError)?
             .map_err(|error| match error {
                 RenameError::TooSoon => ErrorCode::TooSoon,
@@ -509,10 +468,10 @@ impl Hub {
             }
         }
         Ok(self.to_each_member(|to| ServerMessage::Rename {
-            reference: reference.filter(|_| to == from),
+            reference: request.reference.filter(|_| to == request.from),
             old: old.clone(),
             new: new.clone(),
-            time: now,
+            time: request.now,
         }))
     }
 
@@ -578,18 +537,6 @@ fn present(state: &State) -> Result<&Member, Refused> {
 
 fn account_of(state: &State) -> Result<AccountId, Refused> {
     Ok(present(state)?.account)
-}
-
-fn examine_text<'a>(state: &'a State, channel: &str, text: &str) -> Result<&'a Member, Refused> {
-    let member = present(state)?;
-    if channel != LOBBY {
-        return Err(ErrorCode::NoSuchChannel);
-    }
-    check_text(text).map_err(|error| match error {
-        TextError::Empty => ErrorCode::EmptyText,
-        TextError::TooLong => ErrorCode::TextTooLong,
-    })?;
-    Ok(member)
 }
 
 fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Outgoing> {
