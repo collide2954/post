@@ -11,7 +11,9 @@ use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::view::{self, Window};
 use post_client::{Disconnect, Event, Fingerprint, KnownServer, Link};
-use post_proto::{ClientMessage, ErrorCode, Key, Name, Role, ServerMessage, Timestamp};
+use post_proto::{
+    ClientMessage, Code, ErrorCode, Invitation, Key, Name, Role, ServerMessage, Timestamp,
+};
 
 const SCREENSHOT_VARIABLE: &str = "POST_SCREENSHOTS";
 
@@ -102,10 +104,13 @@ fn connecting_app(mode: Mode) -> App {
 }
 
 fn chat_app(mode: Mode) -> (App, Outbox) {
+    chat_app_as(mode, Role::Member)
+}
+
+fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
     let mut app = connecting_app(mode);
     let attempt = app.target().expect("a connection is in progress").attempt;
-    let (link, mut messages) =
-        Link::channel(name("ana"), Role::Member, Key::from_bytes([1; 32]), 8);
+    let (link, mut messages) = Link::channel(name("ana"), role, Key::from_bytes([1; 32]), 8);
     app.update(Message::Connection(attempt, Event::Connected(link)));
 
     let join = |who: &str, clock: &str| ServerMessage::Join {
@@ -141,6 +146,58 @@ fn chat_app(mode: Mode) -> (App, Outbox) {
         app.update(Message::Connection(attempt, Event::Received(message)));
     }
     (app, Box::new(move || messages.try_recv().ok()))
+}
+
+fn receive(app: &mut App, message: ServerMessage) {
+    let attempt = app.target().expect("a connection").attempt;
+    app.update(Message::Connection(attempt, Event::Received(message)));
+}
+
+fn code(text: &str) -> Code {
+    Code::parse(text).expect(text)
+}
+
+fn invitation(text: &str, end: Option<&str>, limit: Option<u32>, used: u32) -> Invitation {
+    Invitation {
+        code: code(text),
+        link: format!("https://chat.example.org/i/{text}"),
+        created: time("14:02:00"),
+        end: end.map(|end| Timestamp::parse(end).expect(end)),
+        uses: limit,
+        used,
+    }
+}
+
+fn two_invitations() -> Vec<Invitation> {
+    vec![
+        invitation("k3Wm8sTz2LpQ", Some("2026-11-28T14:02:00.000Z"), Some(5), 2),
+        invitation("7Hq2kdX9mPq4", None, None, 0),
+    ]
+}
+
+fn invitations_app(mode: Mode, list: Option<Vec<Invitation>>) -> (App, Outbox) {
+    let (mut app, outbox) = chat_app_as(mode, Role::Owner);
+    let open = chat::Message::Open(chat::Panel::Invitations);
+    app.update(Message::Chat(open));
+    if let Some(list) = list {
+        let reference = Some(1);
+        receive(&mut app, ServerMessage::Invitations { reference, list });
+    }
+    (app, outbox)
+}
+
+fn account_app(mode: Mode) -> (App, Outbox) {
+    let (mut app, outbox) = chat_app(mode);
+    app.update(Message::Chat(chat::Message::Open(chat::Panel::Account)));
+    (app, outbox)
+}
+
+fn clicked(window: &Window, text: &str) -> Vec<Message> {
+    let mut interface = simulator(window);
+    interface
+        .click(text)
+        .unwrap_or_else(|error| panic!("{text}: {error}"));
+    interface.into_messages().collect()
 }
 
 #[test]
@@ -424,6 +481,204 @@ fn the_leave_button_leaves_the_chat() {
 }
 
 #[test]
+fn the_header_of_the_chat_has_a_link_for_each_panel() {
+    let (app, _outbox) = chat_app(Mode::Light);
+    let member = window(app, Language::English);
+    assert!(simulator(&member).find("Invitations").is_err());
+    let messages = clicked(&member, "Change name");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Open(chat::Panel::Account))]
+        ),
+        "{messages:?}"
+    );
+
+    let (app, _outbox) = chat_app_as(Mode::Light, Role::Owner);
+    let owner = window(app, Language::English);
+    let messages = clicked(&owner, "Invitations");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Open(chat::Panel::Invitations))]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_invitations_panel_lists_the_open_invitations() {
+    let (app, _outbox) = invitations_app(Mode::Light, Some(two_invitations()));
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "#lobby",
+        "Invitations",
+        "Ends after",
+        "7 days",
+        "No limit",
+        "https://chat.example.org/i/k3Wm8sTz2LpQ",
+        "Ends 2026-11-28 14:02 · Uses: 2 of 5",
+        "https://chat.example.org/i/7Hq2kdX9mPq4",
+        "No end · Uses: 0",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    for text in ["Leave", "Change name", "Hello"] {
+        assert!(interface.find(text).is_err(), "{text}");
+    }
+}
+
+#[test]
+fn the_invitations_panel_tells_the_state_of_the_list() {
+    let (app, _outbox) = invitations_app(Mode::Light, None);
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("Post asks the server for the invitations.")
+        .expect("the panel tells that the list is not there");
+
+    let (app, _outbox) = invitations_app(Mode::Light, Some(Vec::new()));
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("The server has no open invitations.")
+        .expect("the panel tells that the list is empty");
+
+    let (mut app, _outbox) = invitations_app(Mode::Light, Some(Vec::new()));
+    receive(
+        &mut app,
+        ServerMessage::error(Some(1), ErrorCode::NotPermitted),
+    );
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("Your account does not have the permission for this task.")
+        .expect("the panel shows the error");
+}
+
+#[test]
+fn the_buttons_of_the_invitations_panel_make_copy_and_cancel_invitations() {
+    let list = vec![invitation("7Hq2kdX9mPq4", None, None, 0)];
+    let (app, _outbox) = invitations_app(Mode::Light, Some(list));
+    let window = window(app, Language::English);
+
+    let messages = clicked(&window, "1 day");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::LifetimeSelected(
+                chat::Lifetime::Day
+            ))]
+        ),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "25");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::UsesSelected(
+                chat::Uses::TwentyFive
+            ))]
+        ),
+        "{messages:?}"
+    );
+    assert!(clicked(&window, "7 days").is_empty());
+    assert!(clicked(&window, "No limit").is_empty());
+    let messages = clicked(&window, "New invite link");
+    assert!(
+        matches!(messages.as_slice(), [Message::Chat(chat::Message::Invite)]),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Copy");
+    assert!(
+        matches!(messages.as_slice(), [Message::Chat(chat::Message::Copy(copied))] if *copied == code("7Hq2kdX9mPq4")),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Cancel invitation");
+    assert!(
+        matches!(messages.as_slice(), [Message::Chat(chat::Message::Revoke(revoked))] if *revoked == code("7Hq2kdX9mPq4")),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Back");
+    assert!(
+        matches!(messages.as_slice(), [Message::Chat(chat::Message::Close)]),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_invitations_panel_tells_which_link_is_in_the_clipboard() {
+    let (mut app, _outbox) = invitations_app(Mode::Light, Some(two_invitations()));
+    let copy = chat::Message::Copy(code("7Hq2kdX9mPq4"));
+    app.update(Message::Chat(copy));
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .find("Copied")
+        .expect("one link is in the clipboard");
+    interface.find("Copy").expect("one link is not there");
+}
+
+#[test]
+fn the_account_panel_changes_the_name() {
+    let (app, _outbox) = account_app(Mode::Light);
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Your name on this server",
+        "New name",
+        "You can change your name one time in 30 days. Your earlier name stays reserved for you for 30 days.",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    interface
+        .click(selector::id(view::PANEL_FIELD))
+        .expect("the account panel has a name field");
+    interface.typewrite("x");
+    interface.tap_key(Named::Enter);
+    interface
+        .click("Change name")
+        .expect("the account panel has a button");
+
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [
+                Message::Chat(chat::Message::NameChanged(name)),
+                Message::Chat(chat::Message::Rename),
+                Message::Chat(chat::Message::Rename)
+            ] if name.contains('x') && name.contains("ana")
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_account_panel_shows_a_problem_with_the_new_name() {
+    let (mut app, _outbox) = account_app(Mode::Light);
+    let short = chat::Message::NameChanged("a".to_owned());
+    app.update(Message::Chat(short));
+    app.update(Message::Chat(chat::Message::Rename));
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("A name must have a minimum of 2 characters.")
+        .expect("the problem shows");
+
+    let (mut app, _outbox) = account_app(Mode::Light);
+    receive(&mut app, ServerMessage::error(Some(1), ErrorCode::TooSoon));
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("You changed your name a short time ago. Try again later.")
+        .expect("the error shows");
+}
+
+#[test]
 fn the_chat_screen_shows_an_error_from_the_server() {
     let (mut app, _outbox) = chat_app(Mode::Light);
     let attempt = app.target().expect("a connection").attempt;
@@ -454,7 +709,42 @@ fn the_interface_has_spanish_text() {
     let (app, _outbox) = chat_app(Mode::Light);
     let window = self::window(app, Language::Spanish);
     let mut interface = simulator(&window);
-    for text in ["ana · conectado", "ben entró", "ben salió", "Salir"] {
+    for text in [
+        "ana · conectado",
+        "ben entró",
+        "ben salió",
+        "Cambiar nombre",
+        "Salir",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+
+    let (app, _outbox) = invitations_app(Mode::Light, Some(two_invitations()));
+    let window = self::window(app, Language::Spanish);
+    let mut interface = simulator(&window);
+    for text in [
+        "Invitaciones",
+        "Termina después de",
+        "7 días",
+        "Sin límite",
+        "Nuevo enlace de invitación",
+        "Termina 2026-11-28 14:02 · Usos: 2 de 5",
+        "Sin fin · Usos: 0",
+        "Copiar",
+        "Cancelar invitación",
+        "Volver",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+
+    let (app, _outbox) = account_app(Mode::Light);
+    let window = self::window(app, Language::Spanish);
+    let mut interface = simulator(&window);
+    for text in ["Tu nombre en este servidor", "Nombre nuevo"] {
         interface
             .find(text)
             .unwrap_or_else(|error| panic!("{text}: {error}"));
@@ -487,6 +777,22 @@ fn each_screen_draws_in_light_and_dark_mode() {
             ("connecting", connecting_app(mode), Language::English),
             ("chat", chat_app(mode).0, Language::English),
             ("chat-es", chat_app(mode).0, Language::Spanish),
+            (
+                "chat-owner",
+                chat_app_as(mode, Role::Owner).0,
+                Language::English,
+            ),
+            (
+                "invitations",
+                invitations_app(mode, Some(two_invitations())).0,
+                Language::English,
+            ),
+            (
+                "invitations-empty",
+                invitations_app(mode, Some(Vec::new())).0,
+                Language::Spanish,
+            ),
+            ("account", account_app(mode).0, Language::English),
         ];
         for (screen, app, language) in screens {
             let window = window(app, language);

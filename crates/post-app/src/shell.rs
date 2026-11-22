@@ -3,14 +3,15 @@ use std::hash::{Hash, Hasher};
 use iced::keyboard::{self, Key, key::Named};
 use iced::widget::operation;
 use iced::{
-    Application, Element, Pixels, Program, Settings, Size, Subscription, Task, Theme, theme, window,
+    Application, Element, Event, Pixels, Program, Settings, Size, Subscription, Task, Theme, event,
+    theme, window,
 };
 use jiff::tz::TimeZone;
 use post_client::{Home, Identity, Profile, Profiles, Seed};
 
 use crate::app::servers::Target;
 use crate::app::start::StartProblem;
-use crate::app::{App, Effect, Message};
+use crate::app::{App, Effect, Message, chat};
 use crate::i18n::{Language, Strings, Text};
 use crate::palette::Mode;
 use crate::view::{self, Window};
@@ -88,10 +89,12 @@ fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match shell.window.app.update(message) {
         Effect::None => Task::none(),
         Effect::FocusForm => operation::focus(view::ADDRESS_FIELD),
-
+        Effect::FocusDraft => operation::focus(view::DRAFT_FIELD),
+        Effect::FocusPanel => operation::focus(view::PANEL_FIELD),
         Effect::FocusNext => operation::focus_next(),
         Effect::FocusPrevious => operation::focus_previous(),
-        Effect::Connected(server) => {
+        Effect::Copy(text) => iced::clipboard::write(text),
+        Effect::Remember(server) => {
             let saved = shell
                 .profile
                 .as_mut()
@@ -148,7 +151,7 @@ fn subscription(shell: &Shell) -> Subscription<Message> {
     Subscription::batch([
         connection,
         iced::system::theme_changes().map(mode_changed),
-        keyboard::listen().filter_map(|event| focus_key(&event)),
+        event::listen_with(|event, status, _window| shortcut(&event, status)),
     ])
 }
 
@@ -159,13 +162,18 @@ fn mode_changed(mode: theme::Mode) -> Message {
     })
 }
 
-fn focus_key(event: &keyboard::Event) -> Option<Message> {
-    match event {
-        keyboard::Event::KeyPressed {
-            key: Key::Named(Named::Tab),
-            modifiers,
-            ..
-        } => Some(if modifiers.shift() {
+fn shortcut(event: &Event, status: event::Status) -> Option<Message> {
+    let Event::Keyboard(keyboard::Event::KeyPressed {
+        key: Key::Named(key),
+        modifiers,
+        ..
+    }) = event
+    else {
+        return None;
+    };
+    match (key, status) {
+        (Named::Escape, _) => Some(Message::Chat(chat::Message::Close)),
+        (Named::Tab, event::Status::Ignored) => Some(if modifiers.shift() {
             Message::FocusPrevious
         } else {
             Message::FocusNext
@@ -176,16 +184,17 @@ fn focus_key(event: &keyboard::Event) -> Option<Message> {
 
 #[cfg(test)]
 mod tests {
+    use iced::event::Status;
     use iced::keyboard::key::{self, Named};
     use iced::keyboard::{self, Key, Location, Modifiers};
-    use iced::theme;
+    use iced::{Event, mouse, theme};
 
-    use super::{focus_key, mode_changed};
-    use crate::app::Message;
+    use super::{mode_changed, shortcut};
+    use crate::app::{Message, chat};
     use crate::palette::Mode;
 
-    fn pressed(key: Key, modifiers: Modifiers) -> keyboard::Event {
-        keyboard::Event::KeyPressed {
+    fn pressed(key: Key, modifiers: Modifiers) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
             key: key.clone(),
             modified_key: key,
             physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
@@ -193,36 +202,67 @@ mod tests {
             modifiers,
             text: None,
             repeat: false,
-        }
+        })
     }
 
     #[test]
     fn the_tab_key_moves_the_focus_to_the_next_field() {
         let event = pressed(Key::Named(Named::Tab), Modifiers::empty());
 
-        assert!(matches!(focus_key(&event), Some(Message::FocusNext)));
+        assert!(matches!(
+            shortcut(&event, Status::Ignored),
+            Some(Message::FocusNext)
+        ));
     }
 
     #[test]
     fn the_shift_and_tab_keys_move_the_focus_to_the_field_before() {
         let event = pressed(Key::Named(Named::Tab), Modifiers::SHIFT);
 
-        assert!(matches!(focus_key(&event), Some(Message::FocusPrevious)));
+        assert!(matches!(
+            shortcut(&event, Status::Ignored),
+            Some(Message::FocusPrevious)
+        ));
     }
 
     #[test]
-    fn a_different_key_does_not_move_the_focus() {
+    fn the_tab_key_does_nothing_when_a_part_of_the_window_used_it() {
+        let event = pressed(Key::Named(Named::Tab), Modifiers::empty());
+
+        assert!(shortcut(&event, Status::Captured).is_none());
+    }
+
+    #[test]
+    fn the_escape_key_closes_a_panel_also_from_a_text_field() {
+        let event = pressed(Key::Named(Named::Escape), Modifiers::empty());
+
+        for status in [Status::Ignored, Status::Captured] {
+            assert!(
+                matches!(
+                    shortcut(&event, status),
+                    Some(Message::Chat(chat::Message::Close))
+                ),
+                "{status:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_different_event_is_not_a_shortcut() {
         let enter = pressed(Key::Named(Named::Enter), Modifiers::empty());
-        let released = keyboard::Event::KeyReleased {
+        let letter = pressed(Key::Character("a".into()), Modifiers::empty());
+        let released = Event::Keyboard(keyboard::Event::KeyReleased {
             key: Key::Named(Named::Tab),
             modified_key: Key::Named(Named::Tab),
             physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
             location: Location::Standard,
             modifiers: Modifiers::empty(),
-        };
+        });
+        let mouse = Event::Mouse(mouse::Event::CursorLeft);
 
-        assert!(focus_key(&enter).is_none());
-        assert!(focus_key(&released).is_none());
+        for event in [enter, letter, released, mouse] {
+            assert!(shortcut(&event, Status::Ignored).is_none(), "{event:?}");
+        }
     }
 
     #[test]

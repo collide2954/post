@@ -6,6 +6,7 @@ use futures_util::StreamExt;
 use iced::{Program, Size, Theme};
 use iced_test::emulator::{self, Emulator, Mode};
 use iced_test::futures::futures::channel::mpsc;
+use iced_test::selector::{Candidate, Selector};
 use iced_test::{Instruction, Simulator};
 use post_app::app::{Message, servers};
 use post_app::i18n::Language;
@@ -97,6 +98,29 @@ where
             assert!(start.elapsed() < PATIENCE, "the text does not show: {text}");
             self.pump();
         }
+    }
+
+    fn invite_link(&self) -> Option<String> {
+        Simulator::new(self.emulator.view(&self.program))
+            .find(InviteLink)
+            .ok()
+    }
+}
+
+struct InviteLink;
+
+impl Selector for InviteLink {
+    type Output = String;
+
+    fn select(&mut self, candidate: Candidate<'_>) -> Option<String> {
+        match candidate {
+            Candidate::Text { content, .. } if content.contains("/i/") => Some(content.to_owned()),
+            _ => None,
+        }
+    }
+
+    fn description(&self) -> String {
+        "the text of an invite link".to_owned()
     }
 }
 
@@ -202,6 +226,111 @@ fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
     invitation
         .recv_timeout(PATIENCE)
         .expect("ben makes an invitation in time")
+}
+
+fn join(backstage: &Backstage, link: &str, who: &str) {
+    let destination = Destination::parse(link).expect("a valid invite link");
+    let identity = Identity {
+        seed: Seed::from_bytes([3; 32]),
+        name: Some(name(who)),
+    };
+    let (joined, welcome) = std::sync::mpsc::channel();
+    backstage.runtime.spawn(async move {
+        let mut events = Box::pin(sign_in(destination, identity, Trust::default()));
+        let mut links = Vec::new();
+        while let Some(event) = events.next().await {
+            match event {
+                Event::Connected(link) => {
+                    links.push(link);
+                    let _ = joined.send(());
+                }
+                Event::Received(_) => {}
+                Event::Disconnected(_) => break,
+            }
+        }
+    });
+    welcome
+        .recv_timeout(PATIENCE)
+        .expect("the user joins in time");
+}
+
+fn known_servers(directory: &Directory) -> String {
+    let servers = directory.join("profiles").join("1").join("servers.toml");
+    std::fs::read_to_string(servers).expect("a servers file")
+}
+
+#[test]
+fn the_owner_makes_an_invite_link_for_a_second_user_and_cancels_it() {
+    let backstage = start_server();
+    let directory = Directory::new();
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+    driver.sign_up(backstage.owner_link.clone(), "ana");
+    driver.expect("ana · connected");
+
+    driver.act("click \"Invitations\"");
+    driver.expect("The server has no open invitations.");
+    driver.act("click \"No end\"");
+    driver.act("click \"5\"");
+    driver.act("click \"New invite link\"");
+    driver.expect("No end · Uses: 0 of 5");
+    let link = driver.invite_link().expect("the panel shows the link");
+    assert!(
+        link.starts_with(&format!("http://localhost:{}/i/", backstage.port)),
+        "{link}"
+    );
+    driver.act("click \"Copy\"");
+    driver.expect("Copied");
+
+    join(&backstage, &link, "ben");
+    driver.act("click \"Back\"");
+    driver.expect("ben joined");
+    driver.act("click \"Invitations\"");
+    driver.expect("No end · Uses: 1 of 5");
+
+    driver.act("click \"Cancel invitation\"");
+    driver.expect("The server has no open invitations.");
+    assert!(driver.invite_link().is_none());
+}
+
+#[test]
+fn a_user_changes_the_name_and_cannot_change_it_again_at_once() {
+    let backstage = start_server();
+    let directory = Directory::new();
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+    driver.sign_up(backstage.owner_link.clone(), "ana");
+    driver.expect("ana · connected");
+
+    driver.act("click \"Change name\"");
+    driver.expect("Your name on this server");
+    driver.type_text("2");
+    driver.act("type enter");
+
+    driver.expect("ana2 · connected");
+    driver.expect("ana is now ana2");
+    assert!(!driver.shows("Your name on this server"));
+    let servers = known_servers(&directory);
+    assert!(servers.contains("name = \"ana2\""), "{servers}");
+
+    driver.act("click \"Change name\"");
+    driver.expect("Your name on this server");
+    driver.type_text("3");
+    driver.act("type enter");
+    driver.expect("You changed your name a short time ago. Try again later.");
+
+    driver.act("click \"Back\"");
+    driver.expect("ana is now ana2");
+    assert!(!driver.shows("You changed your name a short time ago. Try again later."));
+    driver.type_text("Hello");
+    driver.act("type enter");
+    driver.expect("Hello");
 }
 
 #[test]

@@ -2,7 +2,7 @@ pub mod chat;
 pub mod servers;
 pub mod start;
 
-use post_client::{Event, KnownServer, Link, Security};
+use post_client::{Event, KnownServer, Link};
 use post_proto::ErrorCode;
 
 use self::chat::Chat;
@@ -26,10 +26,13 @@ pub enum Message {
 pub enum Effect {
     None,
     FocusForm,
+    FocusDraft,
+    FocusPanel,
     FocusNext,
     FocusPrevious,
-    Connected(KnownServer),
+    Remember(KnownServer),
     Forget(String),
+    Copy(String),
 }
 
 #[derive(Debug)]
@@ -129,11 +132,9 @@ impl App {
             return Effect::None;
         };
         match message {
-            chat::Message::DraftChanged(draft) => chat.edit(draft),
-            chat::Message::Send => chat.send(),
-            chat::Message::Leave => return self.leave(None),
+            chat::Message::Leave => self.leave(None),
+            message => chat.update(message),
         }
-        Effect::None
     }
 
     fn connection(&mut self, attempt: u64, event: Event) -> Effect {
@@ -143,10 +144,14 @@ impl App {
         match event {
             Event::Connected(link) => self.open_chat(link),
             Event::Received(message) => {
-                if let Screen::Chat(chat) = &mut self.screen {
-                    chat.receive(message);
+                let Screen::Chat(chat) = &mut self.screen else {
+                    return Effect::None;
+                };
+                let effect = chat.receive(message);
+                if let Effect::Remember(server) = &effect {
+                    server.clone().remember_in(&mut self.servers);
                 }
-                Effect::None
+                effect
             }
             Event::Disconnected(reason) => {
                 let problem = Some(Problem::Disconnected(reason));
@@ -165,18 +170,11 @@ impl App {
         let Some((form, target)) = servers.connected() else {
             return Effect::None;
         };
-        let server = KnownServer {
-            address: target.destination.address().to_string(),
-            key: *link.server(),
-            name: link.name().clone(),
-            tls: target.destination.security() == Security::Tls,
-            certificate: link
-                .certificate()
-                .map(|fingerprint| fingerprint.to_string()),
-        };
-        self.screen = Screen::Chat(Box::new(Chat::new(form, target, link)));
+        let chat = Chat::new(form, target, link);
+        let server = chat.server();
+        self.screen = Screen::Chat(Box::new(chat));
         server.clone().remember_in(&mut self.servers);
-        Effect::Connected(server)
+        Effect::Remember(server)
     }
 
     fn leave(&mut self, problem: Option<Problem>) -> Effect {
@@ -291,7 +289,7 @@ mod tests {
         let message = connection(&app, Event::Connected(link));
         assert_eq!(
             app.update(message),
-            Effect::Connected(server("localhost:7678", 1, who))
+            Effect::Remember(server("localhost:7678", 1, who))
         );
         assert!(matches!(app.screen(), Screen::Chat(_)));
         (app, Box::new(move || messages.try_recv().ok()))
@@ -378,7 +376,7 @@ mod tests {
 
         assert_eq!(
             effect,
-            Effect::Connected(server("localhost:7678", 1, "ana-2"))
+            Effect::Remember(server("localhost:7678", 1, "ana-2"))
         );
         let Screen::Chat(chat) = app.screen() else {
             panic!("the application shows the chat");
@@ -404,7 +402,7 @@ mod tests {
             certificate: Some("09".repeat(32)),
             ..server("localhost:8443", 1, "ana")
         };
-        assert_eq!(effect, Effect::Connected(expected.clone()));
+        assert_eq!(effect, Effect::Remember(expected.clone()));
         assert_eq!(app.servers(), [expected]);
     }
 
@@ -589,6 +587,28 @@ mod tests {
                 text: "Hello".to_owned(),
             })
         );
+        let open = chat::Message::Open(chat::Panel::Account);
+        assert_eq!(app.update(Message::Chat(open)), Effect::FocusPanel);
+        let close = Message::Chat(chat::Message::Close);
+        assert_eq!(app.update(close), Effect::FocusDraft);
+    }
+
+    #[test]
+    fn keeps_the_new_name_of_the_user_in_the_list_of_servers() {
+        let (mut app, _outbox) = chatting("ana", 4);
+        let renamed = ServerMessage::Rename {
+            reference: None,
+            old: name("ana"),
+            new: name("anna"),
+            time: Timestamp::parse("2026-11-21T14:02:00.000Z").expect("valid"),
+        };
+
+        let message = connection(&app, Event::Received(renamed));
+        let effect = app.update(message);
+
+        let expected = server("localhost:7678", 1, "anna");
+        assert_eq!(effect, Effect::Remember(expected.clone()));
+        assert_eq!(app.servers(), [expected]);
     }
 
     #[test]

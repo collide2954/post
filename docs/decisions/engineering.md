@@ -378,6 +378,11 @@ Application:
 - The user types a name only for a new account. For an account that exists, the application ignores the name.
 - The application remembers the key of each server. If a known address shows a different key, the application does not sign in.
 - If the application cannot open the profile, the window shows the cause, and the application does nothing more.
+- In the chat screen, the Invitations panel and the name panel take the place of the timeline. The Back link and the Escape key close a panel.
+- The application shows the Invitations link only to the server owner. The server examines each request, thus the application does not decide the permission.
+- A new invitation stops after 1 day, 7 days, or 30 days, or it has no end. It has 1, 5, or 25 uses, or it has no limit (D-166).
+- The Invitations panel asks the server for the list each time it opens. The panel shows the end of an invitation as a local date and time, for example `2026-11-28 14:02`.
+- After a handle change, the application writes the new handle in the profile. The application sends no request if the user does not change the name in the field.
 - When the application changes a value in the settings file, it keeps the comments and the sequence of the file.
 - The F12 key shows and hides the protocol console when the developer setting is on.
 

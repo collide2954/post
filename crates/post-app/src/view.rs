@@ -9,19 +9,20 @@ use iced::{
 };
 use jiff::tz::TimeZone;
 use post_client::{Entry, KnownServer};
-use post_proto::LOBBY;
+use post_proto::{Invitation, LOBBY};
 
-use crate::app::chat::{self, Chat};
+use crate::app::chat::{self, Account, Chat, Invitations, Lifetime, Open, Panel, Uses};
 use crate::app::servers::{self, Question, Servers};
 use crate::app::start::StartProblem;
 use crate::app::{App, Message, Screen};
 use crate::i18n::{Strings, Text};
 use crate::palette::{Mode, Palette, Rgb};
-use crate::timeline::{clock, name_column, shows_name};
+use crate::timeline::{clock, date_and_clock, name_column, shows_name};
 
 pub const ADDRESS_FIELD: &str = "address";
 pub const NAME_FIELD: &str = "name";
 pub const DRAFT_FIELD: &str = "draft";
+pub const PANEL_FIELD: &str = "panel";
 
 pub const TEXT_FONT: Font = Font::with_name("Inter");
 const STRONG_FONT: Font = Font {
@@ -280,26 +281,52 @@ fn server_row<'a>(
     .align_y(Alignment::Center)
     .into()
 }
+
 fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Element<'a, Message> {
     let strings = &window.strings;
-    let session = chat.session();
-    let entries = session.entries();
+    let link = |text: Text, message: chat::Message| {
+        link_button(strings.text(text), Some(Message::Chat(message)), palette)
+    };
 
+    let mut links = row![].spacing(4);
+    if chat.panel().is_some() {
+        links = links.push(link(Text::ChatBackButton, chat::Message::Close));
+    } else {
+        if chat.is_owner() {
+            let open = chat::Message::Open(Panel::Invitations);
+            links = links.push(link(Text::ChatInvitationsButton, open));
+        }
+        links = links
+            .push(link(
+                Text::ChatNameButton,
+                chat::Message::Open(Panel::Account),
+            ))
+            .push(link(Text::ChatLeaveButton, chat::Message::Leave));
+    }
+    let name = chat.session().name().as_str();
     let header = row![
         text(format!("#{LOBBY}")).font(STRONG_FONT).size(15),
         space::horizontal(),
-        text(strings.with(Text::ChatStatus, "name", session.name().as_str()))
+        text(strings.with(Text::ChatStatus, "name", name))
             .size(13)
             .color(color(palette.muted)),
-        link_button(
-            strings.text(Text::ChatLeaveButton),
-            Some(Message::Chat(chat::Message::Leave)),
-            palette
-        ),
+        links,
     ]
     .spacing(12)
     .align_y(Alignment::Center)
     .padding([8, 16]);
+
+    let body = match chat.panel() {
+        None => conversation(window, chat, palette),
+        Some(Open::Invitations(panel)) => invitations_panel(window, chat, panel, palette),
+        Some(Open::Account(account)) => account_panel(strings, chat, account, palette),
+    };
+    column![header, divider(palette), body].into()
+}
+
+fn conversation<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Element<'a, Message> {
+    let strings = &window.strings;
+    let entries = chat.session().entries();
 
     #[expect(
         clippy::cast_precision_loss,
@@ -331,7 +358,7 @@ fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Elem
     .padding([14, 16])
     .style(move |_, status| field_style(palette, status, 0.0));
 
-    let mut page = column![header, divider(palette), timeline];
+    let mut page = column![timeline];
     if let Some(notice) = chat.notice() {
         page = page.push(
             container(
@@ -343,6 +370,213 @@ fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Elem
         );
     }
     page.push(divider(palette)).push(input).into()
+}
+
+fn invitations_panel<'a>(
+    window: &'a Window,
+    chat: &'a Chat,
+    panel: &'a Invitations,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let strings = &window.strings;
+    let lifetimes = Lifetime::ALL.into_iter().map(|lifetime| {
+        choice(
+            strings.text(lifetime.text()),
+            lifetime == panel.lifetime,
+            chat::Message::LifetimeSelected(lifetime),
+            palette,
+        )
+    });
+    let uses = Uses::ALL.into_iter().map(|uses| {
+        let content = uses.count().map_or_else(
+            || strings.text(Text::InvitationsUsesNoLimit),
+            |count| count.to_string(),
+        );
+        let selected = chat::Message::UsesSelected(uses);
+        choice(content, uses == panel.uses, selected, palette)
+    });
+    let notice: Element<'a, Message> = match chat.notice() {
+        Some(notice) => text(strings.text(notice))
+            .size(13)
+            .color(color(palette.danger))
+            .width(Fill)
+            .into(),
+        None => space::horizontal().into(),
+    };
+    let invite = primary_button(
+        strings.text(Text::InvitationsNewButton),
+        Message::Chat(chat::Message::Invite),
+        palette,
+    );
+
+    let mut content = column![
+        heading(strings.text(Text::InvitationsTitle)),
+        label(strings.text(Text::InvitationsEndsLabel), palette),
+        row(lifetimes).spacing(6),
+        Space::new().height(4),
+        label(strings.text(Text::InvitationsUsesLabel), palette),
+        row(uses).spacing(6),
+        Space::new().height(4),
+        row![notice, invite].spacing(12).align_y(Alignment::Center),
+        Space::new().height(4),
+        divider(palette),
+    ];
+    match chat.session().invitations() {
+        None => {
+            let loading = strings.text(Text::InvitationsLoading);
+            content = content.push(paragraph(loading, palette.muted));
+        }
+        Some([]) => {
+            let empty = strings.text(Text::InvitationsEmpty);
+            content = content.push(paragraph(empty, palette.muted));
+        }
+        Some(list) => {
+            for invitation in list {
+                let copied = panel.copied.as_ref() == Some(&invitation.code);
+                content = content
+                    .push(invitation_row(window, invitation, copied, palette))
+                    .push(divider(palette));
+            }
+        }
+    }
+    panel_page(content)
+}
+
+fn invitation_row<'a>(
+    window: &Window,
+    invitation: &'a Invitation,
+    copied: bool,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let strings = &window.strings;
+    let end = invitation.end.map_or_else(
+        || strings.text(Text::InvitationsLifetimeForever),
+        |end| {
+            let time = date_and_clock(end, &window.zone);
+            strings.with(Text::InvitationsEnd, "time", &time)
+        },
+    );
+    let count = invitation.used.to_string();
+    let count = match invitation.uses {
+        Some(limit) => {
+            let values = [("used", count.as_str()), ("uses", &limit.to_string())];
+            strings.with_all(Text::InvitationsUsedOf, &values)
+        }
+        None => strings.with(Text::InvitationsUsed, "used", &count),
+    };
+    let copy = if copied {
+        Text::InvitationsCopied
+    } else {
+        Text::InvitationsCopyButton
+    };
+    let code = &invitation.code;
+
+    column![
+        text(invitation.link.as_str())
+            .font(MONO_FONT)
+            .size(SMALL_SIZE)
+            .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT))),
+        row![
+            text(format!("{end} · {count}"))
+                .size(13)
+                .color(color(palette.muted))
+                .width(Fill),
+            link_button(
+                strings.text(copy),
+                Some(Message::Chat(chat::Message::Copy(code.clone()))),
+                palette
+            ),
+            link_button(
+                strings.text(Text::InvitationsCancelButton),
+                Some(Message::Chat(chat::Message::Revoke(code.clone()))),
+                palette
+            ),
+        ]
+        .spacing(4)
+        .align_y(Alignment::Center),
+    ]
+    .into()
+}
+
+fn account_panel<'a>(
+    strings: &Strings,
+    chat: &'a Chat,
+    account: &'a Account,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let rename = Message::Chat(chat::Message::Rename);
+    let field = text_input("", &account.name)
+        .id(PANEL_FIELD)
+        .on_input(|name| Message::Chat(chat::Message::NameChanged(name)))
+        .on_submit(rename.clone())
+        .padding([8, 10])
+        .style(move |_, status| field_style(palette, status, 1.0));
+    let problem = account
+        .problem
+        .map(|problem| servers::Problem::Name(problem).text())
+        .or_else(|| chat.notice());
+    let feedback: Element<'a, Message> = match problem {
+        Some(problem) => paragraph(strings.text(problem), palette.danger),
+        None => Space::new().height(LINE_HEIGHT).into(),
+    };
+
+    panel_page(column![
+        heading(strings.text(Text::AccountTitle)),
+        label(strings.text(Text::AccountNameLabel), palette),
+        field,
+        feedback,
+        paragraph(strings.text(Text::AccountNote), palette.muted),
+        Space::new().height(4),
+        row![
+            space::horizontal(),
+            primary_button(strings.text(Text::AccountRenameButton), rename, palette)
+        ],
+    ])
+}
+
+fn panel_page(content: Column<'_, Message>) -> Element<'_, Message> {
+    let content = content.spacing(8).max_width(PAGE_WIDTH);
+    scrollable(container(content).center_x(Fill).padding(24))
+        .height(Fill)
+        .into()
+}
+
+fn heading<'a>(content: String) -> Element<'a, Message> {
+    column![
+        text(content).font(STRONG_FONT).size(18),
+        Space::new().height(8)
+    ]
+    .into()
+}
+
+fn choice<'a>(
+    content: String,
+    selected: bool,
+    message: chat::Message,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let font = if selected { STRONG_FONT } else { TEXT_FONT };
+    button(text(content).size(13).font(font))
+        .padding([4, 10])
+        .on_press_maybe((!selected).then_some(Message::Chat(message)))
+        .style(move |_, status| {
+            let (text_color, border_color) = match status {
+                button::Status::Disabled => (palette.text, palette.text),
+                button::Status::Hovered | button::Status::Pressed => (palette.text, palette.rule),
+                button::Status::Active => (palette.accent, palette.rule),
+            };
+            button::Style {
+                background: None,
+                text_color: color(text_color),
+                border: Border {
+                    color: color(border_color),
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                ..button::Style::default()
+            }
+        })
+        .into()
 }
 
 fn line<'a>(
