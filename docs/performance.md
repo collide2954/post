@@ -49,7 +49,9 @@ The 1,000 test clients use the same processor as the server. For each message, t
 
 Thus the test does not show the time of a server with members on other computers. That time is smaller.
 
-**Open point.** Measure the delivery with the clients on a second computer, and measure it on Linux. Decrease the work for each connection before channels with many members come.
+The nightly checks ran the same test on a Linux computer of GitHub on 2026-11-22. That computer is not the reference computer. The median of the 30 messages was 7 ms. For each message, the server program used 3 ms of processor time in its own code and 10 ms in the operating system. With 10,000 idle connections, the server used 91 MB.
+
+**Open point.** Measure the delivery with the clients on a second computer. Decrease the work for each connection before channels with many members come.
 
 ## Server memory
 
