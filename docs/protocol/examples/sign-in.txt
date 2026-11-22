@@ -21,4 +21,3 @@ S: {"type":"error","ref":3,"code":"invalid-invitation","text":"The invitation is
 C: {"type":"register","ref":4,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw","name":"ana","invitation":"7Hq2kdX9mPq4"}
 S: {"type":"welcome","ref":4,"name":"ana","role":"member"}
 S: {"type":"ready"}
-S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:05.000Z"}

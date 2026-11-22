@@ -10,8 +10,8 @@ use post_client::{
 };
 use post_crypto::{Exchange, Fingerprint, Seed, ServerKey};
 use post_proto::{
-    ClientMessage, ErrorCode, Key, MAX_LINE_BYTES, Name, Nonce, Part, Role, ServerMessage,
-    Timestamp,
+    ChannelKind, ClientMessage, ErrorCode, Key, MAX_LINE_BYTES, Name, Nonce, Part, Role,
+    ServerMessage, Timestamp,
 };
 use post_server::Server;
 use post_server::config::{Config, Tls};
@@ -161,11 +161,31 @@ async fn disconnected(events: &mut Events) -> Disconnect {
 async fn owner(server: &Running) -> (Events, Link) {
     let mut ana = events(&server.owner_link, 1, Some("ana"), None);
     let link = signed_in(&mut ana).await;
-    assert!(matches!(
-        received(&mut ana).await,
-        ServerMessage::Join { name: joined, .. } if joined == name("ana")
-    ));
     (ana, link)
+}
+
+fn create_general() -> ClientMessage {
+    ClientMessage::ChannelCreate {
+        reference: None,
+        channel: "general".to_owned(),
+        kind: ChannelKind::Public,
+    }
+}
+
+fn to_general(reference: Option<u32>, text: &str) -> ClientMessage {
+    ClientMessage::Send {
+        reference,
+        channel: "general".to_owned(),
+        text: text.to_owned(),
+    }
+}
+
+async fn made_general(link: &Link, events: &mut Events) {
+    assert!(link.send(create_general()));
+    assert!(matches!(
+        received(events).await,
+        ServerMessage::Channel { .. }
+    ));
 }
 
 async fn invite_link(owner: &Link, events: &mut Events) -> String {
@@ -271,10 +291,6 @@ async fn a_new_user_makes_an_account_and_signs_in_again() {
     assert_eq!(link.name(), &name("ana"));
     assert_eq!(link.role(), Role::Owner);
     let key = *link.server();
-    assert!(matches!(
-        received(&mut first).await,
-        ServerMessage::Join { name: joined, .. } if joined == name("ana")
-    ));
     drop(link);
     assert_eq!(disconnected(&mut first).await, Disconnect::Closed);
 
@@ -294,6 +310,15 @@ async fn two_users_exchange_text_through_the_server() {
     let ben_link = signed_in(&mut ben).await;
     assert_eq!(ben_link.name(), &name("ben"));
     assert_eq!(ben_link.role(), Role::Member);
+    made_general(&ana_link, &mut ana).await;
+    assert!(ben_link.send(ClientMessage::Join {
+        reference: None,
+        channel: "general".to_owned(),
+    }));
+    assert!(matches!(
+        received(&mut ben).await,
+        ServerMessage::Channel { .. }
+    ));
     for user in [&mut ana, &mut ben] {
         assert!(matches!(
             received(user).await,
@@ -301,11 +326,7 @@ async fn two_users_exchange_text_through_the_server() {
         ));
     }
 
-    assert!(ana_link.send(ClientMessage::Send {
-        reference: Some(1),
-        channel: "lobby".to_owned(),
-        text: "Hello".to_owned(),
-    }));
+    assert!(ana_link.send(to_general(Some(1), "Hello")));
 
     assert!(matches!(
         received(&mut ana).await,
@@ -320,10 +341,6 @@ async fn two_users_exchange_text_through_the_server() {
 
     drop(ben_link);
     assert_eq!(disconnected(&mut ben).await, Disconnect::Closed);
-    assert!(matches!(
-        received(&mut ana).await,
-        ServerMessage::Leave { name: left, .. } if left == name("ben")
-    ));
 }
 
 #[tokio::test]
@@ -332,12 +349,15 @@ async fn two_connections_of_one_account_exchange_text() {
     let (mut first, first_link) = owner(&server).await;
     let mut second = events(&format!("localhost:{}", server.port), 1, None, None);
     let _second_link = signed_in(&mut second).await;
+    assert!(first_link.send(create_general()));
+    for connection in [&mut first, &mut second] {
+        assert!(matches!(
+            received(connection).await,
+            ServerMessage::Channel { .. }
+        ));
+    }
 
-    assert!(first_link.send(ClientMessage::Send {
-        reference: Some(1),
-        channel: "lobby".to_owned(),
-        text: "Hello".to_owned(),
-    }));
+    assert!(first_link.send(to_general(Some(1), "Hello")));
 
     assert!(matches!(
         received(&mut first).await,
@@ -574,15 +594,8 @@ async fn signs_in_with_tls_when_the_user_accepted_the_certificate() {
 
     assert_eq!(link.certificate(), Some(fingerprint));
     assert_eq!(link.role(), Role::Owner);
-    assert!(matches!(
-        received(&mut ana).await,
-        ServerMessage::Join { .. }
-    ));
-    assert!(link.send(ClientMessage::Send {
-        reference: None,
-        channel: "lobby".to_owned(),
-        text: "Hello".to_owned(),
-    }));
+    made_general(&link, &mut ana).await;
+    assert!(link.send(to_general(None, "Hello")));
     assert!(matches!(
         received(&mut ana).await,
         ServerMessage::Message { text, .. } if text == "Hello"
@@ -753,11 +766,7 @@ async fn a_link_cannot_send_after_the_connection_stops() {
     assert_eq!(disconnected(&mut ana).await, Disconnect::Closed);
     drop(ana);
 
-    assert!(!link.send(ClientMessage::Send {
-        reference: None,
-        channel: "lobby".to_owned(),
-        text: "Hello".to_owned(),
-    }));
+    assert!(!link.send(to_general(None, "Hello")));
 }
 
 #[tokio::test]
@@ -782,17 +791,16 @@ async fn tells_each_line_before_the_event_that_it_causes() {
     let link = connected(&mut ana).await;
     line_of(&mut ana, Direction::Received, "ready").await;
     assert_eq!(received(&mut ana).await, ServerMessage::Ready {});
-    line_of(&mut ana, Direction::Received, "join").await;
+
+    assert!(link.send(create_general()));
+    line_of(&mut ana, Direction::Sent, "channel-create").await;
+    line_of(&mut ana, Direction::Received, "channel").await;
     assert!(matches!(
         received(&mut ana).await,
-        ServerMessage::Join { .. }
+        ServerMessage::Channel { .. }
     ));
 
-    let hello = ClientMessage::Send {
-        reference: Some(7),
-        channel: "lobby".to_owned(),
-        text: "Hello".to_owned(),
-    };
+    let hello = to_general(Some(7), "Hello");
     assert!(link.send(hello.clone()));
     let sent = line_of(&mut ana, Direction::Sent, "send").await;
     assert_eq!(ClientMessage::decode(&sent.text).ok(), Some(hello));
@@ -814,10 +822,14 @@ async fn sends_a_line_that_the_user_typed() {
     };
     line_of(&mut ana, Direction::Received, "ready").await;
     received(&mut ana).await;
-    line_of(&mut ana, Direction::Received, "join").await;
+
+    let create = r#"{ "type": "channel-create", "channel": "general", "kind": "public" }"#;
+    assert!(link.send_line(create.to_owned()));
+    assert_eq!(line(&mut ana).await.text, create);
+    line_of(&mut ana, Direction::Received, "channel").await;
     received(&mut ana).await;
 
-    let typed = r#"{ "type": "send", "channel": "lobby", "text": "typed" }"#;
+    let typed = r#"{ "type": "send", "channel": "general", "text": "typed" }"#;
     assert!(link.send_line(typed.to_owned()));
     let sent = line(&mut ana).await;
     assert_eq!(sent.direction, Direction::Sent);
@@ -865,8 +877,8 @@ async fn tells_no_lines_when_the_caller_does_not_ask_for_them() {
     let mut ana = events(&server.owner_link, 1, Some("ana"), None);
 
     let link = signed_in(&mut ana).await;
-    received(&mut ana).await;
-    assert!(link.send_line(r#"{"type":"send","channel":"lobby","text":"typed"}"#.to_owned()));
+    made_general(&link, &mut ana).await;
+    assert!(link.send_line(r#"{"type":"send","channel":"general","text":"typed"}"#.to_owned()));
     assert!(matches!(
         received(&mut ana).await,
         ServerMessage::Message { text, .. } if text == "typed"

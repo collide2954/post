@@ -6,7 +6,8 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use post_crypto::{Exchange, Fingerprint, Seed};
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Key, MAX_LINE_BYTES, Name, Role, ServerMessage, Signature,
+    ChannelKind, ClientMessage, Code, ErrorCode, Key, MAX_LINE_BYTES, Name, Role, ServerMessage,
+    Signature,
 };
 use post_server::config::{Config, Listen, Tls};
 use post_server::store::StoreError;
@@ -235,10 +236,40 @@ async fn join_with(port: u16, person: u8, who: &str, link: &str) -> Socket {
         matches!(answer, ServerMessage::Welcome { name: welcomed, .. } if welcomed == name(who))
     );
     assert_eq!(read(&mut socket).await, ServerMessage::Ready {});
-    assert!(
-        matches!(read(&mut socket).await, ServerMessage::Join { name: joined, .. } if joined == name(who))
-    );
     socket
+}
+
+async fn share_the_channel_general(owner: &mut Socket, member: &mut Socket, who: &str) {
+    let create = ClientMessage::ChannelCreate {
+        reference: None,
+        channel: "general".to_owned(),
+        kind: ChannelKind::Public,
+    };
+    write(owner, &create).await;
+    assert!(matches!(
+        read(owner).await,
+        ServerMessage::Channel {
+            reference: None,
+            ..
+        }
+    ));
+    let join = ClientMessage::Join {
+        reference: Some(2),
+        channel: "general".to_owned(),
+    };
+    write(member, &join).await;
+    assert!(matches!(
+        read(member).await,
+        ServerMessage::Channel {
+            reference: Some(2),
+            ..
+        }
+    ));
+    for socket in [owner, member] {
+        assert!(
+            matches!(read(socket).await, ServerMessage::Join { channel, name: joined, .. } if channel == "general" && joined == name(who))
+        );
+    }
 }
 
 async fn invite(owner: &mut Socket) -> String {
@@ -410,7 +441,6 @@ async fn a_person_joins_with_an_invitation_of_the_owner() {
         register_and_stay(server.port, &Seed::from_bytes([7; 32]), "ana", &owner_link).await;
     assert_eq!(answer, welcome("ana", Role::Owner));
     assert_eq!(read(&mut ana).await, ServerMessage::Ready {});
-    assert!(matches!(read(&mut ana).await, ServerMessage::Join { .. }));
 
     let invite = ClientMessage::Invite {
         reference: Some(1),
@@ -438,9 +468,6 @@ async fn a_person_joins_with_an_invitation_of_the_owner() {
     assert_eq!(
         register(server.port, &ben, "ben", &invitation.link).await,
         welcome("ben", Role::Member)
-    );
-    assert!(
-        matches!(read(&mut ana).await, ServerMessage::Join { name: joined, .. } if joined == name("ben"))
     );
     let cy = Seed::from_bytes([9; 32]);
     assert_eq!(
@@ -634,15 +661,13 @@ async fn two_users_exchange_text() {
     let mut ana = owner(&server).await;
     let link = invite(&mut ana).await;
     let mut ben = join_with(server.port, 8, "ben", &link).await;
-    assert!(
-        matches!(read(&mut ana).await, ServerMessage::Join { channel, name: joined, .. } if channel == "lobby" && joined == name("ben"))
-    );
+    share_the_channel_general(&mut ana, &mut ben, "ben").await;
 
     write(
         &mut ana,
         &ClientMessage::Send {
             reference: Some(1),
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: "Hello".to_owned(),
         },
     )
@@ -659,7 +684,7 @@ async fn two_users_exchange_text() {
         panic!("the sender gets the message");
     };
     assert_eq!(reference, Some(1));
-    assert_eq!(channel, "lobby");
+    assert_eq!(channel, "general");
     assert_eq!(from, name("ana"));
     assert_eq!(text, "Hello");
     assert_eq!(
@@ -673,9 +698,13 @@ async fn two_users_exchange_text() {
         }
     );
 
-    ben.close(None).await.expect("the socket can close");
+    let leave = ClientMessage::Leave {
+        reference: None,
+        channel: "general".to_owned(),
+    };
+    write(&mut ben, &leave).await;
     assert!(
-        matches!(read(&mut ana).await, ServerMessage::Leave { channel, name: left, .. } if channel == "lobby" && left == name("ben"))
+        matches!(read(&mut ana).await, ServerMessage::Leave { channel, name: left, .. } if channel == "general" && left == name("ben"))
     );
 }
 
@@ -685,7 +714,7 @@ async fn tells_each_user_about_a_new_name() {
     let mut ana = owner(&server).await;
     let link = invite(&mut ana).await;
     let mut ben = join_with(server.port, 8, "ben", &link).await;
-    assert!(matches!(read(&mut ana).await, ServerMessage::Join { .. }));
+    share_the_channel_general(&mut ana, &mut ben, "ben").await;
 
     let rename = ClientMessage::Rename {
         reference: Some(3),

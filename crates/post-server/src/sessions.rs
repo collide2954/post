@@ -48,8 +48,7 @@ impl Sessions {
 
     pub fn disconnect(&mut self, id: ConnectionId) {
         self.queues.remove(&id);
-        let outgoing = self.hub.disconnect(id, (self.clock)());
-        self.send(outgoing);
+        self.hub.disconnect(id);
     }
 
     fn send(&mut self, outgoing: Vec<Outgoing>) {
@@ -78,11 +77,15 @@ impl Sessions {
 #[cfg(test)]
 mod tests {
     use post_crypto::{Exchange, Seed};
-    use post_proto::{ClientMessage, ErrorCode, Name, Nonce, Role, ServerMessage, Timestamp};
+    use post_proto::{
+        ChannelKind, ChannelName, ClientMessage, ErrorCode, Name, Nonce, Role, ServerMessage,
+        Timestamp,
+    };
+    use post_rules::Kind;
     use tokio::sync::mpsc::{self, Receiver, error::TryRecvError};
 
     use super::{Line, Sessions};
-    use crate::hub::{ConnectionId, Hub, LIMITS, Random, Settings};
+    use crate::hub::{CHANNEL_LIMITS, ConnectionId, Hub, LIMITS, Random, Settings};
     use crate::store::Store;
 
     const ADDRESS: &str = "localhost:7678";
@@ -127,7 +130,7 @@ mod tests {
             .invite(&mut store, ana.id, &invitation, None, None, clock())
             .expect("stored")
             .expect("the owner can invite");
-        rules
+        let ben = rules
             .register(
                 &mut store,
                 key("ben").as_bytes(),
@@ -137,6 +140,23 @@ mod tests {
             )
             .expect("stored")
             .expect("the invitation is open");
+        let mut channels = store
+            .channels(CHANNEL_LIMITS)
+            .expect("the channels of an empty store");
+        let general = channels
+            .create(
+                &mut store,
+                ana.id,
+                &channel("general"),
+                Kind::Public,
+                clock(),
+            )
+            .expect("stored")
+            .expect("the name is free");
+        channels
+            .join(&mut store, ben.id, general, clock())
+            .expect("stored")
+            .expect("a public channel");
         let settings = Settings {
             addresses: vec![ADDRESS.to_owned()],
             link: "http://localhost:7678".to_owned(),
@@ -149,24 +169,31 @@ mod tests {
     fn send(text: &str) -> String {
         ClientMessage::Send {
             reference: None,
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: text.to_owned(),
         }
         .encode()
     }
 
-    fn join(who: &str) -> ServerMessage {
-        ServerMessage::Join {
-            channel: "lobby".to_owned(),
-            name: name(who),
-            time: clock(),
+    fn channel(text: &str) -> ChannelName {
+        ChannelName::parse(text).expect(text)
+    }
+
+    fn state() -> ServerMessage {
+        ServerMessage::Channel {
+            reference: None,
+            channel: channel("general"),
+            kind: ChannelKind::Public,
+            topic: String::new(),
+            owner: name("ana"),
+            created: clock(),
         }
     }
 
     fn message(from: &str, text: &str) -> ServerMessage {
         ServerMessage::Message {
             reference: None,
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             from: name(from),
             time: clock(),
             text: text.to_owned(),
@@ -224,30 +251,26 @@ mod tests {
 
         sessions.receive(ana, &send("Hello"));
 
+        let welcome = |who: &str, role| ServerMessage::Welcome {
+            reference: None,
+            name: name(who),
+            role,
+        };
         assert_eq!(
             drain(&mut ana_lines),
             [
-                ServerMessage::Welcome {
-                    reference: None,
-                    name: name("ana"),
-                    role: Role::Owner,
-                },
+                welcome("ana", Role::Owner),
+                state(),
                 ServerMessage::Ready {},
-                join("ana"),
-                join("ben"),
                 message("ana", "Hello"),
             ]
         );
         assert_eq!(
             drain(&mut ben_lines),
             [
-                ServerMessage::Welcome {
-                    reference: None,
-                    name: name("ben"),
-                    role: Role::Member,
-                },
+                welcome("ben", Role::Member),
+                state(),
                 ServerMessage::Ready {},
-                join("ben"),
                 message("ana", "Hello"),
             ]
         );
@@ -264,7 +287,7 @@ mod tests {
         }
         let hello = ClientMessage::Send {
             reference: Some(7),
-            channel: "lobby".to_owned(),
+            channel: "general".to_owned(),
             text: "Hello".to_owned(),
         };
 
@@ -308,29 +331,22 @@ mod tests {
         assert_eq!(ben_messages[3], message("ana", "one"));
         assert_eq!(ben_lines.try_recv(), Err(TryRecvError::Disconnected));
 
-        assert_eq!(drain(&mut ana_lines).len(), 8);
+        assert_eq!(drain(&mut ana_lines).len(), 7);
         assert_eq!(ana_lines.try_recv(), Err(TryRecvError::Empty));
     }
 
     #[test]
-    fn tells_the_other_users_when_a_connection_closes() {
+    fn forgets_a_connection_that_closes() {
         let mut sessions = sessions();
-        let (_ana, mut ana_lines) = user(&mut sessions, "ana", 8);
+        let (ana, mut ana_lines) = user(&mut sessions, "ana", 8);
         let (ben, mut ben_lines) = user(&mut sessions, "ben", 8);
         drain(&mut ana_lines);
         drain(&mut ben_lines);
 
         sessions.disconnect(ben);
+        sessions.receive(ana, &send("Hello"));
 
-        assert_eq!(
-            drain(&mut ana_lines),
-            [ServerMessage::Leave {
-                reference: None,
-                channel: "lobby".to_owned(),
-                name: name("ben"),
-                time: clock(),
-            }]
-        );
+        assert_eq!(drain(&mut ana_lines), [message("ana", "Hello")]);
         assert_eq!(ben_lines.try_recv(), Err(TryRecvError::Disconnected));
     }
 }

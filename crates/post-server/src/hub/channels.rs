@@ -1,9 +1,10 @@
-use post_proto::{ChannelKind, ChannelName, ErrorCode, LOBBY, ListedChannel, ServerMessage};
+use std::collections::BTreeSet;
+
+use post_proto::{ChannelKind, ChannelName, ErrorCode, ListedChannel, ServerMessage};
 use post_rules::{AccountId, Channel, ChannelLimits, CreateError, JoinError, Kind, LeaveError};
 
 use super::{
-    Answer, ConnectionId, DAY, Hub, Member, Outgoing, Refused, Request, account_of, examine_text,
-    present,
+    Answer, ConnectionId, DAY, Hub, Outgoing, Refused, Request, account_of, examine_text, present,
 };
 
 pub const CHANNEL_LIMITS: ChannelLimits = ChannelLimits {
@@ -23,9 +24,7 @@ impl Hub {
     ) -> Answer {
         let account = account_of(request.state)?;
         let name = ChannelName::parse(channel).map_err(|_| ErrorCode::InvalidChannelName)?;
-        if name.as_str() == LOBBY {
-            return Err(ErrorCode::NameTaken);
-        }
+
         let kind = match kind {
             ChannelKind::Public => Kind::Public,
             ChannelKind::Private => Kind::Private,
@@ -91,13 +90,8 @@ impl Hub {
             .collect())
     }
 
-    pub(super) fn send_to_channel(
-        &self,
-        request: &Request<'_>,
-        member: &Member,
-        channel: &str,
-        text: &str,
-    ) -> Answer {
+    pub(super) fn send_text(&self, request: &Request<'_>, channel: &str, text: &str) -> Answer {
+        let member = present(request.state)?;
         let channel = self.visible(member.account, channel)?;
         if !channel.is_member(member.account) {
             return Err(ErrorCode::NotMember);
@@ -112,6 +106,17 @@ impl Hub {
                 text: text.to_owned(),
             }),
         )
+    }
+
+    pub(super) fn connections_that_see(&self, account: AccountId) -> BTreeSet<ConnectionId> {
+        let (channels, _) = self.channels.rows();
+        let mut connections: BTreeSet<ConnectionId> = self.connections_of(account).collect();
+        for channel in channels {
+            if channel.is_member(account) {
+                connections.extend(self.connections_in(channel));
+            }
+        }
+        connections
     }
 
     pub(super) fn list_channels(&self, request: &Request<'_>) -> Answer {

@@ -3,7 +3,7 @@
 # "C:" is a line from the client. "S:" is a line from the server.
 
 # The first message is not a hello message.
-C: {"type":"send","channel":"lobby","text":"Hello"}
+C: {"type":"send","channel":"general","text":"Hello"}
 S: {"type":"error","code":"hello-required","text":"The first message must be a hello message."}
 
 # The server knows only protocol version 0.
@@ -29,14 +29,15 @@ S: {"type":"error","ref":5,"code":"name-taken","text":"This name is not availabl
 C: {"type":"register","ref":6,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"v8d4t7VYMSVVZlv8aH7A5lG6DIQi-Tyj4iakgMaCshPhNLsn9EV98Wx2xeNTUz7VGOcfEy6Fnz-LOZPIGJApBw","name":"ana","invitation":"7Hq2kdX9mPq4"}
 S: {"type":"welcome","ref":6,"name":"ana","role":"member"}
 S: {"type":"ready"}
-S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
 # The server has no channel with the name "garden".
 C: {"type":"send","ref":7,"channel":"garden","text":"Hello"}
 S: {"type":"error","ref":7,"code":"no-such-channel","text":"The channel does not exist."}
 
-# A text must have a visible character.
-C: {"type":"send","ref":8,"channel":"lobby","text":"   "}
+# Ana makes the channel "general". A text must have a visible character.
+C: {"type":"channel-create","channel":"general","kind":"public"}
+S: {"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T14:02:03.000Z"}
+C: {"type":"send","ref":8,"channel":"general","text":"   "}
 S: {"type":"error","ref":8,"code":"empty-text","text":"A message must contain text."}
 
 # Only the server owner makes an invitation.

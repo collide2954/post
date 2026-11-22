@@ -1,5 +1,5 @@
 use post_proto::{
-    ChannelKind, ChannelName, ClientMessage, ErrorCode, LOBBY, ListedChannel, Role, ServerMessage,
+    ChannelKind, ChannelName, ClientMessage, ErrorCode, ListedChannel, Role, ServerMessage,
 };
 use post_rules::{AccountId, ChannelChange, ChannelHead, ChannelId, ChannelStorage as _, Kind};
 use post_testing::Directory;
@@ -87,16 +87,6 @@ fn refuses_a_channel_that_breaks_a_rule() {
 }
 
 #[test]
-fn keeps_the_name_of_the_temporary_lobby_free_of_a_real_channel() {
-    let (mut hub, ana) = with_owner();
-
-    assert_eq!(
-        hub.receive(ana, &create(3, LOBBY, ChannelKind::Public), now()),
-        [to(ana, error(Some(3), ErrorCode::NameTaken))]
-    );
-}
-
-#[test]
 fn lets_an_account_own_ten_channels() {
     let (mut hub, ids) = hub_with(&["ana", "ben"]);
     for number in 0..10 {
@@ -147,18 +137,13 @@ fn gives_the_state_of_each_channel_of_the_user_after_the_welcome() {
     hub.receive(ids[0], &create(1, "general", ChannelKind::Public), now());
     hub.receive(ids[1], &create(2, "dev", ChannelKind::Private), now());
     hub.receive(ids[0], &create(3, "talk", ChannelKind::Private), now());
-    hub.disconnect(ids[0], now());
+    hub.disconnect(ids[0]);
 
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
     let line = identify(&hub, 1, &server, None);
     let outgoing = hub.receive(id, &line, later());
 
-    let join = ServerMessage::Join {
-        channel: LOBBY.to_owned(),
-        name: name("ana"),
-        time: later(),
-    };
     assert_eq!(
         outgoing,
         [
@@ -166,8 +151,6 @@ fn gives_the_state_of_each_channel_of_the_user_after_the_welcome() {
             to(id, state(None, "general", ChannelKind::Public, "ana")),
             to(id, state(None, "talk", ChannelKind::Private, "ana")),
             to(id, ready()),
-            to(ids[1], join.clone()),
-            to(id, join),
         ]
     );
 }
@@ -308,7 +291,7 @@ fn refuses_a_join_that_breaks_a_rule() {
             [to(member, error(Some(4), ErrorCode::AlreadyMember))]
         );
     }
-    for channel in ["garden", "secret", "General", "#general", "", LOBBY] {
+    for channel in ["garden", "secret", "General", "#general", "", "lobby"] {
         assert_eq!(
             hub.receive(ids[2], &join(5, channel), now()),
             [to(ids[2], error(Some(5), ErrorCode::NoSuchChannel))],
@@ -375,7 +358,7 @@ fn refuses_a_leave_that_breaks_a_rule() {
         hub.receive(ids[1], &leave(2, "general"), now()),
         [to(ids[1], error(Some(2), ErrorCode::NotMember))]
     );
-    for channel in ["garden", "secret", "Not A Name", LOBBY] {
+    for channel in ["garden", "secret", "Not A Name", "lobby"] {
         assert_eq!(
             hub.receive(ids[1], &leave(3, channel), now()),
             [to(ids[1], error(Some(3), ErrorCode::NoSuchChannel))],
@@ -409,7 +392,7 @@ fn refuses_a_join_and_a_leave_before_the_sign_in() {
 fn a_user_stays_a_member_when_the_connection_closes() {
     let (mut hub, ids) = with_general();
     hub.receive(ids[1], &join(2, "general"), now());
-    hub.disconnect(ids[1], now());
+    hub.disconnect(ids[1]);
 
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
@@ -508,17 +491,6 @@ fn examines_the_text_of_a_message_to_a_channel() {
             .len(),
         1
     );
-}
-
-#[test]
-fn keeps_the_temporary_lobby_and_the_channels_apart() {
-    let (mut hub, ids) = with_general();
-
-    let to_the_lobby = hub.receive(ids[1], &send(None, LOBBY, "Hi"), now());
-    let to_the_channel = hub.receive(ids[0], &send(None, "general", "Hi"), now());
-
-    assert_eq!(to_the_lobby.len(), 3);
-    assert_eq!(to_the_channel.len(), 1);
 }
 
 fn list(reference: u32) -> String {

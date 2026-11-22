@@ -296,15 +296,8 @@ fn start_server_with(tls: Tls) -> Backstage {
     }
 }
 
-fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
-    invite_and_answer_as_the_owner(backstage, None)
-}
-
 fn invite_and_answer_in_a_channel_as_ben(backstage: &Backstage, channel: &str) -> String {
-    invite_and_answer_as_the_owner(backstage, Some(channel.to_owned()))
-}
-
-fn invite_and_answer_as_the_owner(backstage: &Backstage, channel: Option<String>) -> String {
+    let channel = channel.to_owned();
     let destination = Destination::parse(&backstage.owner_link).expect("a valid owner link");
     let identity = Identity {
         seed: Seed::from_bytes([2; 32]),
@@ -323,14 +316,12 @@ fn invite_and_answer_as_the_owner(backstage: &Backstage, channel: Option<String>
                         uses: None,
                     };
                     assert!(connected.send(invite));
-                    if let Some(channel) = &channel {
-                        let create = ClientMessage::ChannelCreate {
-                            reference: None,
-                            channel: channel.clone(),
-                            kind: ChannelKind::Public,
-                        };
-                        assert!(connected.send(create));
-                    }
+                    let create = ClientMessage::ChannelCreate {
+                        reference: None,
+                        channel: channel.clone(),
+                        kind: ChannelKind::Public,
+                    };
+                    assert!(connected.send(create));
                     link = Some(connected);
                 }
                 Event::Received(ServerMessage::Invitations { list, .. }) => {
@@ -540,7 +531,13 @@ fn a_developer_reads_the_lines_and_sends_a_line_in_the_console() {
     }
     assert!(driver.text_with("\"name\":\"ana\"").is_some());
 
-    let typed = r#"{"type":"send","channel":"lobby","text":"from the console"}"#;
+    let create = r#"{"type":"channel-create","ref":1,"channel":"general","kind":"public"}"#;
+    let draft = console::Message::DraftChanged(create.to_owned());
+    driver.send(Message::Console(draft));
+    driver.act("click \"Send\"");
+    driver.expect("#general");
+
+    let typed = r#"{"type":"send","channel":"general","text":"from the console"}"#;
     let draft = console::Message::DraftChanged(typed.to_owned());
     driver.send(Message::Console(draft));
     driver.act("click \"Send\"");
@@ -672,7 +669,7 @@ fn the_owner_makes_an_invite_link_for_a_second_user_and_cancels_it() {
 
     join(&backstage, &link, "ben");
     driver.act("click \"Back\"");
-    driver.expect("ben joined");
+    driver.expect_no("Copied");
     driver.act("click \"Invitations\"");
     driver.expect("No end · Uses: 1 of 5");
 
@@ -689,6 +686,11 @@ fn a_user_changes_the_name_and_cannot_change_it_again_at_once() {
     driver.expect("Connect");
     driver.sign_up(backstage.owner_link.clone(), "ana");
     driver.expect("ana · connected");
+    driver.act("click \"Channels\"");
+    driver.expect("Name of a new channel");
+    driver.type_text("plans");
+    driver.act("click \"Make a channel\"");
+    driver.expect("#plans");
 
     driver.act("click \"Change name\"");
     driver.expect("Your name on this server");
@@ -717,15 +719,17 @@ fn a_user_changes_the_name_and_cannot_change_it_again_at_once() {
 #[test]
 fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     let backstage = start_server();
-    let invite_link = invite_and_answer_as_ben(&backstage);
+    let invite_link = invite_and_answer_in_a_channel_as_ben(&backstage, "garden");
     let directory = Directory::new();
     let mut driver = open(Language::English, &directory);
 
     driver.expect("Connect");
     driver.sign_up(invite_link, "ana");
 
-    driver.expect("#lobby");
     driver.expect("ana · connected");
+    driver.act("click \"Channels\"");
+    driver.expect("#garden");
+    driver.act("click \"Join\"");
     driver.expect("ana joined");
 
     driver.type_text("Hello");

@@ -3,8 +3,8 @@ use std::num::NonZeroU32;
 
 use post_crypto::{Exchange, ServerKey};
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Invitation, Key, LOBBY, Name, Nonce, PROTOCOL_VERSION, Part,
-    Role, ServerMessage, Signature, TextError, Timestamp, check_text,
+    ClientMessage, Code, ErrorCode, Invitation, Key, Name, Nonce, PROTOCOL_VERSION, Part, Role,
+    ServerMessage, Signature, TextError, Timestamp, check_text,
 };
 
 use post_rules::{
@@ -168,27 +168,16 @@ impl Hub {
         }
     }
 
-    pub fn disconnect(&mut self, id: ConnectionId, now: Timestamp) -> Vec<Outgoing> {
+    pub fn disconnect(&mut self, id: ConnectionId) {
         let Some(State::Present(member)) = self.connections.remove(&id) else {
-            return Vec::new();
+            return;
         };
-        let has_more_connections =
-            self.online
-                .get_mut(&member.account)
-                .is_some_and(|connections| {
-                    connections.remove(&id);
-                    !connections.is_empty()
-                });
-        if has_more_connections {
-            return Vec::new();
+        if let Some(connections) = self.online.get_mut(&member.account) {
+            connections.remove(&id);
+            if connections.is_empty() {
+                self.online.remove(&member.account);
+            }
         }
-        self.online.remove(&member.account);
-        self.to_each_member(|_| ServerMessage::Leave {
-            reference: None,
-            channel: LOBBY.to_owned(),
-            name: member.name.clone(),
-            time: now,
-        })
     }
 
     fn answer(&mut self, request: &Request<'_>, message: ClientMessage) -> Answer {
@@ -221,7 +210,7 @@ impl Hub {
                 let member = self.register(request, &credentials, &name, &invitation)?;
                 Ok(self.enter(request, member))
             }
-            ClientMessage::Send { channel, text, .. } => self.send(request, &channel, &text),
+            ClientMessage::Send { channel, text, .. } => self.send_text(request, &channel, &text),
             ClientMessage::Invite { lifetime, uses, .. } => self.invite(request, lifetime, uses),
             ClientMessage::Invitations { .. } => self.list_invitations(request),
             ClientMessage::Revoke { code, .. } => self.revoke(request, &code),
@@ -364,7 +353,6 @@ impl Hub {
     }
 
     fn enter(&mut self, request: &Request<'_>, member: Member) -> Vec<Outgoing> {
-        let is_first_connection = !self.online.contains_key(&member.account);
         let mut outgoing = vec![Outgoing {
             to: request.from,
             message: ServerMessage::Welcome {
@@ -373,7 +361,6 @@ impl Hub {
                 role: member.role,
             },
         }];
-        let name = member.name.clone();
         let account = member.account;
         self.connections
             .insert(request.from, State::Present(member));
@@ -383,29 +370,7 @@ impl Hub {
             to: request.from,
             message: ServerMessage::Ready {},
         });
-        if is_first_connection {
-            outgoing.extend(self.to_each_member(|_| ServerMessage::Join {
-                channel: LOBBY.to_owned(),
-                name: name.clone(),
-                time: request.now,
-            }));
-        }
         outgoing
-    }
-
-    fn send(&self, request: &Request<'_>, channel: &str, text: &str) -> Answer {
-        let member = present(request.state)?;
-        if channel != LOBBY {
-            return self.send_to_channel(request, member, channel, text);
-        }
-        examine_text(text)?;
-        Ok(self.to_each_member(|to| ServerMessage::Message {
-            reference: request.reference.filter(|_| to == request.from),
-            channel: LOBBY.to_owned(),
-            from: member.name.clone(),
-            time: request.now,
-            text: text.to_owned(),
-        }))
     }
 
     fn invite(
@@ -496,34 +461,23 @@ impl Hub {
                 member.name = new.clone();
             }
         }
-        Ok(self.to_each_member(|to| ServerMessage::Rename {
-            reference: request.reference.filter(|_| to == request.from),
-            old: old.clone(),
-            new: new.clone(),
-            time: request.now,
-        }))
+        Ok(self
+            .connections_that_see(account)
+            .into_iter()
+            .map(|to| Outgoing {
+                to,
+                message: ServerMessage::Rename {
+                    reference: request.reference.filter(|_| to == request.from),
+                    old: old.clone(),
+                    new: new.clone(),
+                    time: request.now,
+                },
+            })
+            .collect())
     }
 
     fn link(&self, code: &Code) -> String {
         format!("{}/i/{code}", self.settings.link)
-    }
-
-    fn members(&self) -> impl Iterator<Item = (ConnectionId, &Member)> {
-        self.connections
-            .iter()
-            .filter_map(|(id, state)| match state {
-                State::Present(member) => Some((*id, member)),
-                _ => None,
-            })
-    }
-
-    fn to_each_member(&self, message: impl Fn(ConnectionId) -> ServerMessage) -> Vec<Outgoing> {
-        self.members()
-            .map(|(to, _)| Outgoing {
-                to,
-                message: message(to),
-            })
-            .collect()
     }
 }
 

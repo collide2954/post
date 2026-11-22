@@ -56,8 +56,6 @@ A channel name identifies a channel on a server. A channel name obeys these rule
 
 A channel name in a message does not have the `#` sign.
 
-The channel `lobby` is temporary. Each user is in this channel while the user has a connection. A user cannot make a channel with this name. The channel goes away before version 0.3 of Post.
-
 ### Text
 
 The text of a message obeys these rules:
@@ -391,9 +389,7 @@ The `welcome` message starts the session of a user. The session now has a name.
 
 After the `welcome` message, the server sends the `channel` messages and the `ready` message. See "Channels".
 
-The server then puts the user into the temporary channel `lobby`. It sends a `join` message to each user in that channel, also to the new user.
-
-One account can have more than one connection at the same time. The server sends the `join` message only for the first connection of an account, and the `leave` message only for the last one.
+One account can have more than one connection at the same time. Each connection gets the messages of the channels of the account.
 
 ### `channel`
 
@@ -446,18 +442,18 @@ Each entry of the list is an object with these fields:
 
 ### `join`
 
-The `join` message tells that a user came into a channel. In a channel that is not `lobby`, the user is now a member of the channel.
+The `join` message tells that a user is now a member of a channel. The server sends it to each member of the channel, also to the new member.
 
 | Field | Value |
 |---|---|
 | `type` | `"join"` |
 | `channel` | The name of the channel. |
 | `name` | The name of the user. |
-| `time` | The time when the user came in. |
+| `time` | The time when the user joined the channel. |
 
 ### `leave`
 
-The `leave` message tells that a user went out of a channel. In the channel `lobby`, this occurs when the last connection of the user closes. In each other channel, the user is not a member of the channel now.
+The `leave` message tells that a user is not a member of a channel now. The server sends it to each member of the channel, also to the user who left.
 
 | Field | Value |
 |---|---|
@@ -465,11 +461,11 @@ The `leave` message tells that a user went out of a channel. In the channel `lob
 | `ref` | The value from the `leave` message of the client, if it had one. Only the connection that sent that message gets this field. |
 | `channel` | The name of the channel. |
 | `name` | The name of the user. |
-| `time` | The time when the user went out. |
+| `time` | The time when the user left the channel. |
 
 ### `message`
 
-The `message` message carries a text that a user sent to a channel. The server sends it to each member of the channel, also to the sender. For the channel `lobby`, the server sends it to each user who has a connection.
+The `message` message carries a text that a user sent to a channel. The server sends it to each member of the channel, also to the sender.
 
 | Field | Value |
 |---|---|
@@ -503,7 +499,7 @@ Each entry of the list is an object with these fields:
 
 ### `rename`
 
-The `rename` message tells that a user has a new name. The server sends it to each user in the channel, also to the user with the new name.
+The `rename` message tells that a user has a new name. The server sends it to each user who shares a channel with that user, and to the user with the new name.
 
 | Field | Value |
 |---|---|

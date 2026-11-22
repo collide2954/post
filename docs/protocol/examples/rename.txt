@@ -7,7 +7,6 @@ S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPap
 C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"WCBKEQPTD835Vfhh5vrxE7KiE3TqejWYeq4_hu11zSm2jnN-RBwMom6SpX7zEaatzzVrAGqHJsTMa6zIgAiDCw"}
 S: {"type":"welcome","ref":2,"name":"ana","role":"member"}
 S: {"type":"ready"}
-S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
 
 # A different account has the name "ben".
 C: {"type":"rename","ref":3,"name":"ben"}

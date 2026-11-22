@@ -8,7 +8,6 @@ S: {"type":"challenge","protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaa
 C: {"type":"identify","key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
 S: {"type":"welcome","name":"ana","role":"member"}
 S: {"type":"ready"}
-S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
 # Ana makes a public channel. She is its owner and its first member.
 C: {"type":"channel-create","ref":1,"channel":"general","kind":"public"}

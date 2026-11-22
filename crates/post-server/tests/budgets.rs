@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use futures_util::future::join_all;
 use futures_util::{SinkExt, StreamExt};
 use post_crypto::{Exchange, Seed};
-use post_proto::{ClientMessage, Code, ServerMessage};
+use post_proto::{ChannelKind, ClientMessage, Code, ServerMessage};
 use post_testing::Directory;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -20,6 +20,7 @@ const DELIVERY_BUDGET: Duration = Duration::from_millis(50);
 const DELIVERY_ALARM: Duration = Duration::from_millis(150);
 const BURST_ROUNDS: usize = 5;
 const MEMBERS: usize = 1_000;
+const CHANNEL: &str = "budget";
 const ROUNDS: usize = 30;
 const MEMORY_BUDGET_BYTES: u64 = 1_000_000_000;
 const IDLE_CONNECTIONS: usize = 10_000;
@@ -93,20 +94,8 @@ fn member_seed(number: usize) -> Seed {
     Seed::from_bytes(bytes)
 }
 
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "a measurement of a performance budget"]
-async fn the_server_sends_a_message_to_1000_members_in_the_budget() {
-    let server = start_server_process();
-    let port = server.port;
-    let process = server.child.id();
-
-    let mut owner = register(
-        port,
-        &Seed::from_bytes([7; 32]),
-        "owner",
-        &server.owner_link,
-    )
-    .await;
+async fn invitation_of_an_owner_with_a_channel(port: u16, owner_link: &str) -> String {
+    let mut owner = register(port, &Seed::from_bytes([7; 32]), "owner", owner_link).await;
     let invite = ClientMessage::Invite {
         reference: None,
         lifetime: None,
@@ -118,13 +107,34 @@ async fn the_server_sends_a_message_to_1000_members_in_the_budget() {
             break list[0].link.clone();
         }
     };
+    let create = ClientMessage::ChannelCreate {
+        reference: None,
+        channel: CHANNEL.to_owned(),
+        kind: ChannelKind::Public,
+    };
+    write(&mut owner, &create).await;
     tokio::spawn(async move { while owner.next().await.is_some() {} });
+    link
+}
 
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "a measurement of a performance budget"]
+async fn the_server_sends_a_message_to_1000_members_in_the_budget() {
+    let server = start_server_process();
+    let port = server.port;
+    let process = server.child.id();
+    let link = invitation_of_an_owner_with_a_channel(port, &server.owner_link).await;
+
+    let join = ClientMessage::Join {
+        reference: None,
+        channel: CHANNEL.to_owned(),
+    };
     let (receipts, mut received) = mpsc::unbounded_channel();
     let mut writers = Vec::with_capacity(MEMBERS);
     for number in 0..MEMBERS {
         let name = format!("m{number:04}");
-        let socket = register(port, &member_seed(number), &name, &link).await;
+        let mut socket = register(port, &member_seed(number), &name, &link).await;
+        write(&mut socket, &join).await;
         let (write_half, mut read_half) = socket.split();
         let receipts = receipts.clone();
         tokio::spawn(async move {
@@ -146,7 +156,7 @@ async fn the_server_sends_a_message_to_1000_members_in_the_budget() {
     for round in 0..ROUNDS {
         let send = ClientMessage::Send {
             reference: None,
-            channel: "lobby".to_owned(),
+            channel: CHANNEL.to_owned(),
             text: format!("ping {round}"),
         };
         let start = Instant::now();

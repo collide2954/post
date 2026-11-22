@@ -2,8 +2,8 @@ use std::num::NonZeroU32;
 
 use post_crypto::{Exchange, Seed};
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Invitation, Key, LOBBY, Name, Nonce, Part, Role, ServerMessage,
-    Signature, Timestamp,
+    ChannelKind, ClientMessage, Code, ErrorCode, Invitation, Key, Name, Nonce, Part, Role,
+    ServerMessage, Signature, Timestamp,
 };
 
 use post_rules::{Change, Storage as _};
@@ -42,14 +42,6 @@ fn to(to: ConnectionId, message: ServerMessage) -> Outgoing {
     Outgoing { to, message }
 }
 
-fn join(who: &str) -> ServerMessage {
-    ServerMessage::Join {
-        channel: LOBBY.to_owned(),
-        name: name(who),
-        time: now(),
-    }
-}
-
 fn error(reference: Option<u32>, code: ErrorCode) -> ServerMessage {
     ServerMessage::error(reference, code)
 }
@@ -82,6 +74,24 @@ fn hub_with(names: &[&str]) -> (Hub, Vec<ConnectionId>) {
     (hub, ids)
 }
 
+fn hub_with_general(names: &[&str]) -> (Hub, Vec<ConnectionId>) {
+    let (mut hub, ids) = hub_with(names);
+    let create = ClientMessage::ChannelCreate {
+        reference: None,
+        channel: "general".to_owned(),
+        kind: ChannelKind::Public,
+    };
+    hub.receive(ids[0], &create.encode(), now());
+    let join = ClientMessage::Join {
+        reference: None,
+        channel: "general".to_owned(),
+    };
+    for id in &ids[1..] {
+        hub.receive(*id, &join.encode(), now());
+    }
+    (hub, ids)
+}
+
 #[test]
 fn gives_each_connection_a_different_identifier() {
     let mut hub = new_hub();
@@ -92,7 +102,7 @@ fn gives_each_connection_a_different_identifier() {
 
 #[test]
 fn sends_nothing_to_a_connection_before_its_sign_in() {
-    let (mut hub, ids) = hub_with(&["ana"]);
+    let (mut hub, ids) = hub_with_general(&["ana"]);
     let open = invitation(&mut hub, 50);
     let silent = hub.connect();
     let waiting = hub.connect();
@@ -102,25 +112,24 @@ fn sends_nothing_to_a_connection_before_its_sign_in() {
 
     let line = register(&hub, 2, &server, "ben", &open);
     let joined = hub.receive(ben, &line, now());
-    let sent = hub.receive(ids[0], &send(None, "lobby", "Hello"), now());
-    let left = hub.disconnect(ben, later());
+    let sent = hub.receive(ids[0], &send(None, "general", "Hello"), now());
 
-    assert_eq!((joined.len(), sent.len(), left.len()), (4, 2, 1));
-    for outgoing in joined.iter().chain(&sent).chain(&left) {
+    assert_eq!((joined.len(), sent.len()), (2, 1));
+    for outgoing in joined.iter().chain(&sent) {
         assert_ne!(outgoing.to, silent);
         assert_ne!(outgoing.to, waiting);
     }
 }
 
 #[test]
-fn sends_a_text_to_each_user_and_gives_the_number_only_to_the_sender() {
-    let (mut hub, ids) = hub_with(&["ana", "ben", "cy"]);
+fn sends_a_text_to_each_member_and_gives_the_number_only_to_the_sender() {
+    let (mut hub, ids) = hub_with_general(&["ana", "ben", "cy"]);
 
-    let outgoing = hub.receive(ids[1], &send(Some(4), "lobby", "Hello"), now());
+    let outgoing = hub.receive(ids[1], &send(Some(4), "general", "Hello"), now());
 
     let message = |reference| ServerMessage::Message {
         reference,
-        channel: "lobby".to_owned(),
+        channel: "general".to_owned(),
         from: name("ben"),
         time: now(),
         text: "Hello".to_owned(),
@@ -137,9 +146,9 @@ fn sends_a_text_to_each_user_and_gives_the_number_only_to_the_sender() {
 
 #[test]
 fn keeps_the_text_as_the_user_wrote_it() {
-    let (mut hub, ids) = hub_with(&["ana"]);
+    let (mut hub, ids) = hub_with_general(&["ana"]);
 
-    let outgoing = hub.receive(ids[0], &send(None, "lobby", "  two\n  lines  "), now());
+    let outgoing = hub.receive(ids[0], &send(None, "general", "  two\n  lines  "), now());
 
     assert_eq!(
         outgoing,
@@ -147,7 +156,7 @@ fn keeps_the_text_as_the_user_wrote_it() {
             ids[0],
             ServerMessage::Message {
                 reference: None,
-                channel: "lobby".to_owned(),
+                channel: "general".to_owned(),
                 from: name("ana"),
                 time: now(),
                 text: "  two\n  lines  ".to_owned(),
@@ -235,7 +244,7 @@ fn refuses_a_name_that_breaks_the_rules() {
 fn refuses_a_channel_that_does_not_exist() {
     let (mut hub, ids) = hub_with(&["ana"]);
 
-    for channel in ["garden", "#lobby", "Lobby", ""] {
+    for channel in ["garden", "lobby", "#general", "General", ""] {
         assert_eq!(
             hub.receive(ids[0], &send(Some(8), channel, ""), now()),
             [to(ids[0], error(Some(8), ErrorCode::NoSuchChannel))],
@@ -246,49 +255,33 @@ fn refuses_a_channel_that_does_not_exist() {
 
 #[test]
 fn refuses_a_text_that_breaks_the_rules() {
-    let (mut hub, ids) = hub_with(&["ana", "ben"]);
+    let (mut hub, ids) = hub_with_general(&["ana", "ben"]);
 
     assert_eq!(
-        hub.receive(ids[0], &send(Some(1), "lobby", " \n "), now()),
+        hub.receive(ids[0], &send(Some(1), "general", " \n "), now()),
         [to(ids[0], error(Some(1), ErrorCode::EmptyText))]
     );
     assert_eq!(
-        hub.receive(ids[0], &send(None, "lobby", &"x".repeat(4001)), now()),
+        hub.receive(ids[0], &send(None, "general", &"x".repeat(4001)), now()),
         [to(ids[0], error(None, ErrorCode::TextTooLong))]
     );
 }
 
 #[test]
-fn tells_the_other_users_when_a_user_leaves() {
-    let (mut hub, ids) = hub_with(&["ana", "ben", "cy"]);
-
-    let outgoing = hub.disconnect(ids[1], later());
-
-    let leave = ServerMessage::Leave {
-        reference: None,
-        channel: "lobby".to_owned(),
-        name: name("ben"),
-        time: later(),
-    };
-    assert_eq!(outgoing, [to(ids[0], leave.clone()), to(ids[2], leave)]);
-}
-
-#[test]
-fn is_silent_when_a_connection_without_a_name_closes() {
-    let (mut hub, _) = hub_with(&["ana"]);
-    let silent = hub.connect();
-
-    assert_eq!(hub.disconnect(silent, later()), []);
-}
-
-#[test]
 fn ignores_a_connection_that_it_does_not_know() {
-    let (mut hub, ids) = hub_with(&["ana"]);
-    hub.disconnect(ids[0], later());
+    let (mut hub, ids) = hub_with_general(&["ana", "ben"]);
+    let silent = hub.connect();
+    hub.disconnect(silent);
+    hub.disconnect(ids[0]);
+    hub.disconnect(ids[0]);
 
     assert_eq!(hub.receive(ids[0], &hello(1, ADDRESS, &[]), now()), []);
     assert_eq!(hub.refuse(ids[0]), []);
-    assert_eq!(hub.disconnect(ids[0], later()), []);
+    assert_eq!(
+        hub.receive(ids[1], &send(None, "general", "Hello"), now())
+            .len(),
+        1
+    );
 }
 
 const ADDRESS: &str = "chat.example.org:443";
@@ -571,18 +564,14 @@ fn makes_the_user_of_the_owner_link_the_server_owner() {
 
     assert_eq!(
         outgoing,
-        [
-            to(id, welcome("ana", Role::Owner)),
-            to(id, ready()),
-            to(id, join("ana"))
-        ]
+        [to(id, welcome("ana", Role::Owner)), to(id, ready()),]
     );
     assert_eq!(hub.owner_link(now()).expect("stored"), None);
 }
 
 #[test]
-fn makes_an_invited_user_a_member_and_tells_the_lobby() {
-    let (mut hub, ana) = with_owner();
+fn makes_an_invited_user_a_member() {
+    let (mut hub, _ana) = with_owner();
     let code = invitation(&mut hub, 50);
     let ben = hub.connect();
     let server = challenged(&mut hub, ben, &[]);
@@ -592,19 +581,14 @@ fn makes_an_invited_user_a_member_and_tells_the_lobby() {
 
     assert_eq!(
         outgoing,
-        [
-            to(ben, welcome("ben", Role::Member)),
-            to(ben, ready()),
-            to(ana, join("ben")),
-            to(ben, join("ben")),
-        ]
+        [to(ben, welcome("ben", Role::Member)), to(ben, ready()),]
     );
 }
 
 #[test]
 fn signs_in_a_user_who_has_an_account() {
     let (mut hub, ana) = with_owner();
-    hub.disconnect(ana, now());
+    hub.disconnect(ana);
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
 
@@ -613,11 +597,7 @@ fn signs_in_a_user_who_has_an_account() {
 
     assert_eq!(
         outgoing,
-        [
-            to(id, welcome("ana", Role::Owner)),
-            to(id, ready()),
-            to(id, join("ana"))
-        ]
+        [to(id, welcome("ana", Role::Owner)), to(id, ready()),]
     );
 }
 
@@ -657,7 +637,7 @@ fn refuses_a_sign_in_message_at_an_incorrect_moment() {
 
     challenged(&mut hub, new, &[]);
     assert_eq!(
-        hub.receive(new, &send(Some(8), LOBBY, "Hello"), now()),
+        hub.receive(new, &send(Some(8), "general", "Hello"), now()),
         [to(new, error(Some(8), ErrorCode::IdentifyRequired))]
     );
 }
@@ -665,7 +645,7 @@ fn refuses_a_sign_in_message_at_an_incorrect_moment() {
 #[test]
 fn refuses_a_proof_that_is_not_for_this_connection() {
     let (mut hub, ana) = with_owner();
-    hub.disconnect(ana, now());
+    hub.disconnect(ana);
     let invite = invitation(&mut hub, 50);
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
@@ -743,8 +723,8 @@ fn makes_an_account_that_exists_the_owner_with_a_new_owner_link() {
     let (mut hub, ana) = with_owner();
     let open = invitation(&mut hub, 50);
     let ben = registered(&mut hub, 2, "ben", &open);
-    hub.disconnect(ana, now());
-    hub.disconnect(ben, now());
+    hub.disconnect(ana);
+    hub.disconnect(ben);
     new_owner_code(&mut hub, 60);
 
     let id = hub.connect();
@@ -766,10 +746,10 @@ fn makes_an_account_that_exists_the_owner_with_a_new_owner_link() {
 
 #[test]
 fn ignores_an_invitation_at_the_sign_in_of_a_member() {
-    let (mut hub, ana) = with_owner();
+    let (mut hub, _ana) = with_owner();
     let open = invitation(&mut hub, 50);
     let ben = registered(&mut hub, 2, "ben", &open);
-    hub.disconnect(ben, now());
+    hub.disconnect(ben);
 
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
@@ -778,12 +758,7 @@ fn ignores_an_invitation_at_the_sign_in_of_a_member() {
 
     assert_eq!(
         outgoing,
-        [
-            to(id, welcome("ben", Role::Member)),
-            to(id, ready()),
-            to(ana, join("ben")),
-            to(id, join("ben")),
-        ]
+        [to(id, welcome("ben", Role::Member)), to(id, ready()),]
     );
     assert_eq!(hub.rules.open_invitations(now())[0].used, 1);
 }
@@ -823,7 +798,7 @@ fn refuses_a_client_that_does_not_support_a_required_part() {
         hub.receive(id, &line, now())[0],
         to(id, welcome("ana", Role::Owner))
     );
-    hub.disconnect(id, now());
+    hub.disconnect(id);
 
     let id = hub.connect();
     let server = challenged(&mut hub, id, &["voice"]);
@@ -835,44 +810,11 @@ fn refuses_a_client_that_does_not_support_a_required_part() {
 }
 
 #[test]
-fn tells_the_lobby_one_time_about_a_user_with_two_connections() {
-    let (mut hub, first) = with_owner();
-    let open = invitation(&mut hub, 50);
-    let ben = registered(&mut hub, 2, "ben", &open);
-
-    let second = hub.connect();
-    let server = challenged(&mut hub, second, &[]);
-    let line = identify(&hub, 1, &server, None);
-    assert_eq!(
-        hub.receive(second, &line, now()),
-        [to(second, welcome("ana", Role::Owner)), to(second, ready())]
-    );
-
-    let delivered = hub.receive(second, &send(Some(4), LOBBY, "Hello"), now());
-    let receivers: Vec<ConnectionId> = delivered.iter().map(|outgoing| outgoing.to).collect();
-    assert_eq!(receivers, [first, ben, second]);
-
-    assert_eq!(hub.disconnect(first, later()), []);
-    assert_eq!(
-        hub.disconnect(second, later()),
-        [to(
-            ben,
-            ServerMessage::Leave {
-                reference: None,
-                channel: LOBBY.to_owned(),
-                name: name("ana"),
-                time: later(),
-            }
-        )]
-    );
-}
-
-#[test]
 fn answers_with_a_server_error_when_the_storage_fails() {
     let (mut hub, ana) = with_owner();
     let open = invitation(&mut hub, 50);
     let link = new_owner_code(&mut hub, 60);
-    hub.disconnect(ana, now());
+    hub.disconnect(ana);
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
     hub.store.lose_its_tables();
@@ -891,7 +833,7 @@ fn answers_with_a_server_error_when_the_storage_fails() {
 #[test]
 fn needs_no_storage_for_a_sign_in_that_changes_nothing() {
     let (mut hub, ana) = with_owner();
-    hub.disconnect(ana, now());
+    hub.disconnect(ana);
     let id = hub.connect();
     let server = challenged(&mut hub, id, &[]);
     hub.store.lose_its_tables();
@@ -1087,7 +1029,7 @@ fn obeys_the_present_owner_and_not_the_role_at_the_sign_in() {
     let (mut hub, ana) = with_owner();
     let open = invitation(&mut hub, 50);
     let ben = registered(&mut hub, 2, "ben", &open);
-    hub.disconnect(ben, now());
+    hub.disconnect(ben);
     new_owner_code(&mut hub, 60);
     let ben = hub.connect();
     let server = challenged(&mut hub, ben, &[]);
@@ -1173,7 +1115,7 @@ fn rename(reference: u32, name: &str) -> String {
 }
 
 fn sender_of_a_text(hub: &mut Hub, from: ConnectionId) -> Name {
-    let sent = hub.receive(from, &send(None, LOBBY, "Hello"), later());
+    let sent = hub.receive(from, &send(None, "general", "Hello"), later());
     match &sent[0].message {
         ServerMessage::Message { from, .. } => from.clone(),
         other => panic!("the server sends the text, not {other:?}"),
@@ -1181,8 +1123,10 @@ fn sender_of_a_text(hub: &mut Hub, from: ConnectionId) -> Name {
 }
 
 #[test]
-fn changes_the_name_of_a_user_and_tells_each_user() {
-    let (mut hub, ids) = hub_with(&["ana", "ben"]);
+fn changes_the_name_of_a_user_and_tells_each_user_who_shares_a_channel() {
+    let (mut hub, ids) = hub_with_general(&["ana", "ben"]);
+    let open = invitation(&mut hub, 50);
+    let cy = registered(&mut hub, 3, "cy", &open);
 
     let outgoing = hub.receive(ids[1], &rename(5, "benito"), later());
 
@@ -1198,11 +1142,15 @@ fn changes_the_name_of_a_user_and_tells_each_user() {
     );
     assert_eq!(sender_of_a_text(&mut hub, ids[1]), name("benito"));
     assert_eq!(sender_of_a_text(&mut hub, ids[0]), name("ana"));
+
+    let alone = hub.receive(cy, &rename(6, "cyrus"), later());
+    assert_eq!(alone.len(), 1);
+    assert_eq!(alone[0].to, cy);
 }
 
 #[test]
 fn gives_the_new_name_to_each_connection_of_the_account() {
-    let (mut hub, ids) = hub_with(&["ana", "ben"]);
+    let (mut hub, ids) = hub_with_general(&["ana", "ben"]);
     let second = hub.connect();
     let server = challenged(&mut hub, second, &[]);
     let line = identify(&hub, 1, &server, None);
@@ -1212,19 +1160,8 @@ fn gives_the_new_name_to_each_connection_of_the_account() {
 
     assert_eq!(outgoing.len(), 3);
     assert_eq!(sender_of_a_text(&mut hub, second), name("anna"));
-    hub.disconnect(ids[0], later());
-    assert_eq!(
-        hub.disconnect(second, later()),
-        [to(
-            ids[1],
-            ServerMessage::Leave {
-                reference: None,
-                channel: LOBBY.to_owned(),
-                name: name("anna"),
-                time: later(),
-            }
-        )]
-    );
+    hub.disconnect(ids[0]);
+    hub.disconnect(second);
 
     let again = hub.connect();
     let server = challenged(&mut hub, again, &[]);
@@ -1237,7 +1174,7 @@ fn gives_the_new_name_to_each_connection_of_the_account() {
 
 #[test]
 fn refuses_a_name_change_that_breaks_a_rule() {
-    let (mut hub, ids) = hub_with(&["ana", "ben"]);
+    let (mut hub, ids) = hub_with_general(&["ana", "ben"]);
 
     for (wanted, code) in [
         ("Not A Name", ErrorCode::InvalidName),
@@ -1283,14 +1220,14 @@ fn refuses_a_name_change_before_the_sign_in() {
 
 #[test]
 fn keeps_the_name_when_it_cannot_store_the_change() {
-    let (mut hub, ana) = with_owner();
+    let (mut hub, ids) = hub_with_general(&["ana"]);
     hub.store.lose_its_tables();
 
     assert_eq!(
-        hub.receive(ana, &rename(4, "anna"), now()),
-        [to(ana, error(Some(4), ErrorCode::ServerError))]
+        hub.receive(ids[0], &rename(4, "anna"), now()),
+        [to(ids[0], error(Some(4), ErrorCode::ServerError))]
     );
-    assert_eq!(sender_of_a_text(&mut hub, ana), name("ana"));
+    assert_eq!(sender_of_a_text(&mut hub, ids[0]), name("ana"));
 }
 
 fn stored_invitation(number: u32, limit: Option<u32>, used: u32) -> post_rules::Invitation {
