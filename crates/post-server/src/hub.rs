@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use post_crypto::{Exchange, ServerKey};
@@ -54,6 +54,7 @@ pub struct Hub {
     random: Random,
     next_id: u64,
     connections: BTreeMap<ConnectionId, State>,
+    online: BTreeMap<AccountId, BTreeSet<ConnectionId>>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,6 +117,7 @@ impl Hub {
             random,
             next_id: 0,
             connections: BTreeMap::new(),
+            online: BTreeMap::new(),
         })
     }
 
@@ -170,9 +172,17 @@ impl Hub {
         let Some(State::Present(member)) = self.connections.remove(&id) else {
             return Vec::new();
         };
-        if self.has_a_connection(&member) {
+        let has_more_connections =
+            self.online
+                .get_mut(&member.account)
+                .is_some_and(|connections| {
+                    connections.remove(&id);
+                    !connections.is_empty()
+                });
+        if has_more_connections {
             return Vec::new();
         }
+        self.online.remove(&member.account);
         self.to_each_member(|_| ServerMessage::Leave {
             channel: LOBBY.to_owned(),
             name: member.name.clone(),
@@ -350,7 +360,7 @@ impl Hub {
     }
 
     fn enter(&mut self, request: &Request<'_>, member: Member) -> Vec<Outgoing> {
-        let is_first_connection = !self.has_a_connection(&member);
+        let is_first_connection = !self.online.contains_key(&member.account);
         let mut outgoing = vec![Outgoing {
             to: request.from,
             message: ServerMessage::Welcome {
@@ -363,6 +373,7 @@ impl Hub {
         let account = member.account;
         self.connections
             .insert(request.from, State::Present(member));
+        self.online.entry(account).or_default().insert(request.from);
         outgoing.extend(self.channel_states(request.from, account));
         outgoing.push(Outgoing {
             to: request.from,
@@ -494,11 +505,6 @@ impl Hub {
 
     fn link(&self, code: &Code) -> String {
         format!("{}/i/{code}", self.settings.link)
-    }
-
-    fn has_a_connection(&self, member: &Member) -> bool {
-        self.members()
-            .any(|(_, other)| other.account == member.account)
     }
 
     fn members(&self) -> impl Iterator<Item = (ConnectionId, &Member)> {

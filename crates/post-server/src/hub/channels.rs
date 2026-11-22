@@ -74,8 +74,6 @@ impl Hub {
     }
 
     fn connections_of(&self, account: AccountId) -> impl Iterator<Item = ConnectionId> {
-        self.members()
-            .filter(move |(_, member)| member.account == account)
-            .map(|(id, _)| id)
+        self.online.get(&account).into_iter().flatten().copied()
     }
 }
