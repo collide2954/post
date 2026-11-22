@@ -2,6 +2,13 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.1.4 - 2026-11-22
+
+- Add the rules core of the server (D-178). Verus proves the rules for accounts, handles, and invitations, and SQLite only stores the data.
+- Replace the library `base64` with our own proved code for the text form of keys (D-179).
+- Add proofs for the text form of the seed and for the generator of invitation codes.
+- Let only one program use the data of a server. The operator stops the server before the command `post-server owner-link`.
+
 ## 0.1.3 - 2026-11-21
 
 - Add the sign-in of an account to the protocol and to the server (D-163). The application does not use it yet.
