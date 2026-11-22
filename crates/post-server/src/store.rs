@@ -10,8 +10,13 @@ use post_rules::{Account, AccountId, Change, Invitation, Limits, Reservation, Ru
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
-const SCHEMA_VERSION: i64 = 1;
-const SCHEMA: &str = "
+mod channels;
+
+pub use channels::ChannelRows;
+
+const SCHEMA_VERSION: i64 = 2;
+const STEPS: [(i64, &str); 2] = [(1, ACCOUNTS), (SCHEMA_VERSION, channels::SCHEMA)];
+const ACCOUNTS: &str = "
 CREATE TABLE server (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     secret BLOB NOT NULL
@@ -109,9 +114,13 @@ impl Store {
         if version > SCHEMA_VERSION {
             return Err(StoreError::NewerData);
         }
-        if version == 0 {
+        if version < SCHEMA_VERSION {
             let change = database.transaction()?;
-            change.execute_batch(SCHEMA)?;
+            for (number, step) in STEPS {
+                if version < number {
+                    change.execute_batch(step)?;
+                }
+            }
             change.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             change.commit()?;
         }
@@ -183,6 +192,8 @@ impl Store {
         self.database
             .execute_batch(
                 "PRAGMA foreign_keys = OFF;
+                 DROP TABLE next_channel; DROP TABLE reserved_channel_name;
+                 DROP TABLE channel_invited; DROP TABLE channel_member; DROP TABLE channel;
                  DROP TABLE reserved_name; DROP TABLE account; DROP TABLE invitation;",
             )
             .expect("the tables go away");
@@ -250,10 +261,12 @@ fn damaged(index: usize, kind: Type) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(index, kind, "the value is not valid".into())
 }
 
+fn number_from(row: &Row<'_>, index: usize) -> rusqlite::Result<u64> {
+    u64::try_from(row.get::<_, i64>(index)?).map_err(|_| damaged(index, Type::Integer))
+}
+
 fn id_from(row: &Row<'_>, index: usize) -> rusqlite::Result<AccountId> {
-    u64::try_from(row.get::<_, i64>(index)?)
-        .map(AccountId)
-        .map_err(|_| damaged(index, Type::Integer))
+    number_from(row, index).map(AccountId)
 }
 
 fn name_from(row: &Row<'_>, index: usize) -> rusqlite::Result<Name> {
