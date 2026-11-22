@@ -1,6 +1,6 @@
 [package]
 name = "post-rules"
-description = "Proved rules of a Post server for accounts, handles, and invitations"
+description = "Proved rules of a Post server for accounts, handles, invitations, and channels"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

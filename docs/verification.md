@@ -37,6 +37,7 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 | The text form of the seed | `crates/post-crypto/src/seed/text.rs` | The writer makes exactly the text that the specification gives for a seed. The reader accepts a text only if it is the text of a seed, with or without one line end. It then gives that seed. |
 | The generator of invitation codes | `crates/post-crypto/src/random.rs` | The generator gives only codes that obey the rule, thus it cannot stop with an error. A code has the characters of the first 12 fair bytes, in sequence. Each of the 62 characters comes from exactly 4 of the 248 fair byte values. |
 | The rules of the server for accounts, handles, and invitations | `crates/post-rules/src` | Each operation keeps these rules. A key has one account at most. A handle has one owner at most. The server has one owner at most. Each invitation code is one invitation. An invitation is not used more times than its limit. A new account uses only an open invitation. A reserved handle goes only to its account until the reserved time ends. A handle change waits for the minimum interval. Only the owner makes an invitation or cancels one. If the core refuses a request, or if the storage fails, the state does not change. The core accepts stored rows only if they obey the rules. |
+| The rules of the server for channels and their members | `crates/post-rules/src` | Each operation keeps these rules. A channel name has one channel at most. The number for the next channel never decreases, thus a new channel never gets the number of an earlier channel. Each channel has one owner, and the owner is a member. A person is a member of a channel one time at most. Only a private channel has invitations, and only a person who is not a member has one. A person joins a private channel only with an invitation. Only the owner changes the topic, the name, or the owner, deletes the channel, invites a person, or cancels an invitation. The owner does not leave the channel. An account gets a channel only while it owns fewer channels than the limit. A reserved channel name goes only to its channel until the reserved time ends. A channel rename waits for the minimum interval. If the core refuses a request, or if the storage fails, the state does not change. The core accepts stored rows only if they obey the rules. |
 
 ## Holes
 
@@ -48,7 +49,7 @@ A hole is code or an assumption that has no proof. Each hole is in this list.
 |---|---|
 | The rules for the text of a message and for the topic of a channel. The white space, the control characters, and the count of characters come from the standard library. | Open |
 | The rules for addresses. | Open |
-| The agreement between the state of the rules core and the changes that it gives to the storage. Tests examine it. | Open |
+| The agreement between the state of each rules core and the changes that it gives to the storage. Tests examine it. | Open |
 | The steps of the sign-in in the server and in the client. | Open |
 | The readers of the client for invite links, server addresses, and profile names. | Open |
 
