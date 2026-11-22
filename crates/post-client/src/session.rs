@@ -290,7 +290,8 @@ impl Session {
             | ServerMessage::ChannelTopic { .. }
             | ServerMessage::ChannelRename { .. }
             | ServerMessage::ChannelGive { .. }
-            | ServerMessage::ChannelDelete { .. } => {}
+            | ServerMessage::ChannelDelete { .. }
+            | ServerMessage::ChannelInvite { .. } => {}
         }
     }
 

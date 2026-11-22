@@ -229,7 +229,7 @@ impl Hub {
         })
     }
 
-    fn connections_of(&self, account: AccountId) -> impl Iterator<Item = ConnectionId> {
+    pub(super) fn connections_of(&self, account: AccountId) -> impl Iterator<Item = ConnectionId> {
         self.online.get(&account).into_iter().flatten().copied()
     }
 }

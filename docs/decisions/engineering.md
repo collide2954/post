@@ -532,6 +532,7 @@ Protocol:
 - After the sign-in, the server sends the state of each channel of the user. A `ready` message then tells that the state is complete.
 - A private channel that the user cannot see gives the same error as a channel that does not exist.
 - A topic that is empty removes the topic of the channel.
+- An invitation to a private channel names the user by the handle. The owner and the invited user get a message for each change of the invitation. After the sign-in, the server sends each open invitation that the user can see.
 
 Presence and the typing indicator:
 

@@ -518,6 +518,49 @@
       ]
     },
     {
+      "description": "Tells that a user has an invitation to a private channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "name": {
+          "description": "The name of the invited user.",
+          "$ref": "#/$defs/Name"
+        },
+        "owner": {
+          "description": "The name of the owner of the channel.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the `channel-invite` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time when the owner made the invitation.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-invite"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "owner",
+        "time"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {
@@ -714,6 +757,16 @@
           "description": "The channel has no member with the name.",
           "type": "string",
           "const": "no-such-member"
+        },
+        {
+          "description": "The channel is public, thus it has no invitations.",
+          "type": "string",
+          "const": "not-private"
+        },
+        {
+          "description": "The user already has an invitation to the channel.",
+          "type": "string",
+          "const": "already-invited"
         },
         {
           "description": "The server has a problem and cannot do the task.",

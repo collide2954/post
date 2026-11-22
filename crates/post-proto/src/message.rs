@@ -169,6 +169,16 @@ pub enum ClientMessage {
         /// The name of the channel, without the `#` sign.
         channel: String,
     },
+    /// Invites a user to a private channel. Only the owner of the channel can invite a user.
+    ChannelInvite {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+        /// The name of the user.
+        name: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -333,6 +343,20 @@ pub enum ServerMessage {
         /// The time when the owner deleted the channel.
         time: Timestamp,
     },
+    /// Tells that a user has an invitation to a private channel.
+    ChannelInvite {
+        /// The number from the `channel-invite` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The name of the invited user.
+        name: Name,
+        /// The name of the owner of the channel.
+        owner: Name,
+        /// The time when the owner made the invitation.
+        time: Timestamp,
+    },
     /// Refuses a message from the client.
     Error {
         /// The number from the refused message, if it had one.
@@ -437,6 +461,10 @@ pub enum ErrorCode {
     NoSuchUser,
     /// The channel has no member with the name.
     NoSuchMember,
+    /// The channel is public, thus it has no invitations.
+    NotPrivate,
+    /// The user already has an invitation to the channel.
+    AlreadyInvited,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -480,7 +508,8 @@ impl ClientMessage {
             | Self::ChannelTopic { reference, .. }
             | Self::ChannelRename { reference, .. }
             | Self::ChannelGive { reference, .. }
-            | Self::ChannelDelete { reference, .. } => *reference,
+            | Self::ChannelDelete { reference, .. }
+            | Self::ChannelInvite { reference, .. } => *reference,
         }
     }
 
@@ -551,6 +580,8 @@ impl ErrorCode {
             Self::InvalidTopic => "A topic is one line of text with a maximum of 300 characters.",
             Self::NoSuchUser => "The server has no user with this name.",
             Self::NoSuchMember => "The user is not a member of this channel.",
+            Self::NotPrivate => "Only a private channel has invitations.",
+            Self::AlreadyInvited => "The user already has an invitation to this channel.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }

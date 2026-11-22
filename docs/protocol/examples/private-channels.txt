@@ -1,0 +1,29 @@
+# The owner of a private channel invites users to the channel.
+# The lines show the connection of the user "ana". She has an account on the server.
+# "C:" is a line from the client. "S:" is a line from the server.
+
+# Ana signs in. She is the owner of the public channel "general" and of the private channel "secret".
+# The user "cy" has an open invitation to the channel "secret".
+C: {"type":"hello","protocol":0,"address":"chat.example.org:443","nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","supports":[]}
+S: {"type":"challenge","protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI","proof":"ZeA2ResstAfHtxRGEs6knEtI14hfp-IrwWCnVdDajcWimrtB6_yXo33nRHzuebREmPcb2GQo1XPcZONrCBKXCw","requires":[]}
+C: {"type":"identify","key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
+S: {"type":"welcome","name":"ana","role":"member"}
+S: {"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T13:00:00.000Z"}
+S: {"type":"channel","channel":"secret","kind":"private","topic":"","owner":"ana","created":"2026-11-21T13:30:00.000Z"}
+S: {"type":"channel-invite","channel":"secret","name":"cy","owner":"ana","time":"2026-11-21T13:35:00.000Z"}
+S: {"type":"ready"}
+
+# Ana invites the user "ben". Ana and Ben get the message.
+C: {"type":"channel-invite","ref":1,"channel":"secret","name":"ben"}
+S: {"type":"channel-invite","ref":1,"channel":"secret","name":"ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}
+
+# Ben has an invitation now.
+C: {"type":"channel-invite","ref":2,"channel":"secret","name":"ben"}
+S: {"type":"error","ref":2,"code":"already-invited","text":"The user already has an invitation to this channel."}
+
+# Ben joins the channel. His invitation ends.
+S: {"type":"join","channel":"secret","name":"ben","time":"2026-11-21T14:13:00.000Z"}
+
+# The channel "general" is public, thus it has no invitations.
+C: {"type":"channel-invite","ref":3,"channel":"general","name":"cy"}
+S: {"type":"error","ref":3,"code":"not-private","text":"Only a private channel has invitations."}

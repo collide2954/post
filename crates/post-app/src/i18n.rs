@@ -78,6 +78,8 @@ texts! {
     ErrorInvalidTopic => "error-invalid-topic",
     ErrorNoSuchUser => "error-no-such-user",
     ErrorNoSuchMember => "error-no-such-member",
+    ErrorNotPrivate => "error-not-private",
+    ErrorAlreadyInvited => "error-already-invited",
     ErrorInvalidName => "error-invalid-name",
     ErrorNameTaken => "error-name-taken",
     ErrorNoSuchChannel => "error-no-such-channel",

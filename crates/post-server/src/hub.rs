@@ -16,6 +16,7 @@ use crate::store::{Store, StoreError, Stored};
 
 mod channels;
 mod owner;
+mod private;
 
 pub use channels::CHANNEL_LIMITS;
 
@@ -232,6 +233,9 @@ impl Hub {
                 self.give_channel(request, &channel, &name)
             }
             ClientMessage::ChannelDelete { channel, .. } => self.delete_channel(request, &channel),
+            ClientMessage::ChannelInvite { channel, name, .. } => {
+                self.invite_to_channel(request, &channel, &name)
+            }
         }
     }
 
@@ -377,6 +381,7 @@ impl Hub {
             .insert(request.from, State::Present(member));
         self.online.entry(account).or_default().insert(request.from);
         outgoing.extend(self.channel_states(request.from, account));
+        outgoing.extend(self.invitation_states(request.from, account));
         outgoing.push(Outgoing {
             to: request.from,
             message: ServerMessage::Ready {},

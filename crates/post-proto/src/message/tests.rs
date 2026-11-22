@@ -47,8 +47,30 @@ fn channel(text: &str) -> ChannelName {
 fn client_examples() -> Vec<(ClientMessage, &'static str)> {
     let mut examples = channel_requests();
     examples.extend(owner_requests());
+    examples.extend(invitation_requests());
     examples.extend(other_requests());
     examples
+}
+
+fn invitation_requests() -> Vec<(ClientMessage, &'static str)> {
+    vec![
+        (
+            ClientMessage::ChannelInvite {
+                reference: Some(13),
+                channel: "secret".to_owned(),
+                name: "ben".to_owned(),
+            },
+            r#"{"type":"channel-invite","ref":13,"channel":"secret","name":"ben"}"#,
+        ),
+        (
+            ClientMessage::ChannelInvite {
+                reference: None,
+                channel: "secret".to_owned(),
+                name: "Not A Name".to_owned(),
+            },
+            r#"{"type":"channel-invite","channel":"secret","name":"Not A Name"}"#,
+        ),
+    ]
 }
 
 fn owner_requests() -> Vec<(ClientMessage, &'static str)> {
@@ -339,7 +361,33 @@ fn all_server_examples() -> Vec<(ServerMessage, &'static str)> {
     let mut examples = server_examples();
     examples.extend(server_list_examples());
     examples.extend(owner_events());
+    examples.extend(invitation_events());
     examples
+}
+
+fn invitation_events() -> Vec<(ServerMessage, &'static str)> {
+    vec![
+        (
+            ServerMessage::ChannelInvite {
+                reference: Some(13),
+                channel: channel("secret"),
+                name: name("ben"),
+                owner: name("ana"),
+                time: time("2026-11-21T14:12:00.000Z"),
+            },
+            r#"{"type":"channel-invite","ref":13,"channel":"secret","name":"ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelInvite {
+                reference: None,
+                channel: channel("secret"),
+                name: name("ben"),
+                owner: name("ana"),
+                time: time("2026-11-21T14:12:00.000Z"),
+            },
+            r#"{"type":"channel-invite","channel":"secret","name":"ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
+        ),
+    ]
 }
 
 fn owner_events() -> Vec<(ServerMessage, &'static str)> {
@@ -852,6 +900,16 @@ fn each_error_code_of_a_channel_has_a_word_form_and_a_text() {
             "The user is not a member of this channel.",
         ),
         (
+            ErrorCode::NotPrivate,
+            "not-private",
+            "Only a private channel has invitations.",
+        ),
+        (
+            ErrorCode::AlreadyInvited,
+            "already-invited",
+            "The user already has an invitation to this channel.",
+        ),
+        (
             ErrorCode::InvalidChannelName,
             "invalid-channel-name",
             "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore.",
@@ -954,6 +1012,9 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"channel-give","channel":"general"}"#,
         r#"{"type":"channel-give","name":"ben"}"#,
         r#"{"type":"channel-give","channel":"general","name":"ben","time":"2026-11-21T14:10:00.000Z"}"#,
+        r#"{"type":"channel-invite","channel":"secret"}"#,
+        r#"{"type":"channel-invite","name":"ben"}"#,
+        r#"{"type":"channel-invite","channel":"secret","name":"ben","owner":"ana"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -1011,6 +1072,9 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel-give","channel":"general","name":"ben"}"#,
         r#"{"type":"channel-give","channel":"general","name":"Ben","time":"2026-11-21T14:10:00.000Z"}"#,
         r#"{"type":"channel-give","channel":"General","name":"ben","time":"2026-11-21T14:10:00.000Z"}"#,
+        r#"{"type":"channel-invite","channel":"secret","name":"ben","time":"2026-11-21T14:12:00.000Z"}"#,
+        r#"{"type":"channel-invite","channel":"secret","name":"Ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
+        r#"{"type":"channel-invite","channel":"Secret","name":"ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

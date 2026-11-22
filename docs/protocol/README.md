@@ -179,8 +179,8 @@ An owner link is a special invitation. The server program makes it, and a client
 A member of the server can make a channel. That member is the owner of the channel and its first member.
 
 - A channel is public or private. The owner selects the kind when the owner makes the channel. The kind does not change.
-- Each member of the server can join a public channel. At this time, only the owner is a member of a private channel.
-- A public channel is in the channel list of the server. A private channel is not in the list.
+- Each member of the server can join a public channel. A user can join a private channel only with an invitation from its owner.
+- A public channel is in the channel list of the server. A user sees a private channel in the list only when the user has an invitation to it.
 - A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel.
 - An account can be the owner of a maximum of 10 channels.
 - A channel has a topic. The topic is one line of text with a maximum of 300 characters. It can be empty. Only the owner changes the topic.
@@ -189,7 +189,11 @@ A member of the server can make a channel. That member is the owner of the chann
 - Only the owner deletes a channel. The name of a deleted channel is free immediately.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
 
-After the `welcome` message, the server sends one `channel` message for each channel that the user is a member of. Then it sends a `ready` message.
+After the `welcome` message, the server sends these messages:
+
+1. One `channel` message for each channel that the user is a member of.
+2. One `channel-invite` message for each open invitation of the user, and for each open invitation to a private channel that the user owns.
+3. A `ready` message.
 
 ## Messages from the client
 
@@ -338,6 +342,8 @@ The server answers with a `channel` message or with an `error` message. Each con
 - If the channel does not exist, the error is `no-such-channel`. A private channel that the user cannot see gives the same error.
 - If the user is already a member of the channel, the error is `already-member`.
 
+A user joins a private channel with an invitation. The invitation ends when the user joins.
+
 ### `leave`
 
 The `leave` message stops the membership of the user in a channel.
@@ -432,6 +438,25 @@ The server answers with a `channel-delete` message or with an `error` message. E
 
 - If the user is not the owner of the channel, the error is `not-permitted`.
 
+### `channel-invite`
+
+The `channel-invite` message invites a user to a private channel. The user can then see the channel in the channel list and join it.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-invite"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+| `name` | The name of the user. |
+
+The server answers with a `channel-invite` message or with an `error` message. Each connection of the owner and each connection of the invited user get the `channel-invite` message.
+
+- If the user who sends the message is not the owner of the channel, the error is `not-permitted`.
+- If the server has no user with the name, the error is `no-such-user`.
+- If the channel is public, the error is `not-private`.
+- If the user with the name is a member of the channel, the error is `already-member`.
+- If the user with the name already has an invitation to the channel, the error is `already-invited`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -459,7 +484,7 @@ The `welcome` message starts the session of a user. The session now has a name.
 | `name` | The name of the user in this session. |
 | `role` | The role of the user on this server: `"owner"` or `"member"`. |
 
-After the `welcome` message, the server sends the `channel` messages and the `ready` message. See "Channels".
+After the `welcome` message, the server sends the `channel` messages, the `channel-invite` messages, and the `ready` message. See "Channels".
 
 One account can have more than one connection at the same time. Each connection gets the messages of the channels of the account.
 
@@ -482,7 +507,7 @@ The `channel` message gives the state of a channel to one of its members. The se
 
 ### `ready`
 
-The `ready` message tells that the state after the sign-in is complete. The server sends it after the `welcome` message and the `channel` messages that follow it.
+The `ready` message tells that the state after the sign-in is complete. The server sends it after the `welcome` message and the `channel` and `channel-invite` messages that follow it.
 
 | Field | Value |
 |---|---|
@@ -492,7 +517,7 @@ A client that connects again uses this message. If a channel that the client kne
 
 ### `channels`
 
-The `channels` message gives a part of the channel list of the server. The list contains each public channel.
+The `channels` message gives a part of the channel list of the server. The list contains each public channel. It also contains each private channel that the user has an invitation to.
 
 | Field | Value |
 |---|---|
@@ -629,6 +654,22 @@ The `channel-delete` message tells that the owner deleted a channel. The server 
 | `channel` | The name of the channel. |
 | `time` | The time when the owner deleted the channel. |
 
+### `channel-invite`
+
+The `channel-invite` message tells that a user has an invitation to a private channel. The server sends it in these conditions:
+
+- When the owner invites a user. The owner and the invited user get the message.
+- After the `welcome` message, one time for each open invitation that the user can see.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-invite"` |
+| `ref` | The value from the `channel-invite` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The name of the channel. |
+| `name` | The name of the invited user. |
+| `owner` | The name of the owner of the channel. |
+| `time` | The time when the owner made the invitation. |
+
 ### `error`
 
 The `error` message refuses a message from the client. The connection stays open.
@@ -671,6 +712,8 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `invalid-topic` | The topic does not obey the rules for a topic. |
 | `no-such-user` | The server has no user with the name. |
 | `no-such-member` | The channel has no member with the name. |
+| `not-private` | The channel is public, thus it has no invitations. |
+| `already-invited` | The user already has an invitation to the channel. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations

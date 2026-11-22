@@ -13,6 +13,7 @@ use crate::store::{Store, StoreError};
 
 mod channels;
 mod owner;
+mod private;
 
 fn ready() -> ServerMessage {
     ServerMessage::Ready {}

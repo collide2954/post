@@ -242,7 +242,7 @@ pub(super) fn leave(reference: u32, channel: &str) -> String {
     .encode()
 }
 
-fn joined(title: &str, who: &str) -> ServerMessage {
+pub(super) fn joined(title: &str, who: &str) -> ServerMessage {
     ServerMessage::Join {
         channel: channel(title),
         name: name(who),

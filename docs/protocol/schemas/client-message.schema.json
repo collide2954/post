@@ -529,6 +529,39 @@
         "type",
         "channel"
       ]
+    },
+    {
+      "description": "Invites a user to a private channel. Only the owner of the channel can invite a user.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the user.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-invite"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name"
+      ]
     }
   ],
   "$defs": {
