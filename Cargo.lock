@@ -2870,6 +2870,7 @@ dependencies = [
  "jiff",
  "post-client",
  "post-proto",
+ "post-rules",
  "post-server",
  "post-testing",
  "sys-locale",

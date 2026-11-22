@@ -22,6 +22,11 @@ macro_rules! texts {
 }
 
 texts! {
+    StartNoHome => "start-no-home",
+    StartProfileInUse => "start-profile-in-use",
+    StartProfileDamaged => "start-profile-damaged",
+    StartProfileFiles => "start-profile-files",
+    ProfileFirstName => "profile-first-name",
     ConnectServerLabel => "connect-server-label",
     ConnectNameLabel => "connect-name-label",
     ConnectButton => "connect-button",
@@ -31,6 +36,7 @@ texts! {
     ProblemAddressEmpty => "problem-address-empty",
     ProblemAddressInvalid => "problem-address-invalid",
     ProblemAddressPort => "problem-address-port",
+    ProblemAddressLink => "problem-address-link",
     ProblemAddressNotLocal => "problem-address-not-local",
     ProblemNameCharacters => "problem-name-characters",
     ProblemNameShort => "problem-name-short",
@@ -61,6 +67,7 @@ texts! {
     ChatJoined => "chat-joined",
     ChatLeft => "chat-left",
     ChatNotSent => "chat-not-sent",
+    ChatServerNotSaved => "chat-server-not-saved",
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

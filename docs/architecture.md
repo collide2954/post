@@ -9,7 +9,7 @@ The repository is one Cargo workspace (decision record D-097). Each crate depend
 | Crate | Content | Depends on |
 |---|---|---|
 | `post-app` | The application with its window. The program has the name `post`. | `post-client`, `post-proto` |
-| `post-client` | The client logic without an interface | `post-proto` |
+| `post-client` | The client logic without an interface | `post-crypto`, `post-proto` |
 | `post-server` | The server. The program has the name `post-server`. | `post-crypto`, `post-proto`, `post-rules` |
 | `post-crypto` | Keys and proofs of accounts and servers | `post-proto` |
 | `post-rules` | The proved rules of a server for accounts, handles, and invitations | `post-proto` |
@@ -82,21 +82,24 @@ The server keeps its storage in a data directory. In development mode, the direc
 
 ## The client crate
 
-- `address` reads a server address. In version 0.1, it accepts only an address of the local computer.
-- `connection` opens the WebSocket, sends the `hello` message, and gives the events of the connection as a stream.
+- `destination` reads an invite link or a server address. It decides if the connection uses TLS.
+- `home` finds the directories of the user for the settings and for the data.
+- `profile` keeps the profiles in files (D-147). A profile has a name, a seed, and a list of the servers that it knows. A lock file lets only one window use a profile.
+- `connection` opens the WebSocket, does the sign-in, and gives the events of the connection as a stream. It examines the proof of the server before it calculates the account key.
 - `session` holds the timeline of one connection and makes the `send` messages.
+- `address` reads a server address for the temporary `guest` message. It goes away together with that message.
 
 ## The application crate
 
 The application uses the iced toolkit (D-077).
 
-- `app` holds the state of the application and the update logic. It does not use the toolkit. An update returns an effect, for example "put the focus in the message field".
+- `app` holds the state of the application and the update logic. It does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the message field".
 - `timeline` holds the rules that prepare a timeline entry for the window: the local time and the groups of messages.
 - `palette` holds the colors of light mode and dark mode. A test examines the contrast of each color.
 - `i18n` holds the texts of the interface. The catalogs for English and Latin American Spanish are in `crates/post-app/i18n`.
 - `view` makes the widgets from the state. It contains no decisions.
-- `shell` connects the state to the toolkit: the start, the updates, and the subscriptions.
-- `main` selects the language and starts the shell.
+- `shell` connects the state to the toolkit: the start, the updates, and the subscriptions. It opens the profile, gives the seed to the connection, and writes the known servers.
+- `main` selects the language, finds the directories of the user, and starts the shell.
 
 ## The website
 
@@ -114,6 +117,6 @@ A test makes the website from the repository and examines each link. The same te
 - Each module has unit tests. We write a test before the code that it examines (D-101).
 - The server and the client have tests that use a real WebSocket connection on the local computer.
 - The application has tests that operate the interface without a window. They type text and select buttons.
-- One test runs the complete application without a window. It connects to a real server and exchanges text with a second user.
+- Some tests run the complete application without a window. One of them makes an account on a real server with an invite link and exchanges text with a second user.
 - The automatic checks measure the coverage of each crate (D-104). The files `view.rs` and `main.rs` do not count.
 - Mutation tests examine the protocol crate each night.

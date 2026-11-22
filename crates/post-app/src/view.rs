@@ -11,7 +11,7 @@ use jiff::tz::TimeZone;
 use post_client::Entry;
 use post_proto::LOBBY;
 
-use crate::app::{App, Chat, Form, Message, Screen, Target};
+use crate::app::{App, Chat, Form, Message, Screen, StartProblem, Target};
 use crate::i18n::{Strings, Text};
 use crate::palette::{Mode, Palette, Rgb};
 use crate::timeline::{clock, name_column, shows_name};
@@ -71,12 +71,31 @@ fn custom_theme(name: &'static str, mode: Mode) -> Theme {
 pub fn view(window: &Window) -> Element<'_, Message> {
     let palette = Palette::of(window.app.mode());
     match window.app.screen() {
+        Screen::Stopped(problem) => stopped_screen(&window.strings, problem, palette),
         Screen::Connect(form) => connect_screen(&window.strings, form, None, palette),
         Screen::Connecting { form, target } => {
             connect_screen(&window.strings, form, Some(target), palette)
         }
         Screen::Chat(chat) => chat_screen(window, chat, palette),
     }
+}
+
+fn stopped_screen<'a>(
+    strings: &Strings,
+    problem: &StartProblem,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let content = column![
+        text("Post").font(STRONG_FONT).size(28),
+        Space::new().height(12),
+        text(problem.describe(strings))
+            .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
+            .color(color(palette.danger)),
+    ]
+    .spacing(8)
+    .max_width(380);
+
+    container(content).center(Fill).padding(24).into()
 }
 
 fn connect_screen<'a>(
@@ -103,7 +122,7 @@ fn connect_screen<'a>(
         (Some(target), _) => text(strings.with(
             Text::ConnectProgress,
             "address",
-            &target.address.to_string(),
+            &target.destination.to_string(),
         ))
         .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
         .color(color(palette.muted))

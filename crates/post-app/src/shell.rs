@@ -1,19 +1,39 @@
+use std::hash::{Hash, Hasher};
+
 use iced::keyboard::{self, Key, key::Named};
 use iced::widget::operation;
 use iced::{
-    Application, Pixels, Program, Settings, Size, Subscription, Task, Theme, theme, window,
+    Application, Element, Pixels, Program, Settings, Size, Subscription, Task, Theme, theme, window,
 };
 use jiff::tz::TimeZone;
+use post_client::{Home, Identity, Profile, Profiles, Seed};
 
-use crate::app::{App, Effect, Message};
-use crate::i18n::{Language, Strings};
+use crate::app::{App, Effect, Message, StartProblem, Target};
+use crate::i18n::{Language, Strings, Text};
 use crate::palette::Mode;
 use crate::view::{self, Window};
 
+pub struct Shell {
+    window: Window,
+    profile: Option<Profile>,
+}
+
+struct SignIn {
+    target: Target,
+    seed: Seed,
+}
+
+impl Hash for SignIn {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.target.attempt.hash(state);
+    }
+}
+
 pub fn application(
     language: Language,
-) -> Application<impl Program<State = Window, Message = Message, Theme = Theme>> {
-    let mut application = iced::application(move || boot(language), update, view::view)
+    home: Option<Home>,
+) -> Application<impl Program<State = Shell, Message = Message, Theme = Theme>> {
+    let mut application = iced::application(move || boot(language, home.clone()), update, view)
         .title("Post")
         .theme(window_theme)
         .subscription(subscription)
@@ -33,44 +53,86 @@ pub fn application(
     application
 }
 
-fn boot(language: Language) -> (Window, Task<Message>) {
-    let window = Window {
-        app: App::new(Mode::Light),
-        strings: Strings::new(language),
-        zone: TimeZone::system(),
+fn boot(language: Language, home: Option<Home>) -> (Shell, Task<Message>) {
+    let strings = Strings::new(language);
+    let profile = home.ok_or(StartProblem::NoHome).and_then(|home| {
+        Profiles::new(home)
+            .start(&strings.text(Text::ProfileFirstName))
+            .map_err(StartProblem::from)
+    });
+    let (app, profile) = match profile {
+        Ok(profile) => (
+            App::new(Mode::Light, profile.servers().to_vec()),
+            Some(profile),
+        ),
+        Err(problem) => (App::stopped(Mode::Light, problem), None),
+    };
+    let shell = Shell {
+        window: Window {
+            app,
+            strings,
+            zone: TimeZone::system(),
+        },
+        profile,
     };
     let tasks = Task::batch([
         iced::system::theme().map(mode_changed),
         operation::focus(view::NAME_FIELD),
     ]);
-    (window, tasks)
+    (shell, tasks)
 }
 
-fn update(window: &mut Window, message: Message) -> Task<Message> {
-    match window.app.update(message) {
+fn update(shell: &mut Shell, message: Message) -> Task<Message> {
+    match shell.window.app.update(message) {
         Effect::None => Task::none(),
         Effect::FocusName => operation::focus(view::NAME_FIELD),
         Effect::FocusDraft => operation::focus(view::DRAFT_FIELD),
         Effect::FocusNext => operation::focus_next(),
         Effect::FocusPrevious => operation::focus_previous(),
+        Effect::Connected(server) => {
+            let saved = shell
+                .profile
+                .as_mut()
+                .is_some_and(|profile| profile.remember(server).is_ok());
+            if !saved {
+                shell.window.app.update(Message::ServerNotSaved);
+            }
+            operation::focus(view::DRAFT_FIELD)
+        }
     }
 }
 
-fn window_theme(window: &Window) -> Theme {
-    view::theme(window.app.mode())
+fn view(shell: &Shell) -> Element<'_, Message> {
+    view::view(&shell.window)
 }
 
-fn subscription(window: &Window) -> Subscription<Message> {
-    let connection = window
-        .app
-        .target()
-        .map_or_else(Subscription::none, |target| {
-            Subscription::run_with(target.clone(), |target| {
-                post_client::connect(target.address.clone(), target.name.clone())
+fn window_theme(shell: &Shell) -> Theme {
+    view::theme(shell.window.app.mode())
+}
+
+fn subscription(shell: &Shell) -> Subscription<Message> {
+    let connection = match (shell.window.app.target(), &shell.profile) {
+        (Some(target), Some(profile)) => {
+            let sign_in = SignIn {
+                target: target.clone(),
+                seed: profile.seed().clone(),
+            };
+            Subscription::run_with(sign_in, |sign_in| {
+                let identity = Identity {
+                    seed: sign_in.seed.clone(),
+                    name: sign_in.target.name.clone(),
+                };
+                post_client::sign_in(
+                    sign_in.target.destination.clone(),
+                    identity,
+                    sign_in.target.known,
+                )
             })
             .with(target.attempt)
             .map(|(attempt, event)| Message::Connection(attempt, event))
-        });
+        }
+        _ => Subscription::none(),
+    };
     Subscription::batch([
         connection,
         iced::system::theme_changes().map(mode_changed),

@@ -250,9 +250,7 @@ impl Profile {
     }
 
     pub fn remember(&mut self, server: KnownServer) -> Result<(), ProfileError> {
-        self.servers
-            .retain(|known| known.address != server.address && known.key != server.key);
-        self.servers.insert(0, server);
+        server.remember_in(&mut self.servers);
         self.save()
     }
 
@@ -266,6 +264,13 @@ impl Profile {
             servers: self.servers.clone(),
         };
         write_toml(&self.directory.join(SERVERS), &file)
+    }
+}
+
+impl KnownServer {
+    pub fn remember_in(self, servers: &mut Vec<Self>) {
+        servers.retain(|known| known.address != self.address && known.key != self.key);
+        servers.insert(0, self);
     }
 }
 
@@ -641,6 +646,27 @@ mod tests {
             .expect("saved");
 
         assert_eq!(profile.servers(), [server("new.example.org", 1, "ana")]);
+    }
+
+    #[test]
+    fn puts_a_server_at_the_start_of_a_list() {
+        let mut servers = vec![
+            server("chat.example.org", 1, "ana"),
+            server("old.example.org", 2, "ana"),
+            server("localhost:7678", 3, "ana-dev"),
+        ];
+
+        server("new.example.org", 2, "ana").remember_in(&mut servers);
+        server("chat.example.org", 1, "anna").remember_in(&mut servers);
+
+        assert_eq!(
+            servers,
+            [
+                server("chat.example.org", 1, "anna"),
+                server("new.example.org", 2, "ana"),
+                server("localhost:7678", 3, "ana-dev"),
+            ]
+        );
     }
 
     #[test]

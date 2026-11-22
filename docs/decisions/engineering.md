@@ -371,6 +371,9 @@ Application:
 
 - The profiles are in the data directory of the user: `%APPDATA%\Post` on Windows, `~/Library/Application Support/Post` on macOS, and the XDG directories on Linux. The environment variable `POST_HOME` selects a different directory.
 - A profile name has 1 to 30 characters. The first profile has the name "main", or "principal" in Spanish.
+- The user types a name only for a new account. For an account that exists, the application ignores the name.
+- The application remembers the key of each server. If a known address shows a different key, the application does not sign in.
+- If the application cannot open the profile, the window shows the cause, and the application does nothing more.
 - When the application changes a value in the settings file, it keeps the comments and the sequence of the file.
 - The F12 key shows and hides the protocol console when the developer setting is on.
 

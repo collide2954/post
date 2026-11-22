@@ -1,14 +1,21 @@
-connect-server-label = Server
-connect-name-label = Name
+start-no-home = Post cannot find a directory for its data. Set the environment variable POST_HOME to a directory.
+start-profile-in-use = This profile is open in a different window of Post. Close that window, then start Post again.
+start-profile-damaged = The { $file } file of this profile is not valid. Post cannot open the profile.
+start-profile-files = Post cannot use the files of this profile. { $reason }
+profile-first-name = main
+
+connect-server-label = Invite link or server address
+connect-name-label = Name for a new account
 connect-button = Connect
 connect-cancel-button = Cancel
 connect-progress = Connecting to { $address }…
 connect-note = This test version connects only to a server on this computer. The connection has no encryption.
 
 problem-address-empty = Type the address of the server.
-problem-address-invalid = The address must have the form host or host:port.
+problem-address-invalid = This text is not an invite link or a server address.
 problem-address-port = The port must be a number from 1 to 65535.
-problem-address-not-local = This version connects only to this computer. Use localhost.
+problem-address-link = The invite link is not complete. Copy the full link again.
+problem-address-not-local = A connection without encryption is possible only to this computer.
 problem-name-characters = A name can contain only a to z, 0 to 9, hyphen, and underscore.
 problem-name-short = A name must have a minimum of 2 characters.
 problem-name-long = A name can have a maximum of 20 characters.
@@ -40,3 +47,4 @@ chat-input-placeholder = Message #{ $channel }
 chat-joined = { $name } joined
 chat-left = { $name } left
 chat-not-sent = Post did not send the message. Try again.
+chat-server-not-saved = Post could not save this server in your profile.

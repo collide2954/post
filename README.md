@@ -21,7 +21,9 @@ Version 0.1 is the first slice. It shows that all the layers work together:
 
 Version 0.1 has no accounts, no encryption, and no stored history. The connection does not go across a network. The [roadmap](docs/decisions/engineering.md) gives the sequence of the next versions (record D-100).
 
-## Try version 0.1
+The main branch contains the work on version 0.2. The application now signs in with an account. The connection still has no encryption, and it does not go across a network.
+
+## Try the main branch
 
 You must have [rustup](https://rustup.rs). It installs the Rust release that the file `rust-toolchain.toml` gives.
 
@@ -31,15 +33,18 @@ You must have [rustup](https://rustup.rs). It installs the Rust release that the
    cargo run --bin post-server
    ```
 
+   At the first start, the server prints an owner link.
+
 2. In a second terminal, start the application:
 
    ```
    cargo run --bin post
    ```
 
-3. Type a name, and select **Connect**.
-4. Start the application again in a third terminal. Use a different name.
-5. Write a message in one window. The message shows in the two windows.
+3. Paste the owner link into the first field. Type a name, and select **Connect**. You are now the owner of the server.
+4. Write a message.
+
+The application keeps a secret seed in a file in your user directory. Only your user account can read the file, and the seed has no other protection at this time (record D-169).
 
 The server listens on port 7678. To use a different port, give the number: `cargo run --bin post-server -- --port 9000`. The server keeps its data in the directory `post-server-data`.
 

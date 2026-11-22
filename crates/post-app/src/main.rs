@@ -2,6 +2,7 @@
 
 use post_app::i18n::Language;
 use post_app::shell;
+use post_client::Home;
 
 const LANGUAGE_VARIABLE: &str = "POST_LANGUAGE";
 
@@ -10,5 +11,5 @@ fn main() -> iced::Result {
         .ok()
         .and_then(|tag| Language::from_tag(&tag))
         .unwrap_or_else(|| Language::from_locale(sys_locale::get_locale().as_deref()));
-    shell::application(language).run()
+    shell::application(language, Home::of_this_user()).run()
 }

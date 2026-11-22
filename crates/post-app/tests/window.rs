@@ -5,7 +5,7 @@ use iced::keyboard::key::Named;
 use iced::{Pixels, Settings, Size};
 use iced_test::{Simulator, selector};
 use jiff::tz::TimeZone;
-use post_app::app::{App, Message};
+use post_app::app::{App, Message, StartProblem};
 use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::view::{self, Window};
@@ -45,8 +45,12 @@ fn simulator(window: &Window) -> Simulator<'_, Message> {
     Simulator::with_size(settings, Size::new(900.0, 600.0), view::view(window))
 }
 
+fn new_app(mode: Mode) -> App {
+    App::new(mode, Vec::new())
+}
+
 fn connect_app(mode: Mode) -> App {
-    let mut app = App::new(mode);
+    let mut app = new_app(mode);
     app.update(Message::NameChanged("ana".to_owned()));
     app
 }
@@ -100,7 +104,7 @@ fn chat_app(mode: Mode) -> (App, Outbox) {
 
 #[test]
 fn the_name_field_gets_the_keys_that_the_user_types() {
-    let window = window(App::new(Mode::Light), Language::English);
+    let window = window(new_app(Mode::Light), Language::English);
     let mut interface = simulator(&window);
 
     interface
@@ -117,7 +121,7 @@ fn the_name_field_gets_the_keys_that_the_user_types() {
 
 #[test]
 fn the_server_field_shows_the_local_address() {
-    let window = window(App::new(Mode::Light), Language::English);
+    let window = window(new_app(Mode::Light), Language::English);
     let mut interface = simulator(&window);
 
     interface
@@ -160,7 +164,8 @@ fn the_connect_button_and_the_enter_key_start_a_connection() {
 
 #[test]
 fn the_connect_screen_shows_a_problem() {
-    let mut app = App::new(Mode::Light);
+    let mut app = new_app(Mode::Light);
+    app.update(Message::NameChanged("a".to_owned()));
     app.update(Message::Connect);
     let window = window(app, Language::English);
     let mut interface = simulator(&window);
@@ -168,6 +173,18 @@ fn the_connect_screen_shows_a_problem() {
     interface
         .find("A name must have a minimum of 2 characters.")
         .expect("the problem shows");
+}
+
+#[test]
+fn the_window_tells_why_post_cannot_start() {
+    let app = App::stopped(Mode::Light, StartProblem::Damaged("seed"));
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .find("The seed file of this profile is not valid. Post cannot open the profile.")
+        .expect("the problem shows");
+    assert!(interface.find("Connect").is_err());
 }
 
 #[test]
@@ -271,7 +288,11 @@ fn the_chat_screen_shows_an_error_from_the_server() {
 fn the_interface_has_spanish_text() {
     let window = window(connect_app(Mode::Light), Language::Spanish);
     let mut interface = simulator(&window);
-    for text in ["Servidor", "Nombre", "Conectar"] {
+    for text in [
+        "Enlace de invitación o dirección del servidor",
+        "Nombre para una cuenta nueva",
+        "Conectar",
+    ] {
         interface
             .find(text)
             .unwrap_or_else(|error| panic!("{text}: {error}"));
@@ -293,6 +314,11 @@ fn each_screen_draws_in_light_and_dark_mode() {
 
     for (mode, mode_name) in [(Mode::Light, "light"), (Mode::Dark, "dark")] {
         let screens = [
+            (
+                "stopped",
+                App::stopped(mode, StartProblem::InUse),
+                Language::English,
+            ),
             ("connect", connect_app(mode), Language::English),
             ("connecting", connecting_app(mode), Language::English),
             ("chat", chat_app(mode).0, Language::English),
