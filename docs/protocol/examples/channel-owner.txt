@@ -26,3 +26,11 @@ S: {"type":"error","ref":3,"code":"not-permitted","text":"Your account does not 
 # An empty text removes the topic.
 C: {"type":"channel-topic","ref":4,"channel":"general","topic":""}
 S: {"type":"channel-topic","ref":4,"channel":"general","topic":"","by":"ana","time":"2026-11-21T14:07:00.000Z"}
+
+# Ana changes the name of her channel. Each member of the channel gets the message.
+C: {"type":"channel-rename","ref":5,"channel":"general","name":"lounge"}
+S: {"type":"channel-rename","ref":5,"channel":"general","name":"lounge","time":"2026-11-21T14:08:00.000Z"}
+
+# A channel can change its name one time in 30 days.
+C: {"type":"channel-rename","ref":6,"channel":"lounge","name":"garden"}
+S: {"type":"error","ref":6,"code":"too-soon","text":"The name changed a short time ago. Try again later."}

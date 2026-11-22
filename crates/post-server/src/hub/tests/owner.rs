@@ -1,7 +1,7 @@
-use post_proto::{ChannelKind, ClientMessage, ErrorCode, ListedChannel, ServerMessage};
+use post_proto::{ChannelKind, ClientMessage, ErrorCode, ListedChannel, ServerMessage, Timestamp};
 
 use super::channels::{create, join, list, signed_in_again, with_general};
-use super::{challenged, channel, error, identify, later, name, now, to};
+use super::{challenged, channel, error, identify, later, name, now, send, to};
 
 fn topic(reference: u32, channel: &str, topic: &str) -> String {
     ClientMessage::ChannelTopic {
@@ -127,7 +127,7 @@ fn refuses_a_topic_that_breaks_a_rule() {
 fn refuses_a_change_of_a_channel_before_the_sign_in() {
     let (mut hub, _ids) = with_general();
     let id = hub.connect();
-    let lines = [topic(1, "general", "Plans")];
+    let lines = [topic(1, "general", "Plans"), rename(1, "general", "lounge")];
 
     for line in &lines {
         assert_eq!(
@@ -153,4 +153,114 @@ fn answers_with_a_server_error_when_it_cannot_store_a_change_of_a_channel() {
         hub.receive(ids[0], &topic(2, "general", "Plans"), now()),
         [to(ids[0], error(Some(2), ErrorCode::ServerError))]
     );
+    assert_eq!(
+        hub.receive(ids[0], &rename(3, "general", "lounge"), now()),
+        [to(ids[0], error(Some(3), ErrorCode::ServerError))]
+    );
+}
+
+fn rename(reference: u32, channel: &str, name: &str) -> String {
+    ClientMessage::ChannelRename {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+        name: name.to_owned(),
+    }
+    .encode()
+}
+
+fn renamed(reference: Option<u32>, old: &str, new: &str) -> ServerMessage {
+    ServerMessage::ChannelRename {
+        reference,
+        channel: channel(old),
+        name: channel(new),
+        time: later(),
+    }
+}
+
+fn next_month() -> Timestamp {
+    Timestamp::parse("2026-12-22T14:02:07.120Z").expect("valid")
+}
+
+#[test]
+fn the_owner_changes_the_name_of_a_channel_and_each_member_gets_the_news() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+
+    let outgoing = hub.receive(ids[0], &rename(5, "general", "lounge"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], renamed(Some(5), "general", "lounge")),
+            to(ids[1], renamed(None, "general", "lounge")),
+        ]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &send(Some(6), "general", "Hello"), later()),
+        [to(ids[1], error(Some(6), ErrorCode::NoSuchChannel))]
+    );
+    let sent = hub.receive(ids[1], &send(Some(7), "lounge", "Hello"), later());
+    assert_eq!(sent.len(), 2);
+}
+
+#[test]
+fn keeps_the_earlier_name_of_a_channel_for_that_channel() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &rename(2, "general", "lounge"), now());
+
+    assert_eq!(
+        hub.receive(ids[1], &create(3, "general", ChannelKind::Public), later()),
+        [to(ids[1], error(Some(3), ErrorCode::NameTaken))]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &rename(4, "lounge", "garden"), later()),
+        [to(ids[0], error(Some(4), ErrorCode::TooSoon))]
+    );
+
+    let back = hub.receive(ids[0], &rename(5, "lounge", "general"), next_month());
+    assert_eq!(back.len(), 1);
+    assert_eq!(
+        hub.receive(
+            ids[1],
+            &create(6, "lounge", ChannelKind::Public),
+            next_month()
+        ),
+        [to(ids[1], error(Some(6), ErrorCode::NameTaken))]
+    );
+}
+
+#[test]
+fn refuses_a_new_name_of_a_channel_that_breaks_a_rule() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &create(2, "dev", ChannelKind::Public), now());
+    hub.receive(ids[0], &create(3, "secret", ChannelKind::Private), now());
+    hub.receive(ids[1], &join(4, "general"), now());
+
+    for (wanted, code) in [
+        ("General", ErrorCode::InvalidChannelName),
+        ("g", ErrorCode::InvalidChannelName),
+        ("", ErrorCode::InvalidChannelName),
+        ("dev", ErrorCode::NameTaken),
+        ("general", ErrorCode::NameTaken),
+        ("secret", ErrorCode::NameTaken),
+    ] {
+        assert_eq!(
+            hub.receive(ids[0], &rename(5, "general", wanted), now()),
+            [to(ids[0], error(Some(5), code))],
+            "{wanted}"
+        );
+    }
+    for not_the_owner in [ids[1], ids[2]] {
+        assert_eq!(
+            hub.receive(not_the_owner, &rename(6, "general", "lounge"), now()),
+            [to(not_the_owner, error(Some(6), ErrorCode::NotPermitted))]
+        );
+    }
+    for title in ["garden", "secret", "General"] {
+        assert_eq!(
+            hub.receive(ids[1], &rename(7, title, "lounge"), now()),
+            [to(ids[1], error(Some(7), ErrorCode::NoSuchChannel))],
+            "{title}"
+        );
+    }
 }

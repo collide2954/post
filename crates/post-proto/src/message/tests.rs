@@ -69,6 +69,22 @@ fn owner_requests() -> Vec<(ClientMessage, &'static str)> {
             },
             r#"{"type":"channel-topic","channel":"general","topic":""}"#,
         ),
+        (
+            ClientMessage::ChannelRename {
+                reference: Some(10),
+                channel: "general".to_owned(),
+                name: "lounge".to_owned(),
+            },
+            r#"{"type":"channel-rename","ref":10,"channel":"general","name":"lounge"}"#,
+        ),
+        (
+            ClientMessage::ChannelRename {
+                reference: None,
+                channel: "general".to_owned(),
+                name: "Not A Name".to_owned(),
+            },
+            r#"{"type":"channel-rename","channel":"general","name":"Not A Name"}"#,
+        ),
     ]
 }
 
@@ -317,6 +333,24 @@ fn owner_events() -> Vec<(ServerMessage, &'static str)> {
                 time: time("2026-11-21T14:06:00.000Z"),
             },
             r#"{"type":"channel-topic","channel":"general","topic":"","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelRename {
+                reference: Some(10),
+                channel: channel("general"),
+                name: channel("lounge"),
+                time: time("2026-11-21T14:08:00.000Z"),
+            },
+            r#"{"type":"channel-rename","ref":10,"channel":"general","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelRename {
+                reference: None,
+                channel: channel("general"),
+                name: channel("lounge"),
+                time: time("2026-11-21T14:08:00.000Z"),
+            },
+            r#"{"type":"channel-rename","channel":"general","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
         ),
     ]
 }
@@ -729,7 +763,7 @@ fn each_error_code_has_a_word_form_and_a_text() {
         (
             ErrorCode::TooSoon,
             "too-soon",
-            "You changed your name a short time ago. Try again later.",
+            "The name changed a short time ago. Try again later.",
         ),
     ];
     examine_error_codes(&codes);
@@ -837,6 +871,9 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"channel-topic","topic":"Plans"}"#,
         r#"{"type":"channel-topic","channel":"general","topic":7}"#,
         r#"{"type":"channel-topic","channel":"general","topic":"Plans","by":"ana"}"#,
+        r#"{"type":"channel-rename","channel":"general"}"#,
+        r#"{"type":"channel-rename","name":"lounge"}"#,
+        r#"{"type":"channel-rename","channel":"general","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -886,6 +923,9 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel-topic","channel":"general","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
         r#"{"type":"channel-topic","channel":"General","topic":"Plans","by":"ana","time":"2026-11-21T14:06:00.000Z"}"#,
         r#"{"type":"channel-topic","channel":"general","topic":"Plans","by":"Ana","time":"2026-11-21T14:06:00.000Z"}"#,
+        r#"{"type":"channel-rename","channel":"general","name":"lounge"}"#,
+        r#"{"type":"channel-rename","channel":"general","name":"Lounge","time":"2026-11-21T14:08:00.000Z"}"#,
+        r#"{"type":"channel-rename","channel":"General","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

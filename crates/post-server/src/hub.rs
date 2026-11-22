@@ -225,6 +225,9 @@ impl Hub {
             ClientMessage::ChannelTopic { channel, topic, .. } => {
                 self.set_topic(request, &channel, &topic)
             }
+            ClientMessage::ChannelRename { channel, name, .. } => {
+                self.rename_channel(request, &channel, &name)
+            }
         }
     }
 

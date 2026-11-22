@@ -435,6 +435,39 @@
         "channel",
         "topic"
       ]
+    },
+    {
+      "description": "Changes the name of a channel. Only the owner of the channel can change it.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The present name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The new name of the channel.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-rename"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name"
+      ]
     }
   ],
   "$defs": {

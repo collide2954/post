@@ -141,6 +141,16 @@ pub enum ClientMessage {
         /// The new topic. An empty text removes the topic.
         topic: String,
     },
+    /// Changes the name of a channel. Only the owner of the channel can change it.
+    ChannelRename {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The present name of the channel, without the `#` sign.
+        channel: String,
+        /// The new name of the channel.
+        name: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -271,6 +281,18 @@ pub enum ServerMessage {
         /// The time of the change.
         time: Timestamp,
     },
+    /// Tells that a channel has a new name.
+    ChannelRename {
+        /// The number from the `channel-rename` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The earlier name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The new name of the channel.
+        name: ChannelName,
+        /// The time of the change.
+        time: Timestamp,
+    },
     /// Refuses a message from the client.
     Error {
         /// The number from the refused message, if it had one.
@@ -357,7 +379,7 @@ pub enum ErrorCode {
     TextTooLong,
     /// The account does not have the permission for the request.
     NotPermitted,
-    /// The account changed its name a short time ago.
+    /// The account or the channel changed its name a short time ago.
     TooSoon,
     /// The name does not obey the rules for a channel name.
     InvalidChannelName,
@@ -411,7 +433,8 @@ impl ClientMessage {
             | Self::Join { reference, .. }
             | Self::Leave { reference, .. }
             | Self::Channels { reference }
-            | Self::ChannelTopic { reference, .. } => *reference,
+            | Self::ChannelTopic { reference, .. }
+            | Self::ChannelRename { reference, .. } => *reference,
         }
     }
 
@@ -471,7 +494,7 @@ impl ErrorCode {
             Self::EmptyText => "A message must contain text.",
             Self::TextTooLong => "A message can have a maximum of 4000 characters.",
             Self::NotPermitted => "Your account does not have the permission for this request.",
-            Self::TooSoon => "You changed your name a short time ago. Try again later.",
+            Self::TooSoon => "The name changed a short time ago. Try again later.",
             Self::InvalidChannelName => {
                 "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore."
             }

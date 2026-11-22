@@ -18,7 +18,7 @@ S: {"type":"rename","ref":4,"old":"ana","new":"anna","time":"2026-11-21T14:06:00
 
 # An account can change its name only one time in 30 days.
 C: {"type":"rename","ref":5,"name":"annie"}
-S: {"type":"error","ref":5,"code":"too-soon","text":"You changed your name a short time ago. Try again later."}
+S: {"type":"error","ref":5,"code":"too-soon","text":"The name changed a short time ago. Try again later."}
 
 # Ben changes his name.
 S: {"type":"rename","old":"ben","new":"benito","time":"2026-11-21T14:07:00.000Z"}

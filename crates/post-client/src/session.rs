@@ -287,7 +287,8 @@ impl Session {
             ServerMessage::Error { code, .. } => self.problem = Some(code),
             ServerMessage::Welcome { .. }
             | ServerMessage::Challenge { .. }
-            | ServerMessage::ChannelTopic { .. } => {}
+            | ServerMessage::ChannelTopic { .. }
+            | ServerMessage::ChannelRename { .. } => {}
         }
     }
 

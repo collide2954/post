@@ -409,6 +409,44 @@
       ]
     },
     {
+      "description": "Tells that a channel has a new name.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The earlier name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "name": {
+          "description": "The new name of the channel.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "ref": {
+          "description": "The number from the `channel-rename` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time of the change.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-rename"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "time"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {
@@ -562,7 +600,7 @@
           "const": "not-permitted"
         },
         {
-          "description": "The account changed its name a short time ago.",
+          "description": "The account or the channel changed its name a short time ago.",
           "type": "string",
           "const": "too-soon"
         },

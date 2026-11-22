@@ -184,6 +184,7 @@ A member of the server can make a channel. That member is the owner of the chann
 - A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel.
 - An account can be the owner of a maximum of 10 channels.
 - A channel has a topic. The topic is one line of text with a maximum of 300 characters. It can be empty. Only the owner changes the topic.
+- Only the owner changes the name of a channel. The earlier name stays reserved for the channel for 30 days. In this time, no other channel can take it.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
 
 After the `welcome` message, the server sends one `channel` message for each channel that the user is a member of. Then it sends a `ready` message.
@@ -377,6 +378,26 @@ The server answers with a `channel-topic` message or with an `error` message. Ea
 - If the topic has a line break or a different control character, or if it has more than 300 characters, the error is `invalid-topic`.
 - If the user is not the owner of the channel, the error is `not-permitted`.
 
+### `channel-rename`
+
+The `channel-rename` message changes the name of a channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-rename"` |
+| `ref` | Optional. |
+| `channel` | The present name of the channel. |
+| `name` | The new name of the channel. |
+
+The server answers with a `channel-rename` message or with an `error` message. Each member of the channel gets the `channel-rename` message.
+
+- If the new name does not obey the rules for a channel name, the error is `invalid-channel-name`.
+- If the user is not the owner of the channel, the error is `not-permitted`.
+- A channel can change its name one time in 30 days. Before the end of this time, the error is `too-soon`.
+- If a channel has the new name, or if the name is reserved for a different channel, the error is `name-taken`.
+
+The two times are fixed in protocol version 0.
+
 ## Messages from the server
 
 ### `challenge`
@@ -539,6 +560,18 @@ The `channel-topic` message tells that a channel has a new topic. The server sen
 | `by` | The name of the user who changed the topic. |
 | `time` | The time of the change. |
 
+### `channel-rename`
+
+The `channel-rename` message tells that a channel has a new name. The server sends it to each member of the channel. The messages that follow use the new name.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-rename"` |
+| `ref` | The value from the `channel-rename` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The earlier name of the channel. |
+| `name` | The new name of the channel. |
+| `time` | The time of the change. |
+
 ### `error`
 
 The `error` message refuses a message from the client. The connection stays open.
@@ -572,7 +605,7 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `empty-text` | The text has no visible character. |
 | `text-too-long` | The text has more than 4,000 characters. |
 | `not-permitted` | The account does not have the permission for the request. |
-| `too-soon` | The account changed its name a short time ago. |
+| `too-soon` | The account or the channel changed its name a short time ago. |
 | `invalid-channel-name` | The name does not obey the rules for a channel name. |
 | `too-many-channels` | The account owns the maximum number of channels. |
 | `already-member` | The user is already a member of the channel. |
