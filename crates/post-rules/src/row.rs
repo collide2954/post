@@ -64,6 +64,12 @@ pub enum InviteError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RevokeError {
+    NotPermitted,
+    NotOpen,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodeTaken;
 
 #[derive(Debug, PartialEq, Eq)]

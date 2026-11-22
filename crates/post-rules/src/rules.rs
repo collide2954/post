@@ -3,7 +3,7 @@ use vstd::prelude::*;
 
 use crate::row::{
     Account, AccountId, Change, CodeTaken, Invitation, InviteError, Limits, RegisterError,
-    RenameError, Reservation, Storage,
+    RenameError, Reservation, RevokeError, Storage,
 };
 use crate::rule::{has_waited, invitation_is_open, later};
 #[cfg(verus_keep_ghost)]
@@ -529,10 +529,7 @@ impl Rules {
         proof {
             use_type_invariant(&*self);
         }
-        let Some(maker) = self.id_at(by) else {
-            return Ok(Err(InviteError::NotPermitted));
-        };
-        if !self.accounts[maker].owner {
+        if !self.is_owner(by) {
             return Ok(Err(InviteError::NotPermitted));
         }
         let invitation = Invitation {
@@ -552,19 +549,39 @@ impl Rules {
         }
     }
 
-    pub fn revoke<S: Storage>(&mut self, storage: &mut S, code: &Code, now: Timestamp) -> (result:
-        Result<bool, S::Error>)
+    pub fn revoke<S: Storage>(
+        &mut self,
+        storage: &mut S,
+        by: AccountId,
+        code: &Code,
+        now: Timestamp,
+    ) -> (result: Result<Result<(), RevokeError>, S::Error>)
         ensures
-            !(result matches Ok(true)) ==> final(self).same_as(*old(self)),
+            !(result matches Ok(Ok(_))) ==> final(self).same_as(*old(self)),
+            result matches Ok(Ok(_)) ==> {
+                &&& exists|i: int|
+                    0 <= i < old(self).accounts().len() && (#[trigger] old(self).accounts()[i]).id == by
+                        && old(self).accounts()[i].owner
+                &&& exists|i: int|
+                    0 <= i < old(self).invitations().len() && (#[trigger] old(
+                        self,
+                    ).invitations()[i]).code@ == code@ && !old(self).invitations()[i].owner && is_open(
+                        old(self).invitations()[i],
+                        now.millis(),
+                    )
+            },
     {
         proof {
             use_type_invariant(&*self);
         }
+        if !self.is_owner(by) {
+            return Ok(Err(RevokeError::NotPermitted));
+        }
         let Some(at) = self.code_at(code) else {
-            return Ok(false);
+            return Ok(Err(RevokeError::NotOpen));
         };
         if self.invitations[at].owner || !invitation_is_open(&self.invitations[at], now) {
-            return Ok(false);
+            return Ok(Err(RevokeError::NotOpen));
         }
         let mut revoked = self.invitations[at].clone();
         revoked.revoked = Some(now);
@@ -573,7 +590,25 @@ impl Rules {
         let (accounts, mut invitations, reservations, next, limits) = self.take();
         invitations.set(at, revoked);
         *self = Self { accounts, invitations, reservations, next, limits };
-        Ok(true)
+        assert(is_open(old(self).invitations()[at as int], now.millis()));
+        Ok(Ok(()))
+    }
+
+    #[must_use]
+    pub fn is_owner(&self, id: AccountId) -> (owner: bool)
+        ensures
+            owner ==> exists|i: int|
+                0 <= i < self.accounts().len() && (#[trigger] self.accounts()[i]).id == id
+                    && self.accounts()[i].owner,
+    {
+        match self.id_at(id) {
+            Some(at) => {
+                let owner = self.accounts[at].owner;
+                assert(owner ==> self.accounts()[at as int].id == id);
+                owner
+            },
+            None => false,
+        }
     }
 
     #[must_use]

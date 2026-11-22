@@ -1,7 +1,7 @@
 use post_proto::{Code, Name, Timestamp};
 use post_rules::{
     Account, AccountId, Change, CodeTaken, Invitation, InviteError, Limits, RegisterError,
-    RenameError, Reservation, Rules, Storage,
+    RenameError, Reservation, RevokeError, Rules, Storage,
 };
 
 const START: u64 = 1_795_000_000_000;
@@ -155,13 +155,18 @@ impl Server {
         result
     }
 
-    fn revoke(&mut self, invitation: &Code, now: Timestamp) -> bool {
-        let revoked = self
+    fn revoke(
+        &mut self,
+        by: AccountId,
+        invitation: &Code,
+        now: Timestamp,
+    ) -> Result<(), RevokeError> {
+        let result = self
             .rules
-            .revoke(&mut self.memory, invitation, now)
+            .revoke(&mut self.memory, by, invitation, now)
             .expect("stored");
         self.examine();
-        revoked
+        result
     }
 
     fn join(&mut self, owner: AccountId, person: u8, who: &str, now: Timestamp) -> AccountId {
@@ -291,7 +296,7 @@ fn refuses_a_second_account_for_one_key() {
 fn refuses_an_invitation_that_is_not_open() {
     let (mut server, owner) = Server::with_owner();
     let revoked = server.invite(owner, 1, None, None, day(0)).expect("made");
-    assert!(server.revoke(&revoked.code, day(0)));
+    assert_eq!(server.revoke(owner, &revoked.code, day(0)), Ok(()));
     let ended = server
         .invite(owner, 2, Some(day(7)), None, day(0))
         .expect("made");
@@ -627,11 +632,45 @@ fn revokes_only_an_open_invitation_of_a_member() {
     let invitation = server.invite(owner, 1, None, None, day(0)).expect("made");
     let link = server.new_owner_code(2, day(0));
 
-    assert!(server.revoke(&invitation.code, day(1)));
-    assert!(!server.revoke(&invitation.code, day(1)));
-    assert!(!server.revoke(&link, day(1)));
-    assert!(!server.revoke(&code(99), day(1)));
+    assert_eq!(server.revoke(owner, &invitation.code, day(1)), Ok(()));
+    for not_open in [invitation.code, link.clone(), code(99)] {
+        assert_eq!(
+            server.revoke(owner, &not_open, day(1)),
+            Err(RevokeError::NotOpen),
+            "{not_open}"
+        );
+    }
     assert!(server.rules.code_is_open(&link, day(1)));
+}
+
+#[test]
+fn lets_only_the_owner_revoke_an_invitation() {
+    let (mut server, owner) = Server::with_owner();
+    let ben = server.join(owner, 2, "ben", day(0));
+    let invitation = server.invite(owner, 1, None, None, day(0)).expect("made");
+
+    for account in [ben, AccountId(99)] {
+        assert_eq!(
+            server.revoke(account, &invitation.code, day(1)),
+            Err(RevokeError::NotPermitted)
+        );
+    }
+    assert!(server.rules.code_is_open(&invitation.code, day(1)));
+}
+
+#[test]
+fn tells_if_an_account_is_the_owner() {
+    let (mut server, owner) = Server::with_owner();
+    let ben = server.join(owner, 2, "ben", day(0));
+
+    assert!(server.rules.is_owner(owner));
+    assert!(!server.rules.is_owner(ben));
+    assert!(!server.rules.is_owner(AccountId(99)));
+
+    let link = server.new_owner_code(2, day(1));
+    assert!(server.claim(ben, &link, day(1)));
+    assert!(server.rules.is_owner(ben));
+    assert!(!server.rules.is_owner(owner));
 }
 
 #[test]
@@ -642,7 +681,9 @@ fn lists_the_open_invitations_of_members() {
         .invite(owner, 2, Some(day(7)), None, day(0))
         .expect("made");
     let revoked = server.invite(owner, 3, None, None, day(0)).expect("made");
-    server.revoke(&revoked.code, day(0));
+    server
+        .revoke(owner, &revoked.code, day(0))
+        .expect("the invitation is open");
     server.new_owner_code(4, day(0));
 
     assert_eq!(
@@ -688,7 +729,10 @@ fn changes_nothing_when_the_storage_fails() {
         rules.invite(memory, owner, &code(3), None, None, day(1)),
         Err(Broken)
     );
-    assert_eq!(rules.revoke(memory, &invitation.code, day(1)), Err(Broken));
+    assert_eq!(
+        rules.revoke(memory, owner, &invitation.code, day(1)),
+        Err(Broken)
+    );
     assert_eq!(rules.new_owner_code(memory, &code(4), day(1)), Err(Broken));
 
     server.examine();
@@ -710,7 +754,10 @@ fn does_not_write_when_it_refuses_a_request() {
         rules.rename(memory, owner, &name("ana"), day(1)),
         Ok(Err(RenameError::NameTaken))
     );
-    assert_eq!(rules.revoke(memory, &code(99), day(1)), Ok(false));
+    assert_eq!(
+        rules.revoke(memory, owner, &code(99), day(1)),
+        Ok(Err(RevokeError::NotOpen))
+    );
     assert_eq!(rules.owner_code(memory, &code(5), day(1)), Ok(Ok(None)));
 }
 

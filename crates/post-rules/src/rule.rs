@@ -117,6 +117,7 @@ pub fn has_waited(renamed: Option<Timestamp>, now: Timestamp, interval: u64) -> 
     }
 }
 
+#[must_use]
 pub fn later(time: Timestamp, millis: u64) -> (later: Timestamp)
     ensures
         later.millis() == if time.millis() + millis <= last_millis() {
