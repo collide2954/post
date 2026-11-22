@@ -4,12 +4,12 @@ use iced::{Alignment, Element, Fill, Pixels};
 use post_client::KnownServer;
 
 use super::widgets::{
-    color, field_style, label, link_button, page, paragraph, primary_button, settings_link, title,
+    color, field_style, label, link_button, page, page_link, paragraph, primary_button, title,
 };
 use super::{ADDRESS_FIELD, LINE_HEIGHT, MONO_FONT, NAME_FIELD, SMALL_SIZE, STRONG_FONT};
-use crate::app::Message;
 use crate::app::servers::{self, Question, Servers};
 use crate::app::start::StartProblem;
+use crate::app::{Message, Page};
 use crate::i18n::{Strings, Text};
 use crate::palette::Palette;
 
@@ -151,7 +151,13 @@ pub(super) fn servers_screen<'a>(
             .push(feedback)
             .push(row![space::horizontal(), action])
             .push(Space::new().height(12))
-            .push(row![settings_link(strings, [4, 0], palette)]),
+            .push(
+                row![
+                    page_link(strings, Page::Profiles, [4, 0], palette),
+                    page_link(strings, Page::Settings, [4, 0], palette),
+                ]
+                .spacing(16),
+            ),
     )
 }
 

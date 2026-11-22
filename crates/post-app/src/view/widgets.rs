@@ -83,18 +83,48 @@ pub(super) fn bar(
     column![bar.push(links), divider(palette)].into()
 }
 
-pub(super) fn settings_link<'a>(
+pub(super) fn page_link<'a>(
     strings: &Strings,
+    page: Page,
     padding: [u16; 2],
     palette: Palette,
 ) -> Element<'a, Message> {
-    let open = Message::Open(Page::Settings);
+    let name = match page {
+        Page::Settings => Text::NavSettingsButton,
+        Page::Profiles => Text::NavProfilesButton,
+    };
     link(
-        strings.text(Text::NavSettingsButton),
-        Some(open),
+        strings.text(name),
+        Some(Message::Open(page)),
         padding,
         palette,
     )
+}
+
+pub(super) fn danger_button<'a>(
+    content: String,
+    message: Option<Message>,
+    palette: Palette,
+) -> Element<'a, Message> {
+    button(text(content).font(STRONG_FONT))
+        .padding([8, 18])
+        .on_press_maybe(message)
+        .style(move |_, status| {
+            let (background, text_color) = match status {
+                button::Status::Hovered | button::Status::Pressed => {
+                    (mix(palette.danger, palette.text, 0.18), palette.background)
+                }
+                button::Status::Active => (color(palette.danger), palette.background),
+                button::Status::Disabled => (color(palette.rule), palette.muted),
+            };
+            button::Style {
+                background: Some(Background::Color(background)),
+                text_color: color(text_color),
+                border: border::rounded(4),
+                ..button::Style::default()
+            }
+        })
+        .into()
 }
 
 pub(super) fn primary_button<'a>(

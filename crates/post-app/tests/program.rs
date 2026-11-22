@@ -9,10 +9,13 @@ use iced_test::emulator::{self, Emulator, Mode};
 use iced_test::futures::futures::channel::mpsc;
 use iced_test::selector::{Candidate, Selector};
 use iced_test::{Instruction, Simulator};
-use post_app::app::{Message, servers};
+use post_app::app::{Message, profiles, servers};
+use post_app::arguments::Arguments;
 use post_app::i18n::Language;
 use post_app::shell;
-use post_client::{Destination, Event, Fingerprint, Home, Identity, Seed, Trust, sign_in};
+use post_client::{
+    Destination, Event, Fingerprint, Home, Identity, Profiles, Seed, Trust, sign_in,
+};
 use post_proto::{ClientMessage, Name, ServerMessage};
 use post_server::Server;
 use post_server::config::{Config, Tls};
@@ -101,6 +104,14 @@ where
         }
     }
 
+    fn expect_no(&mut self, text: &str) {
+        let start = Instant::now();
+        while self.shows(text) {
+            assert!(start.elapsed() < PATIENCE, "the text stays: {text}");
+            self.pump();
+        }
+    }
+
     fn invite_link(&self) -> Option<String> {
         Simulator::new(self.emulator.view(&self.program))
             .find(InviteLink)
@@ -150,6 +161,34 @@ fn name(text: &str) -> Name {
 
 fn home(directory: &Directory) -> Home {
     Home::at(directory.path())
+}
+
+fn open(
+    language: Language,
+    directory: &Directory,
+) -> Driver<impl Program<Message = Message, Theme = Theme> + 'static> {
+    open_with(language, directory, &[])
+}
+
+fn open_with(
+    language: Language,
+    directory: &Directory,
+    arguments: &[&str],
+) -> Driver<impl Program<Message = Message, Theme = Theme> + 'static> {
+    let arguments = Arguments::parse(arguments.iter().map(|argument| (*argument).to_owned()));
+    Driver::start(shell::application(
+        language,
+        Some(home(directory)),
+        arguments,
+    ))
+}
+
+fn new_profile_name(name: &str) -> Message {
+    Message::Profiles(profiles::Message::NewNameChanged(name.to_owned()))
+}
+
+fn edit(text: &str) -> Message {
+    Message::Profiles(profiles::Message::EditChanged(text.to_owned()))
 }
 
 fn start_server() -> Backstage {
@@ -265,12 +304,137 @@ fn settings_file(directory: &Directory) -> PathBuf {
 }
 
 #[test]
+fn a_user_makes_a_second_profile_and_opens_it() {
+    let backstage = start_server();
+    let directory = Directory::new();
+    let mut driver = open(Language::English, &directory);
+    driver.expect("Connect");
+    driver.sign_up(backstage.owner_link.clone(), "ana");
+    driver.expect("ana · connected");
+    driver.act("click \"Leave\"");
+    driver.expect("Servers");
+
+    driver.act("click \"Profiles\"");
+    driver.expect("Open in this window");
+    driver.send(new_profile_name("work"));
+    driver.act("click \"Make a profile\"");
+    driver.expect("work");
+    driver.act("click \"Open\"");
+
+    driver.expect("Connect");
+    driver.expect_no("Servers");
+    assert!(!driver.shows(&backstage.address()));
+    let second = directory.join("profiles").join("2");
+    assert!(second.join("seed").is_file());
+    assert!(second.join("settings.toml").is_file());
+    let state = std::fs::read_to_string(directory.join("state.toml")).expect("a state file");
+    assert_eq!(state, "last-profile = 2\n");
+    let first = std::fs::read_to_string(directory.join("profiles").join("1").join("seed"));
+    let other = std::fs::read_to_string(second.join("seed"));
+    assert_ne!(first.expect("a seed"), other.expect("a seed"));
+    drop(driver);
+
+    let mut next = open(Language::English, &directory);
+    next.expect("Connect");
+    assert!(!next.shows("Servers"));
+    next.act("click \"Profiles\"");
+    next.expect("Open in this window");
+    next.act("click \"Open\"");
+    next.expect("ana · connected");
+}
+
+#[test]
+fn a_user_renames_a_profile_and_deletes_a_profile() {
+    let directory = Directory::new();
+    let mut driver = open(Language::English, &directory);
+    driver.expect("Connect");
+    driver.act("click \"Profiles\"");
+    driver.expect("Open in this window");
+    driver.send(new_profile_name("work"));
+    driver.act("click \"Make a profile\"");
+    driver.expect("work");
+
+    driver.act("click \"Rename\"");
+    driver.expect("Save");
+    driver.send(edit("home"));
+    driver.act("click \"Save\"");
+    driver.expect("home");
+    driver.expect_no("Save");
+    let profile = directory.join("profiles").join("1").join("profile.toml");
+    let name = std::fs::read_to_string(profile).expect("a profile file");
+    assert_eq!(name, "name = \"home\"\n");
+
+    driver.send(new_profile_name("HOME"));
+    driver.act("click \"Make a profile\"");
+    driver.expect("A different profile has this name.");
+    driver.send(new_profile_name(""));
+
+    driver.act("click \"Delete\"");
+    driver.expect(
+        "If you delete the profile \"work\", you lose its accounts on all servers. No person can get them back.",
+    );
+    driver.act("click \"Delete this profile\"");
+    driver.send(edit("wor"));
+    driver.act("click \"Delete this profile\"");
+    assert!(directory.join("profiles").join("2").exists());
+    driver.send(edit("work"));
+    driver.act("click \"Delete this profile\"");
+
+    driver.expect_no("Delete this profile");
+    assert!(!driver.shows("work"));
+    assert!(!directory.join("profiles").join("2").exists());
+    assert!(directory.join("profiles").join("1").exists());
+}
+
+#[test]
+fn the_command_line_opens_a_profile_by_its_name() {
+    let directory = Directory::new();
+    let profiles = Profiles::new(home(&directory));
+    profiles.create("main").expect("a profile");
+    profiles.create("work").expect("a profile");
+
+    let mut driver = open_with(Language::English, &directory, &["--profile", "work"]);
+
+    driver.expect("Connect");
+    let state = std::fs::read_to_string(directory.join("state.toml")).expect("a state file");
+    assert_eq!(state, "last-profile = 2\n");
+
+    let mut second = open_with(Language::English, &directory, &["--profile=main"]);
+    second.expect("Connect");
+    second.act("click \"Profiles\"");
+    second.expect("Open in this window");
+    second.act("click \"Open\"");
+    second.expect("This profile is open in a different window.");
+    second.act("click \"Delete\"");
+    second.send(edit("work"));
+    second.act("click \"Delete this profile\"");
+    second.expect("This profile is open in a different window.");
+    assert!(directory.join("profiles").join("2").exists());
+    drop(driver);
+}
+
+#[test]
+fn the_window_tells_about_a_problem_of_the_command_line() {
+    let directory = Directory::new();
+
+    let mut unknown = open_with(Language::English, &directory, &["--profile", "garden"]);
+    unknown.expect("No profile has the name \"garden\".");
+    assert!(!unknown.shows("Connect"));
+    assert!(!directory.join("profiles").exists());
+
+    let mut argument = open_with(Language::Spanish, &directory, &["--rapido"]);
+    argument.expect(
+        "Post no conoce el argumento \"--rapido\". Para abrir un perfil, usa: post --profile <nombre>",
+    );
+
+    let mut missing = open_with(Language::English, &directory, &["--profile"]);
+    missing.expect("Give the name of a profile after --profile.");
+}
+
+#[test]
 fn a_user_changes_the_language_and_the_application_keeps_it() {
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
     let file = settings_file(&directory);
     let text = std::fs::read_to_string(&file).expect("a settings file");
@@ -302,10 +466,7 @@ fn a_user_changes_the_language_and_the_application_keeps_it() {
     assert!(text.contains("text-size = 110\n"), "{text}");
     drop(driver);
 
-    let mut second = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut second = open(Language::English, &directory);
     second.expect("Conectar");
     second.act("click \"Configuración\"");
     second.expect("110%");
@@ -314,10 +475,7 @@ fn a_user_changes_the_language_and_the_application_keeps_it() {
 #[test]
 fn the_application_obeys_a_change_in_the_settings_file() {
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
     let file = settings_file(&directory);
 
@@ -346,10 +504,7 @@ fn a_user_sees_a_note_when_the_settings_file_cannot_take_a_change() {
     let directory = Directory::new();
     let file = settings_file(&directory);
     std::fs::create_dir_all(&file).expect("a directory in the place of the file");
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
 
     driver.act("click \"Settings\"");
@@ -362,10 +517,7 @@ fn a_user_sees_a_note_when_the_settings_file_cannot_take_a_change() {
 fn the_owner_makes_an_invite_link_for_a_second_user_and_cancels_it() {
     let backstage = start_server();
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
     driver.sign_up(backstage.owner_link.clone(), "ana");
     driver.expect("ana · connected");
@@ -399,10 +551,7 @@ fn the_owner_makes_an_invite_link_for_a_second_user_and_cancels_it() {
 fn a_user_changes_the_name_and_cannot_change_it_again_at_once() {
     let backstage = start_server();
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
     driver.sign_up(backstage.owner_link.clone(), "ana");
     driver.expect("ana · connected");
@@ -437,10 +586,7 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     let backstage = start_server();
     let invite_link = invite_and_answer_as_ben(&backstage);
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
 
     driver.expect("Connect");
     driver.sign_up(invite_link, "ana");
@@ -474,19 +620,13 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
 fn a_user_signs_in_again_with_the_account_of_the_profile() {
     let backstage = start_server();
     let directory = Directory::new();
-    let mut first = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut first = open(Language::English, &directory);
     first.expect("Connect");
     first.sign_up(backstage.owner_link.clone(), "ana");
     first.expect("ana · connected");
     drop(first);
 
-    let mut second = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut second = open(Language::English, &directory);
 
     second.expect("ana · connected");
 }
@@ -495,10 +635,7 @@ fn a_user_signs_in_again_with_the_account_of_the_profile() {
 fn a_user_removes_a_server_from_the_list() {
     let backstage = start_server();
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
     driver.sign_up(backstage.owner_link.clone(), "ana");
     driver.expect("ana · connected");
@@ -523,10 +660,7 @@ fn a_user_accepts_the_certificate_of_a_server_and_signs_in_with_tls() {
         .expect("a server with TLS has a certificate");
     assert!(backstage.owner_link.starts_with("https://localhost:"));
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
 
     driver.sign_up(backstage.owner_link.clone(), "ana");
@@ -553,10 +687,7 @@ fn a_user_accepts_the_certificate_of_a_server_and_signs_in_with_tls() {
 fn a_user_without_an_account_sees_that_an_invite_link_is_necessary() {
     let backstage = start_server();
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
 
     driver.expect("Connect");
     driver.sign_up(backstage.address(), "ana");
@@ -568,10 +699,7 @@ fn a_user_without_an_account_sees_that_an_invite_link_is_necessary() {
 fn a_user_sees_a_note_when_the_profile_cannot_save_the_server() {
     let backstage = start_server();
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::English, &directory);
     driver.expect("Connect");
     let servers = directory.join("profiles").join("1").join("servers.toml");
     std::fs::create_dir(servers).expect("a directory in the place of the file");
@@ -588,10 +716,7 @@ fn a_user_sees_a_problem_when_no_server_answers() {
     let port = listener.local_addr().expect("a local address").port();
     drop(listener);
     let directory = Directory::new();
-    let mut driver = Driver::start(shell::application(
-        Language::Spanish,
-        Some(home(&directory)),
-    ));
+    let mut driver = open(Language::Spanish, &directory);
 
     driver.expect("Conectar");
     driver.sign_up(format!("localhost:{port}"), "ana");
@@ -605,16 +730,10 @@ fn a_user_sees_a_problem_when_no_server_answers() {
 #[test]
 fn a_second_window_cannot_open_the_profile_of_the_first_window() {
     let directory = Directory::new();
-    let mut first = Driver::start(shell::application(
-        Language::English,
-        Some(home(&directory)),
-    ));
+    let mut first = open(Language::English, &directory);
     first.expect("Connect");
 
-    let mut second = Driver::start(shell::application(
-        Language::Spanish,
-        Some(home(&directory)),
-    ));
+    let mut second = open(Language::Spanish, &directory);
 
     second.expect(
         "Este perfil está abierto en otra ventana de Post. Cierra esa ventana y vuelve a iniciar Post.",
@@ -624,7 +743,11 @@ fn a_second_window_cannot_open_the_profile_of_the_first_window() {
 
 #[test]
 fn the_window_tells_that_post_has_no_directory_for_its_data() {
-    let mut driver = Driver::start(shell::application(Language::English, None));
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        None,
+        Ok(Arguments::default()),
+    ));
 
     driver.expect(
         "Post cannot find a directory for its data. Set the environment variable POST_HOME to a directory.",

@@ -7,15 +7,15 @@ use post_client::Entry;
 use post_proto::{Invitation, LOBBY, Timestamp};
 
 use super::widgets::{
-    bar, choice, color, divider, field_style, heading, label, link_button, panel_page, paragraph,
-    primary_button, settings_link,
+    bar, choice, color, divider, field_style, heading, label, link_button, page_link, panel_page,
+    paragraph, primary_button,
 };
 use super::{
     BAR_HEIGHT, DRAFT_FIELD, LINE_HEIGHT, MONO_FONT, NAME_CHARACTER_WIDTH, PANEL_FIELD, SMALL_SIZE,
     STATUS_WIDTH, STRONG_FONT, TEXT_SIZE, Window,
 };
 use crate::app::chat::{self, Account, Chat, Invitations, Lifetime, Open, Panel, Uses};
-use crate::app::{Message, servers};
+use crate::app::{Message, Page, servers};
 use crate::i18n::{Strings, Text};
 use crate::palette::Palette;
 use crate::timeline::{ClockStyle, clock, date_and_clock, name_column, shows_name};
@@ -59,7 +59,7 @@ pub(super) fn chat_bar<'a>(
                 Text::ChatNameButton,
                 chat::Message::Open(Panel::Account),
             ))
-            .push(settings_link(strings, [4, 8], palette))
+            .push(page_link(strings, Page::Settings, [4, 8], palette))
             .push(link(Text::ChatLeaveButton, chat::Message::Leave));
     }
     let name = chat.session().name().as_str();

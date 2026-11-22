@@ -391,6 +391,10 @@ Application:
 - The text size changes in steps of 10%. The keys Control and plus, Control and minus, and Control and zero also change it. On macOS, the Command key replaces the Control key.
 - The 12-hour format keeps a constant width, for example ` 2:02 PM`. Spanish text shows `a. m.` and `p. m.`.
 - The smallest window is 520 by 320 points. A chat bar that is narrower than 740 points does not show the status text.
+- The Profiles page opens from the Servers screen. When the user opens a different profile, the window closes the connection of the first profile.
+- The command `post --profile <name>` does not make a profile. If no profile has the name, the window shows the problem. The comparison of the names ignores the difference between capital letters and small letters.
+- A window cannot open or delete a profile that is open in a different window.
+- Each connection has a number. The numbers continue after a profile change, thus the application ignores an event from a connection of the earlier profile.
 - The F12 key shows and hides the protocol console when the developer setting is on.
 
 **Reason.** Each rule is the final rule, or it is clearly temporary. The rules keep the version as small as the decisions permit.

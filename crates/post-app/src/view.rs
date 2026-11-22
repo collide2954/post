@@ -1,4 +1,5 @@
 mod chat;
+mod profiles;
 mod servers;
 mod settings;
 mod widgets;
@@ -9,16 +10,19 @@ use iced::{Element, Font, Theme, font};
 use jiff::tz::TimeZone;
 
 use self::chat::chat_screen;
+use self::profiles::profiles_page;
 use self::servers::{certificate_screen, servers_screen, stopped_screen};
 use self::settings::settings_page;
 use self::widgets::color;
 use crate::app::{App, Message, Page, Screen};
 use crate::i18n::Strings;
 use crate::palette::{Mode, Palette};
+
 pub const ADDRESS_FIELD: &str = "address";
 pub const NAME_FIELD: &str = "name";
 pub const DRAFT_FIELD: &str = "draft";
 pub const PANEL_FIELD: &str = "panel";
+pub const PROFILE_FIELD: &str = "profile";
 
 pub const TEXT_FONT: Font = Font::with_name("Inter");
 const STRONG_FONT: Font = Font {
@@ -76,8 +80,10 @@ fn custom_theme(name: &'static str, mode: Mode) -> Theme {
 pub fn view(window: &Window) -> Element<'_, Message> {
     let palette = Palette::of(window.app.mode());
     let strings = &window.strings;
-    if window.app.page() == Some(Page::Settings) {
-        return settings_page(window, palette);
+    match window.app.page() {
+        Some(Page::Settings) => return settings_page(window, palette),
+        Some(Page::Profiles) => return profiles_page(window, palette),
+        None => {}
     }
     match window.app.screen() {
         Screen::Stopped(problem) => stopped_screen(strings, problem, palette),

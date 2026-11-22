@@ -6,12 +6,14 @@ use iced::{Pixels, Settings, Size};
 use iced_test::{Simulator, selector};
 use jiff::tz::TimeZone;
 use post_app::app::start::StartProblem;
-use post_app::app::{App, Message, Page, chat, servers, settings};
+use post_app::app::{App, Message, Page, chat, profiles, servers, settings};
 use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::settings::Clock;
 use post_app::view::{self, Window};
-use post_client::{Disconnect, Event, Fingerprint, KnownServer, Link};
+use post_client::{
+    Disconnect, Event, Fingerprint, KnownServer, Link, NameProblem, ProfileEntry, ProfileId,
+};
 use post_proto::{
     ClientMessage, Code, ErrorCode, Invitation, Key, Name, Role, ServerMessage, Timestamp,
 };
@@ -202,6 +204,38 @@ fn settings_app(mode: Mode) -> App {
     let mut app = new_app(mode);
     app.update(Message::Open(Page::Settings));
     app
+}
+
+fn profile(number: u32) -> ProfileId {
+    ProfileId::from_number(number)
+}
+
+fn profiles_app(mode: Mode) -> App {
+    let mut app = new_app(mode);
+    app.update(Message::Open(Page::Profiles));
+    let entry = |number, name: &str| ProfileEntry {
+        id: profile(number),
+        name: name.to_owned(),
+    };
+    let list = vec![entry(1, "main"), entry(2, "work")];
+    let listed = profiles::Message::Listed(list, profile(1));
+    app.update(Message::Profiles(listed));
+    app
+}
+
+fn profiles_app_with(mode: Mode, messages: Vec<profiles::Message>) -> App {
+    let mut app = profiles_app(mode);
+    for message in messages {
+        app.update(Message::Profiles(message));
+    }
+    app
+}
+
+fn profile_message(window: &Window, text: &str) -> profiles::Message {
+    match clicked(window, text).as_slice() {
+        [Message::Profiles(message)] => message.clone(),
+        other => panic!("{text}: {other:?}"),
+    }
 }
 
 fn settings_file(app: &mut App, text: &str) {
@@ -741,6 +775,175 @@ fn the_servers_screen_and_the_chat_have_a_link_to_the_settings() {
 }
 
 #[test]
+fn only_the_servers_screen_has_a_link_to_the_profiles() {
+    let servers = window(new_app(Mode::Light), Language::English);
+    let messages = clicked(&servers, "Profiles");
+    assert!(
+        matches!(messages.as_slice(), [Message::Open(Page::Profiles)]),
+        "{messages:?}"
+    );
+
+    let (app, _outbox) = chat_app(Mode::Light);
+    let chat = window(app, Language::English);
+    assert!(simulator(&chat).find("Profiles").is_err());
+}
+
+#[test]
+fn the_profiles_page_lists_the_profiles() {
+    let window = window(profiles_app(Mode::Light), Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Profiles",
+        "Each profile has its own identity, servers, and settings.",
+        "main",
+        "Open in this window",
+        "work",
+        "Open",
+        "Rename",
+        "Delete",
+        "Name of a new profile",
+        "Make a profile",
+        "Back",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    interface
+        .click(selector::id(view::PROFILE_FIELD))
+        .expect("the page has a field for a new name");
+    interface.typewrite("g");
+    interface.tap_key(Named::Enter);
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [
+                Message::Profiles(profiles::Message::NewNameChanged(name)),
+                Message::Profiles(profiles::Message::Create)
+            ] if name == "g"
+        ),
+        "{messages:?}"
+    );
+
+    assert!(
+        matches!(profile_message(&window, "Open"), profiles::Message::Switch(id) if id == profile(2))
+    );
+    assert!(
+        matches!(profile_message(&window, "Rename"), profiles::Message::Rename(id) if id == profile(1))
+    );
+    assert!(
+        matches!(profile_message(&window, "Delete"), profiles::Message::Delete(id) if id == profile(2))
+    );
+    assert!(matches!(
+        profile_message(&window, "Make a profile"),
+        profiles::Message::Create
+    ));
+    let messages = clicked(&window, "Back");
+    assert!(
+        matches!(messages.as_slice(), [Message::Back]),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_profiles_page_changes_the_name_of_a_profile() {
+    let rename = vec![profiles::Message::Rename(profile(2))];
+    let window = window(profiles_app_with(Mode::Light, rename), Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .click(selector::id(view::PANEL_FIELD))
+        .expect("the row has a name field");
+    interface.typewrite("x");
+    interface.tap_key(Named::Enter);
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [
+                Message::Profiles(profiles::Message::EditChanged(name)),
+                Message::Profiles(profiles::Message::Confirm)
+            ] if name.contains('x') && name.contains("work")
+        ),
+        "{messages:?}"
+    );
+
+    assert!(matches!(
+        profile_message(&window, "Save"),
+        profiles::Message::Confirm
+    ));
+    assert!(matches!(
+        profile_message(&window, "Cancel"),
+        profiles::Message::Cancel
+    ));
+    assert!(clicked(&window, "Rename").is_empty());
+    let mut interface = simulator(&window);
+    assert!(interface.find("Open").is_err());
+    assert!(interface.find("Delete").is_err());
+}
+
+#[test]
+fn the_profiles_page_asks_for_the_name_before_it_deletes_a_profile() {
+    let delete = vec![profiles::Message::Delete(profile(2))];
+    let window = window(
+        profiles_app_with(Mode::Light, delete.clone()),
+        Language::English,
+    );
+    let mut interface = simulator(&window);
+    for text in [
+        "If you delete the profile \"work\", you lose its accounts on all servers. No person can get them back.",
+        "Type the name of the profile to delete it.",
+        "Delete this profile",
+        "Cancel",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    assert!(clicked(&window, "Delete this profile").is_empty());
+
+    let mut typed = delete;
+    typed.push(profiles::Message::EditChanged("work".to_owned()));
+    let window = self::window(profiles_app_with(Mode::Light, typed), Language::English);
+    assert!(matches!(
+        profile_message(&window, "Delete this profile"),
+        profiles::Message::Confirm
+    ));
+}
+
+#[test]
+fn the_profiles_page_shows_a_problem_at_the_place_of_the_change() {
+    let taken = profiles::Message::Failed(profiles::Problem::Name(NameProblem::Taken));
+    let window = window(
+        profiles_app_with(Mode::Light, vec![taken.clone()]),
+        Language::English,
+    );
+    simulator(&window)
+        .find("A different profile has this name.")
+        .expect("the problem shows below the field for a new profile");
+
+    let in_use = profiles::Message::Failed(profiles::Problem::InUse);
+    let messages = vec![profiles::Message::Delete(profile(2)), in_use];
+    let window = self::window(profiles_app_with(Mode::Light, messages), Language::Spanish);
+    let mut interface = simulator(&window);
+    for text in [
+        "Este perfil está abierto en otra ventana.",
+        "Eliminar este perfil",
+        "Escribe el nombre del perfil para eliminarlo.",
+        "Perfiles",
+        "Abierto en esta ventana",
+        "Nombre de un perfil nuevo",
+        "Crear perfil",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+}
+
+#[test]
 fn the_settings_page_shows_each_setting() {
     let mut window = window(settings_app(Mode::Light), Language::English);
     window.settings_file = Some("/home/ana/.config/post/profiles/1/settings.toml".to_owned());
@@ -1030,6 +1233,17 @@ fn each_screen_draws_in_light_and_dark_mode() {
             ("account", account_app(mode).0, Language::English),
             ("settings", settings_app(mode), Language::English),
             ("settings-es", settings_app(mode), Language::Spanish),
+            ("profiles", profiles_app(mode), Language::English),
+            (
+                "profiles-rename",
+                profiles_app_with(mode, vec![profiles::Message::Rename(profile(2))]),
+                Language::English,
+            ),
+            (
+                "profiles-delete",
+                profiles_app_with(mode, vec![profiles::Message::Delete(profile(2))]),
+                Language::Spanish,
+            ),
         ];
         for (screen, app, language) in screens {
             let window = window(app, language);

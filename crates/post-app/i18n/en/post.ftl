@@ -2,6 +2,9 @@ start-no-home = Post cannot find a directory for its data. Set the environment v
 start-profile-in-use = This profile is open in a different window of Post. Close that window, then start Post again.
 start-profile-damaged = The { $file } file of this profile is not valid. Post cannot open the profile.
 start-profile-files = Post cannot use the files of this profile. { $reason }
+start-no-profile = No profile has the name "{ $name }".
+start-argument = Post does not know the argument "{ $argument }". To open a profile, use: post --profile <name>
+start-profile-name-missing = Give the name of a profile after --profile.
 profile-first-name = main
 
 servers-title = Servers
@@ -65,6 +68,26 @@ chat-invitations-button = Invitations
 chat-name-button = Change name
 nav-back-button = Back
 nav-settings-button = Settings
+nav-profiles-button = Profiles
+
+profiles-title = Profiles
+profiles-note = Each profile has its own identity, servers, and settings.
+profiles-current = Open in this window
+profiles-open-button = Open
+profiles-rename-button = Rename
+profiles-delete-button = Delete
+profiles-save-button = Save
+profiles-new-label = Name of a new profile
+profiles-create-button = Make a profile
+profiles-delete-warning = If you delete the profile "{ $name }", you lose its accounts on all servers. No person can get them back.
+profiles-delete-confirm-label = Type the name of the profile to delete it.
+profiles-delete-confirm-button = Delete this profile
+profiles-problem-empty = A profile must have a name.
+profiles-problem-long = A profile name can have a maximum of 30 characters.
+profiles-problem-character = A profile name cannot contain a control character.
+profiles-problem-taken = A different profile has this name.
+profiles-problem-in-use = This profile is open in a different window.
+profiles-problem-files = Post cannot use the files of the profile.
 clock-morning = AM
 clock-afternoon = PM
 

@@ -2,6 +2,9 @@ start-no-home = Post no encuentra un directorio para sus datos. Define la variab
 start-profile-in-use = Este perfil está abierto en otra ventana de Post. Cierra esa ventana y vuelve a iniciar Post.
 start-profile-damaged = El archivo { $file } de este perfil no es válido. Post no puede abrir el perfil.
 start-profile-files = Post no puede usar los archivos de este perfil. { $reason }
+start-no-profile = Ningún perfil tiene el nombre "{ $name }".
+start-argument = Post no conoce el argumento "{ $argument }". Para abrir un perfil, usa: post --profile <nombre>
+start-profile-name-missing = Escribe el nombre de un perfil después de --profile.
 profile-first-name = principal
 
 servers-title = Servidores
@@ -65,6 +68,26 @@ chat-invitations-button = Invitaciones
 chat-name-button = Cambiar nombre
 nav-back-button = Volver
 nav-settings-button = Configuración
+nav-profiles-button = Perfiles
+
+profiles-title = Perfiles
+profiles-note = Cada perfil tiene su propia identidad, sus servidores y su configuración.
+profiles-current = Abierto en esta ventana
+profiles-open-button = Abrir
+profiles-rename-button = Cambiar nombre
+profiles-delete-button = Eliminar
+profiles-save-button = Guardar
+profiles-new-label = Nombre de un perfil nuevo
+profiles-create-button = Crear perfil
+profiles-delete-warning = Si eliminas el perfil "{ $name }", pierdes sus cuentas en todos los servidores. Nadie puede recuperarlas.
+profiles-delete-confirm-label = Escribe el nombre del perfil para eliminarlo.
+profiles-delete-confirm-button = Eliminar este perfil
+profiles-problem-empty = Un perfil debe tener un nombre.
+profiles-problem-long = El nombre de un perfil puede tener 30 caracteres como máximo.
+profiles-problem-character = El nombre de un perfil no puede tener un carácter de control.
+profiles-problem-taken = Otro perfil ya tiene este nombre.
+profiles-problem-in-use = Este perfil está abierto en otra ventana.
+profiles-problem-files = Post no puede usar los archivos del perfil.
 clock-morning = a. m.
 clock-afternoon = p. m.
 

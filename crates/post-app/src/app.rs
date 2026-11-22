@@ -1,9 +1,10 @@
 pub mod chat;
+pub mod profiles;
 pub mod servers;
 pub mod settings;
 pub mod start;
 
-use post_client::{Event, KnownServer, Link};
+use post_client::{Event, KnownServer, Link, ProfileId};
 use post_proto::ErrorCode;
 
 use self::chat::Chat;
@@ -18,6 +19,7 @@ pub enum Message {
     Servers(servers::Message),
     Chat(chat::Message),
     Settings(settings::Message),
+    Profiles(profiles::Message),
     Connection(u64, Event),
     ProfileNotSaved,
     ModeChanged(Mode),
@@ -30,6 +32,7 @@ pub enum Message {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Settings,
+    Profiles,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +47,11 @@ pub enum Effect {
     Forget(String),
     Copy(String),
     SaveSettings(Settings),
+    ListProfiles,
+    CreateProfile(String),
+    RenameProfile(ProfileId, String),
+    DeleteProfile(ProfileId),
+    SwitchProfile(ProfileId),
 }
 
 #[derive(Debug)]
@@ -54,6 +62,7 @@ pub struct App {
     screen: Screen,
     page: Option<Page>,
     settings: settings::Store,
+    profiles: profiles::Profiles,
 }
 
 #[derive(Debug)]
@@ -66,7 +75,15 @@ pub enum Screen {
 impl App {
     #[must_use]
     pub fn new(mode: Mode, servers: Vec<KnownServer>) -> Self {
-        let mut attempts = 0;
+        Self::after(0, mode, servers)
+    }
+
+    #[must_use]
+    pub fn for_a_different_profile(&self, servers: Vec<KnownServer>) -> Self {
+        Self::after(self.attempts, self.mode, servers)
+    }
+
+    fn after(mut attempts: u64, mode: Mode, servers: Vec<KnownServer>) -> Self {
         let screen = match servers.first() {
             Some(last_in_use) => Servers::opening(last_in_use, &mut attempts),
             None => Servers::default(),
@@ -78,6 +95,7 @@ impl App {
             screen: Screen::Servers(Box::new(screen)),
             page: None,
             settings: settings::Store::default(),
+            profiles: profiles::Profiles::default(),
         }
     }
 
@@ -90,7 +108,13 @@ impl App {
             screen: Screen::Stopped(problem),
             page: None,
             settings: settings::Store::default(),
+            profiles: profiles::Profiles::default(),
         }
+    }
+
+    #[must_use]
+    pub fn profiles(&self) -> &profiles::Profiles {
+        &self.profiles
     }
 
     #[must_use]
@@ -142,6 +166,7 @@ impl App {
             },
             Message::Chat(message) => self.chat(message),
             Message::Settings(message) => self.settings.update(message),
+            Message::Profiles(message) => self.profiles.update(message),
             Message::Connection(attempt, event) => self.connection(attempt, event),
             Message::ProfileNotSaved => {
                 match &mut self.screen {
@@ -158,12 +183,19 @@ impl App {
             Message::FocusNext => Effect::FocusNext,
             Message::FocusPrevious => Effect::FocusPrevious,
             Message::Open(page) => {
-                if !matches!(self.screen, Screen::Stopped(_)) {
-                    self.page = Some(page);
+                if matches!(self.screen, Screen::Stopped(_)) {
+                    return Effect::None;
                 }
-                Effect::None
+                self.page = Some(page);
+                match page {
+                    Page::Settings => Effect::None,
+                    Page::Profiles => Effect::ListProfiles,
+                }
             }
             Message::Back => {
+                if self.page == Some(Page::Profiles) && self.profiles.cancel() {
+                    return Effect::None;
+                }
                 if self.page.take().is_some() {
                     return self.focus();
                 }
@@ -279,12 +311,16 @@ pub fn error_text(code: ErrorCode) -> Text {
 
 #[cfg(test)]
 mod tests {
-    use post_client::{Disconnect, Entry, Event, Fingerprint, KnownServer, Link};
+    use post_client::{
+        Disconnect, Entry, Event, Fingerprint, KnownServer, Link, ProfileEntry, ProfileId,
+    };
     use post_proto::{ClientMessage, ErrorCode, Key, Name, Role, ServerMessage, Timestamp};
 
     use super::servers::Problem;
     use super::start::StartProblem;
-    use super::{App, Effect, Message, Page, Screen, chat, error_text, servers, settings};
+    use super::{
+        App, Effect, Message, Page, Screen, chat, error_text, profiles, servers, settings,
+    };
     use crate::i18n::Text;
     use crate::palette::Mode;
     use crate::settings::{Clock, Settings};
@@ -802,6 +838,62 @@ mod tests {
     }
 
     #[test]
+    fn asks_for_the_list_when_the_profiles_page_opens() {
+        let mut app = app();
+
+        assert_eq!(
+            app.update(Message::Open(Page::Profiles)),
+            Effect::ListProfiles
+        );
+        assert_eq!(app.page(), Some(Page::Profiles));
+
+        let list = vec![
+            ProfileEntry {
+                id: ProfileId::from_number(1),
+                name: "main".to_owned(),
+            },
+            ProfileEntry {
+                id: ProfileId::from_number(2),
+                name: "work".to_owned(),
+            },
+        ];
+        let listed = profiles::Message::Listed(list.clone(), ProfileId::from_number(1));
+        assert_eq!(app.update(Message::Profiles(listed)), Effect::None);
+        assert_eq!(app.profiles().list(), list);
+
+        let rename = profiles::Message::Rename(ProfileId::from_number(2));
+        assert_eq!(app.update(Message::Profiles(rename)), Effect::FocusPanel);
+        assert_eq!(app.update(Message::Back), Effect::None);
+        assert_eq!(app.profiles().edit(), None);
+        assert_eq!(app.page(), Some(Page::Profiles));
+        assert_eq!(app.update(Message::Back), Effect::FocusForm);
+        assert_eq!(app.page(), None);
+    }
+
+    #[test]
+    fn gives_a_connection_of_the_next_profile_a_new_number() {
+        let (app, _outbox) = chatting("ana", 4);
+        let old = app.target().expect("a connection").attempt;
+
+        let mut next = app.for_a_different_profile(vec![server("localhost:7678", 2, "zoe")]);
+
+        let target = next.target().expect("the application connects at once");
+        assert_eq!(target.attempt, old + 1);
+        assert_eq!(next.mode(), app.mode());
+        assert_eq!(next.settings(), &Settings::default());
+        assert_eq!(next.page(), None);
+        let stale = Message::Connection(old, Event::Received(joined("ben")));
+        assert_eq!(next.update(stale), Effect::None);
+        let stale = Message::Connection(old, Event::Disconnected(Disconnect::Closed));
+        assert_eq!(next.update(stale), Effect::None);
+        assert!(next.target().is_some());
+
+        let empty = app.for_a_different_profile(Vec::new());
+        assert_eq!(empty.target(), None);
+        assert_eq!(empty.servers(), []);
+    }
+
+    #[test]
     fn keeps_the_connection_while_a_page_is_open() {
         let (mut app, _outbox) = chatting("ana", 4);
         app.update(Message::Open(Page::Settings));
@@ -827,6 +919,7 @@ mod tests {
         assert_eq!(app.update(Message::Connection(0, event)), Effect::None);
         app.update(Message::ModeChanged(Mode::Dark));
         assert_eq!(app.update(Message::Open(Page::Settings)), Effect::None);
+        assert_eq!(app.update(Message::Open(Page::Profiles)), Effect::None);
         assert_eq!(app.page(), None);
         assert_eq!(app.update(Message::Back), Effect::None);
 

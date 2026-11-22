@@ -1,4 +1,5 @@
 pub mod app;
+pub mod arguments;
 pub mod i18n;
 pub mod palette;
 pub mod settings;

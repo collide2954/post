@@ -96,13 +96,14 @@ The server keeps its storage in a data directory. In development mode, the direc
 
 The application uses the iced toolkit (D-077).
 
-- `app` holds the state of the application and the update logic. It has one module for each screen: `start`, `servers`, `chat`, and `settings`. The `chat` module also holds the Invitations panel and the name panel. The `app` module does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the name field".
+- `app` holds the state of the application and the update logic. It has one module for each screen: `start`, `servers`, `chat`, `settings`, and `profiles`. The `chat` module also holds the Invitations panel and the name panel. The `app` module does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the name field".
 - `settings` reads the text of the settings file, and it writes new values into that text (D-087). It keeps the comments of the file.
 - `timeline` holds the rules that prepare a timeline entry for the window: the local time in the format that the settings give, the local date, and the groups of messages.
 - `palette` holds the colors of light mode and dark mode. A test examines the contrast of each color.
 - `i18n` holds the texts of the interface. The catalogs for English and Latin American Spanish are in `crates/post-app/i18n`.
 - `view` makes the widgets from the state. It contains no decisions. It has one module for each screen, and the module `widgets` holds the parts that the screens share.
-- `shell` connects the state to the toolkit: the start, the updates, and the subscriptions. It opens the profile, gives the seed to the connection, writes the known servers, and puts an invite link in the clipboard. It also writes the settings file, and it tells the state when the text of that file changes.
+- `shell` connects the state to the toolkit: the start, the updates, and the subscriptions. It opens the profile, gives the seed to the connection, writes the known servers, and puts an invite link in the clipboard. It also writes the settings file, and it tells the state when the text of that file changes. It makes, renames, deletes, and opens profiles for the Profiles page.
+- `arguments` reads the arguments of the command line. The argument `--profile` gives the name of the profile to open (D-165).
 - `main` selects the language, finds the directories of the user, and starts the shell.
 
 ## The website
