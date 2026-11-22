@@ -1,0 +1,666 @@
+use std::num::NonZeroU32;
+
+use super::{ClientMessage, ErrorCode, Invitation, PROTOCOL_VERSION, Role, ServerMessage};
+use crate::{Code, DecodeError, Key, MAX_LINE_BYTES, Name, Nonce, Part, Signature, Timestamp};
+
+fn name(text: &str) -> Name {
+    Name::parse(text).expect(text)
+}
+
+#[test]
+fn writes_a_role_as_a_lower_case_word() {
+    for (role, json) in [(Role::Owner, "\"owner\""), (Role::Member, "\"member\"")] {
+        assert_eq!(serde_json::to_string(&role).expect("valid"), json);
+        assert_eq!(serde_json::from_str::<Role>(json).expect("valid"), role);
+    }
+    assert!(serde_json::from_str::<Role>("\"Owner\"").is_err());
+}
+
+fn time(text: &str) -> Timestamp {
+    Timestamp::parse(text).expect(text)
+}
+
+fn client_examples() -> Vec<(ClientMessage, &'static str)> {
+    vec![
+        (
+            ClientMessage::Send {
+                reference: Some(1),
+                channel: "lobby".to_owned(),
+                text: "Hello".to_owned(),
+            },
+            r#"{"type":"send","ref":1,"channel":"lobby","text":"Hello"}"#,
+        ),
+        (
+            ClientMessage::Send {
+                reference: None,
+                channel: "lobby".to_owned(),
+                text: "two\nlines".to_owned(),
+            },
+            r#"{"type":"send","channel":"lobby","text":"two\nlines"}"#,
+        ),
+        (
+            ClientMessage::Invite {
+                reference: Some(2),
+                lifetime: NonZeroU32::new(604_800),
+                uses: NonZeroU32::new(1),
+            },
+            r#"{"type":"invite","ref":2,"lifetime":604800,"uses":1}"#,
+        ),
+        (
+            ClientMessage::Invite {
+                reference: None,
+                lifetime: None,
+                uses: None,
+            },
+            r#"{"type":"invite"}"#,
+        ),
+        (
+            ClientMessage::Invitations { reference: Some(3) },
+            r#"{"type":"invitations","ref":3}"#,
+        ),
+        (
+            ClientMessage::Revoke {
+                reference: None,
+                code: Code::parse("7Hq2kdX9mPq4").expect("valid"),
+            },
+            r#"{"type":"revoke","code":"7Hq2kdX9mPq4"}"#,
+        ),
+        (
+            ClientMessage::Rename {
+                reference: Some(4),
+                name: "anna".to_owned(),
+            },
+            r#"{"type":"rename","ref":4,"name":"anna"}"#,
+        ),
+        (
+            ClientMessage::Rename {
+                reference: None,
+                name: "Not A Name".to_owned(),
+            },
+            r#"{"type":"rename","name":"Not A Name"}"#,
+        ),
+    ]
+}
+
+fn server_examples() -> Vec<(ServerMessage, &'static str)> {
+    vec![
+        (
+            ServerMessage::Welcome {
+                reference: None,
+                name: name("ana"),
+                role: Role::Member,
+            },
+            r#"{"type":"welcome","name":"ana","role":"member"}"#,
+        ),
+        (
+            ServerMessage::Welcome {
+                reference: Some(4_294_967_295),
+                name: name("ana"),
+                role: Role::Member,
+            },
+            r#"{"type":"welcome","ref":4294967295,"name":"ana","role":"member"}"#,
+        ),
+        (
+            ServerMessage::Join {
+                channel: "lobby".to_owned(),
+                name: name("ben"),
+                time: time("2026-11-21T14:02:05.000Z"),
+            },
+            r#"{"type":"join","channel":"lobby","name":"ben","time":"2026-11-21T14:02:05.000Z"}"#,
+        ),
+        (
+            ServerMessage::Leave {
+                channel: "lobby".to_owned(),
+                name: name("ben"),
+                time: time("2026-11-21T14:03:00.000Z"),
+            },
+            r#"{"type":"leave","channel":"lobby","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::Message {
+                reference: Some(1),
+                channel: "lobby".to_owned(),
+                from: name("ana"),
+                time: time("2026-11-21T14:02:07.120Z"),
+                text: "Hello".to_owned(),
+            },
+            r#"{"type":"message","ref":1,"channel":"lobby","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#,
+        ),
+        (
+            ServerMessage::Message {
+                reference: None,
+                channel: "lobby".to_owned(),
+                from: name("ben"),
+                time: time("2026-11-21T14:02:09.480Z"),
+                text: "Hi".to_owned(),
+            },
+            r#"{"type":"message","channel":"lobby","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi"}"#,
+        ),
+        (
+            ServerMessage::Error {
+                reference: Some(2),
+                code: ErrorCode::NoSuchChannel,
+                text: "The channel does not exist.".to_owned(),
+            },
+            r#"{"type":"error","ref":2,"code":"no-such-channel","text":"The channel does not exist."}"#,
+        ),
+    ]
+}
+
+fn all_server_examples() -> Vec<(ServerMessage, &'static str)> {
+    let mut examples = server_examples();
+    examples.extend(server_list_examples());
+    examples
+}
+
+fn server_list_examples() -> Vec<(ServerMessage, &'static str)> {
+    vec![
+        (
+            ServerMessage::Invitations {
+                reference: Some(3),
+                list: vec![
+                    Invitation {
+                        code: Code::parse("7Hq2kdX9mPq4").expect("valid"),
+                        link: "https://chat.example.org/i/7Hq2kdX9mPq4".to_owned(),
+                        created: time("2026-11-21T14:02:05.000Z"),
+                        end: Some(time("2026-11-28T14:02:05.000Z")),
+                        uses: Some(5),
+                        used: 2,
+                    },
+                    Invitation {
+                        code: Code::parse("AAAAAAAAAAAA").expect("valid"),
+                        link: "https://chat.example.org/i/AAAAAAAAAAAA".to_owned(),
+                        created: time("2026-11-20T09:00:00.000Z"),
+                        end: None,
+                        uses: None,
+                        used: 0,
+                    },
+                ],
+            },
+            r#"{"type":"invitations","ref":3,"list":[{"code":"7Hq2kdX9mPq4","link":"https://chat.example.org/i/7Hq2kdX9mPq4","created":"2026-11-21T14:02:05.000Z","end":"2026-11-28T14:02:05.000Z","uses":5,"used":2},{"code":"AAAAAAAAAAAA","link":"https://chat.example.org/i/AAAAAAAAAAAA","created":"2026-11-20T09:00:00.000Z","used":0}]}"#,
+        ),
+        (
+            ServerMessage::Invitations {
+                reference: None,
+                list: Vec::new(),
+            },
+            r#"{"type":"invitations","list":[]}"#,
+        ),
+        (
+            ServerMessage::Rename {
+                reference: Some(4),
+                old: name("ana"),
+                new: name("anna"),
+                time: time("2026-11-21T14:04:00.000Z"),
+            },
+            r#"{"type":"rename","ref":4,"old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::Rename {
+                reference: None,
+                old: name("ana"),
+                new: name("anna"),
+                time: time("2026-11-21T14:04:00.000Z"),
+            },
+            r#"{"type":"rename","old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
+        ),
+    ]
+}
+
+#[test]
+fn writes_and_reads_each_sign_in_message() {
+    let key = "A".repeat(43);
+    let nonce = format!("{}-_s", "-_v7".repeat(10));
+    let proof = "A".repeat(86);
+    let code = Code::parse("7Hq2kdX9mPq4").expect("valid");
+    let part = |word: &str| Part::parse(word).expect(word);
+
+    let client = [
+        (
+            ClientMessage::Hello {
+                reference: Some(1),
+                protocol: 0,
+                address: "chat.example.org:443".to_owned(),
+                nonce: Nonce::from_bytes([0xfb; 32]),
+                supports: Vec::new(),
+            },
+            format!(
+                r#"{{"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce":"{nonce}","supports":[]}}"#
+            ),
+        ),
+        (
+            ClientMessage::Hello {
+                reference: None,
+                protocol: 0,
+                address: "localhost:7678".to_owned(),
+                nonce: Nonce::from_bytes([0xfb; 32]),
+                supports: vec![part("sealed"), part("voice")],
+            },
+            format!(
+                r#"{{"type":"hello","protocol":0,"address":"localhost:7678","nonce":"{nonce}","supports":["sealed","voice"]}}"#
+            ),
+        ),
+        (
+            ClientMessage::Identify {
+                reference: Some(2),
+                key: Key::from_bytes([0; 32]),
+                proof: Signature::from_bytes([0; 64]),
+                invitation: None,
+            },
+            format!(r#"{{"type":"identify","ref":2,"key":"{key}","proof":"{proof}"}}"#),
+        ),
+        (
+            ClientMessage::Identify {
+                reference: None,
+                key: Key::from_bytes([0; 32]),
+                proof: Signature::from_bytes([0; 64]),
+                invitation: Some(code.clone()),
+            },
+            format!(
+                r#"{{"type":"identify","key":"{key}","proof":"{proof}","invitation":"7Hq2kdX9mPq4"}}"#
+            ),
+        ),
+        (
+            ClientMessage::Register {
+                reference: Some(3),
+                key: Key::from_bytes([0; 32]),
+                proof: Signature::from_bytes([0; 64]),
+                name: "ana".to_owned(),
+                invitation: code,
+            },
+            format!(
+                r#"{{"type":"register","ref":3,"key":"{key}","proof":"{proof}","name":"ana","invitation":"7Hq2kdX9mPq4"}}"#
+            ),
+        ),
+    ];
+    for (message, line) in client {
+        assert_eq!(message.encode(), line);
+        assert_eq!(ClientMessage::decode(&line).expect(&line), message);
+    }
+
+    let challenge = ServerMessage::Challenge {
+        reference: Some(1),
+        protocol: 0,
+        key: Key::from_bytes([0; 32]),
+        nonce: Nonce::from_bytes([0xfb; 32]),
+        proof: Signature::from_bytes([0; 64]),
+        requires: vec![part("sealed")],
+    };
+    let line = format!(
+        r#"{{"type":"challenge","ref":1,"protocol":0,"key":"{key}","nonce":"{nonce}","proof":"{proof}","requires":["sealed"]}}"#
+    );
+    assert_eq!(challenge.encode(), line);
+    assert_eq!(ServerMessage::decode(&line).expect(&line), challenge);
+}
+
+#[test]
+fn refuses_a_sign_in_message_with_a_value_that_breaks_a_rule() {
+    let key = "A".repeat(43);
+    let proof = "A".repeat(86);
+    let lines = [
+        format!(r#"{{"type":"hello","protocol":0,"address":"a:1","nonce":"{key}"}}"#),
+        format!(
+            r#"{{"type":"hello","protocol":"0","address":"a:1","nonce":"{key}","supports":[]}}"#
+        ),
+        format!(
+            r#"{{"type":"hello","protocol":-1,"address":"a:1","nonce":"{key}","supports":[]}}"#
+        ),
+        format!(
+            r#"{{"type":"hello","protocol":0,"address":"a:1","nonce":"{key}A","supports":[]}}"#
+        ),
+        format!(
+            r#"{{"type":"hello","protocol":0,"address":"a:1","nonce":"{key}","supports":["Sealed"]}}"#
+        ),
+        format!(
+            r#"{{"type":"hello","protocol":0,"address":"a:1","nonce":"{key}","supports":"sealed"}}"#
+        ),
+        format!(r#"{{"type":"identify","key":"{key}A","proof":"{proof}"}}"#),
+        format!(r#"{{"type":"identify","key":"{key}","proof":"{key}"}}"#),
+        format!(r#"{{"type":"identify","key":"{key}","proof":"{proof}","invitation":"short"}}"#),
+        format!(r#"{{"type":"identify","key":"{key}","proof":"{proof}","name":"ana"}}"#),
+        format!(r#"{{"type":"register","key":"{key}","proof":"{proof}","name":"ana"}}"#),
+        format!(
+            r#"{{"type":"register","key":"{key}","proof":"{proof}","invitation":"7Hq2kdX9mPq4"}}"#
+        ),
+        format!(
+            r#"{{"type":"challenge","protocol":0,"key":"{key}","nonce":"{key}","proof":"{proof}","requires":[]}}"#
+        ),
+    ];
+    for line in lines {
+        assert!(
+            matches!(ClientMessage::decode(&line), Err(DecodeError::Invalid(_))),
+            "{line}"
+        );
+    }
+
+    let lines = [
+        format!(
+            r#"{{"type":"challenge","protocol":0,"key":"{key}","nonce":"{key}","proof":"{proof}"}}"#
+        ),
+        format!(
+            r#"{{"type":"challenge","protocol":0,"key":"{key}","nonce":"{key}","proof":"{key}","requires":[]}}"#
+        ),
+        format!(
+            r#"{{"type":"challenge","protocol":0,"key":"{key}","nonce":"{key}","proof":"{proof}","requires":["a"]}}"#
+        ),
+    ];
+    for line in lines {
+        assert!(
+            matches!(ServerMessage::decode(&line), Err(DecodeError::Invalid(_))),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn the_protocol_version_is_zero() {
+    assert_eq!(PROTOCOL_VERSION, 0);
+}
+
+#[test]
+fn the_one_channel_has_the_name_lobby() {
+    assert_eq!(crate::LOBBY, "lobby");
+}
+
+#[test]
+fn the_default_port_spells_post_on_a_telephone_keypad() {
+    assert_eq!(crate::DEFAULT_PORT, 7678);
+}
+
+#[test]
+fn writes_each_client_message_as_one_line() {
+    for (message, line) in client_examples() {
+        assert_eq!(message.encode(), line);
+    }
+}
+
+#[test]
+fn reads_each_client_message() {
+    for (message, line) in client_examples() {
+        assert_eq!(ClientMessage::decode(line).expect(line), message);
+    }
+}
+
+#[test]
+fn writes_each_server_message_as_one_line() {
+    for (message, line) in all_server_examples() {
+        assert_eq!(message.encode(), line);
+    }
+}
+
+#[test]
+fn reads_each_server_message() {
+    for (message, line) in all_server_examples() {
+        assert_eq!(ServerMessage::decode(line).expect(line), message);
+    }
+}
+
+fn examine_error_codes(codes: &[(ErrorCode, &str, &str)]) {
+    for (code, word, text) in codes {
+        assert_eq!(code.text(), *text);
+        let line = format!(r#"{{"type":"error","ref":5,"code":"{word}","text":"{text}"}}"#);
+        assert_eq!(ServerMessage::error(Some(5), *code).encode(), line);
+        assert_eq!(
+            ServerMessage::decode(&line).expect(word),
+            ServerMessage::Error {
+                reference: Some(5),
+                code: *code,
+                text: (*text).to_owned(),
+            }
+        );
+    }
+}
+
+#[test]
+fn each_error_code_of_the_sign_in_has_a_word_form_and_a_text() {
+    let codes = [
+        (
+            ErrorCode::WrongAddress,
+            "wrong-address",
+            "This server does not answer to this address.",
+        ),
+        (
+            ErrorCode::IdentifyRequired,
+            "identify-required",
+            "Sign in before you send this message.",
+        ),
+        (
+            ErrorCode::DuplicateIdentify,
+            "duplicate-identify",
+            "The session already has an account.",
+        ),
+        (
+            ErrorCode::InvalidProof,
+            "invalid-proof",
+            "The signature is not valid for this connection.",
+        ),
+        (
+            ErrorCode::UnknownAccount,
+            "unknown-account",
+            "This server has no account for this key.",
+        ),
+        (
+            ErrorCode::AccountExists,
+            "account-exists",
+            "This key already has an account.",
+        ),
+        (
+            ErrorCode::InvalidInvitation,
+            "invalid-invitation",
+            "The invitation is not valid.",
+        ),
+        (
+            ErrorCode::MissingPart,
+            "missing-part",
+            "The client does not support a part of the protocol that this server requires.",
+        ),
+        (
+            ErrorCode::ServerError,
+            "server-error",
+            "The server has a problem. Try again later.",
+        ),
+    ];
+    examine_error_codes(&codes);
+}
+#[test]
+fn each_error_code_has_a_word_form_and_a_text() {
+    let codes = [
+        (
+            ErrorCode::BadMessage,
+            "bad-message",
+            "The message is not a valid protocol message.",
+        ),
+        (
+            ErrorCode::UnsupportedProtocol,
+            "unsupported-protocol",
+            "The server does not support this protocol version.",
+        ),
+        (
+            ErrorCode::HelloRequired,
+            "hello-required",
+            "The first message must be a hello message.",
+        ),
+        (
+            ErrorCode::DuplicateHello,
+            "duplicate-hello",
+            "The connection already had a hello message.",
+        ),
+        (
+            ErrorCode::InvalidName,
+            "invalid-name",
+            "A name has 2 to 20 characters: a to z, 0 to 9, hyphen, and underscore.",
+        ),
+        (
+            ErrorCode::NameTaken,
+            "name-taken",
+            "This name is not available.",
+        ),
+        (
+            ErrorCode::NoSuchChannel,
+            "no-such-channel",
+            "The channel does not exist.",
+        ),
+        (
+            ErrorCode::EmptyText,
+            "empty-text",
+            "A message must contain text.",
+        ),
+        (
+            ErrorCode::TextTooLong,
+            "text-too-long",
+            "A message can have a maximum of 4000 characters.",
+        ),
+        (
+            ErrorCode::NotPermitted,
+            "not-permitted",
+            "Your account does not have the permission for this request.",
+        ),
+        (
+            ErrorCode::TooSoon,
+            "too-soon",
+            "You changed your name a short time ago. Try again later.",
+        ),
+    ];
+    examine_error_codes(&codes);
+}
+
+#[test]
+fn writes_a_line_break_in_a_text_as_an_escape() {
+    let line = ClientMessage::Send {
+        reference: None,
+        channel: "lobby".to_owned(),
+        text: "one\r\ntwo".to_owned(),
+    }
+    .encode();
+    assert!(!line.contains('\n'));
+    assert!(!line.contains('\r'));
+    assert!(line.contains(r"one\r\ntwo"));
+}
+
+#[test]
+fn refuses_a_line_that_is_not_a_known_message() {
+    for line in [
+        "",
+        "hello",
+        "[]",
+        "{}",
+        r#"{"type":"dance"}"#,
+        r#"{"type":"send"}"#,
+        r#"{"type":"send","channel":"lobby"}"#,
+        r#"{"type":"send","channel":7,"text":"Hello"}"#,
+        r#"{"type":"send","channel":"lobby","text":"Hello","extra":1}"#,
+        r#"{"type":"send","ref":-1,"channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"send","ref":4294967296,"channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"send","ref":1.5,"channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"SEND","channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"guest","protocol":0,"name":"ana"}"#,
+        r#"{"type":"welcome","name":"ana","role":"member"}"#,
+        r#"{"type":"send","channel":"lobby","text":"Hello"} x"#,
+        r#"{"type":"invite","lifetime":0}"#,
+        r#"{"type":"invite","lifetime":-1}"#,
+        r#"{"type":"invite","lifetime":4294967296}"#,
+        r#"{"type":"invite","lifetime":"7 days"}"#,
+        r#"{"type":"invite","uses":0}"#,
+        r#"{"type":"invite","uses":1.5}"#,
+        r#"{"type":"invite","end":"2026-11-28T14:02:05.000Z"}"#,
+        r#"{"type":"invitations","list":[]}"#,
+        r#"{"type":"revoke"}"#,
+        r#"{"type":"revoke","code":"short"}"#,
+        r#"{"type":"revoke","code":"7Hq2kdX9mPq4","link":"x"}"#,
+        r#"{"type":"rename"}"#,
+        r#"{"type":"rename","name":7}"#,
+        r#"{"type":"rename","old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
+    ] {
+        assert!(
+            matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
+    for line in [
+        r#"{"type":"welcome","name":"Ana","role":"member"}"#,
+        r#"{"type":"welcome","name":"a","role":"member"}"#,
+        r#"{"type":"join","channel":"lobby","name":"ben","time":"yesterday"}"#,
+        r#"{"type":"join","channel":"lobby","name":"ben","time":1795269727120}"#,
+        r#"{"type":"error","code":"no-such-code","text":"x"}"#,
+        r#"{"type":"send","channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"invitations"}"#,
+        r#"{"type":"invitations","list":{}}"#,
+        r#"{"type":"rename","name":"anna"}"#,
+        r#"{"type":"rename","old":"ana","new":"Anna","time":"2026-11-21T14:04:00.000Z"}"#,
+        r#"{"type":"rename","old":"ana","new":"anna"}"#,
+        r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z"}]}"#,
+        r#"{"type":"invitations","list":[{"code":"short","link":"x","created":"2026-11-21T14:02:05.000Z","used":0}]}"#,
+        r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":0,"owner":true}]}"#,
+        r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":-1}]}"#,
+    ] {
+        assert!(
+            matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn refuses_a_message_on_more_than_one_line() {
+    for line in [
+        "{\"type\":\"send\",\n\"channel\":\"lobby\",\"text\":\"Hello\"}",
+        "{\"type\":\"send\",\"channel\":\"lobby\",\"text\":\"Hello\"}\n",
+        "{\"type\":\"send\",\r\"channel\":\"lobby\",\"text\":\"Hello\"}",
+    ] {
+        assert!(
+            matches!(ClientMessage::decode(line), Err(DecodeError::LineBreak)),
+            "{line:?}"
+        );
+        assert!(
+            matches!(ServerMessage::decode(line), Err(DecodeError::LineBreak)),
+            "{line:?}"
+        );
+    }
+}
+
+#[test]
+fn refuses_a_line_that_is_too_long() {
+    assert_eq!(MAX_LINE_BYTES, 65_536);
+
+    let start = r#"{"type":"send","channel":"lobby","text":""#;
+    let end = r#""}"#;
+    let fill = MAX_LINE_BYTES - start.len() - end.len();
+
+    let longest = format!("{start}{}{end}", "a".repeat(fill));
+    assert_eq!(longest.len(), MAX_LINE_BYTES);
+    assert!(ClientMessage::decode(&longest).is_ok());
+
+    let too_long = format!("{start}{}{end}", "a".repeat(fill + 1));
+    assert!(matches!(
+        ClientMessage::decode(&too_long),
+        Err(DecodeError::TooLong)
+    ));
+    assert!(matches!(
+        ServerMessage::decode(&too_long),
+        Err(DecodeError::TooLong)
+    ));
+}
+
+#[test]
+fn describes_each_decode_error() {
+    assert_eq!(
+        DecodeError::TooLong.to_string(),
+        "a line can have a maximum of 65536 bytes"
+    );
+    assert_eq!(
+        DecodeError::LineBreak.to_string(),
+        "a message must be on one line"
+    );
+    let invalid = ClientMessage::decode("{}").expect_err("not a message");
+    assert!(
+        invalid
+            .to_string()
+            .starts_with("the line is not a valid message: ")
+    );
+    assert!(std::error::Error::source(&invalid).is_some());
+    assert!(std::error::Error::source(&DecodeError::TooLong).is_none());
+}
