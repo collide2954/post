@@ -260,6 +260,23 @@ The `revoke` message cancels an invitation. A person cannot make an account with
 
 The server answers with an `invitations` message or with an `error` message. If the invitation does not exist, or if it is not open, the error is `invalid-invitation`.
 
+### `rename`
+
+The `rename` message changes the name of the account.
+
+| Field | Value |
+|---|---|
+| `type` | `"rename"` |
+| `ref` | Optional. |
+| `name` | The new name. |
+
+The server answers with a `rename` message or with an `error` message.
+
+- The earlier name stays reserved for the account for 30 days. In this time, no other account can take it.
+- An account can change its name one time in 30 days. Before the end of this time, the error is `too-soon`.
+
+The two times are fixed in protocol version 0.
+
 ## Messages from the server
 
 ### `challenge`
@@ -347,6 +364,18 @@ Each entry of the list is an object with these fields:
 | `uses` | Optional. The number of accounts that the invitation can make. |
 | `used` | The number of accounts that the invitation made. |
 
+### `rename`
+
+The `rename` message tells that a user has a new name. The server sends it to each user in the channel, also to the user with the new name.
+
+| Field | Value |
+|---|---|
+| `type` | `"rename"` |
+| `ref` | The value from the `rename` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `old` | The earlier name of the user. |
+| `new` | The new name of the user. |
+| `time` | The time of the change. |
+
 ### `error`
 
 The `error` message refuses a message from the client. The connection stays open.
@@ -380,6 +409,7 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `empty-text` | The text has no visible character. |
 | `text-too-long` | The text has more than 4,000 characters. |
 | `not-permitted` | The account does not have the permission for the request. |
+| `too-soon` | The account changed its name a short time ago. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations
@@ -396,6 +426,7 @@ Each file in the [examples](examples) directory shows one connection.
 | [sign-in-errors.txt](examples/sign-in-errors.txt) | The server refuses messages of the sign-in. |
 | [requirements.txt](examples/requirements.txt) | A server requires a part of the protocol that the client does not support. |
 | [invitations.txt](examples/invitations.txt) | The server owner makes, lists, and cancels invitations. |
+| [rename.txt](examples/rename.txt) | A user changes the name of the account. |
 | [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
 | [two-users.txt](examples/two-users.txt) | Two users exchange text. |
 | [errors.txt](examples/errors.txt) | The server refuses other messages. |

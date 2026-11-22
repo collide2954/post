@@ -129,6 +129,7 @@ fn the_schemas_list_each_message_type() {
             "invitations",
             "invite",
             "register",
+            "rename",
             "revoke",
             "send"
         ]
@@ -146,6 +147,7 @@ fn the_schemas_list_each_message_type() {
             "join",
             "leave",
             "message",
+            "rename",
             "welcome"
         ]
     );

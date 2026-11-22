@@ -257,6 +257,11 @@ fn line<'a>(
             text(window.strings.with(Text::ChatLeft, "name", name.as_str()))
                 .color(color(palette.muted)),
         ),
+        Entry::Renamed { time, old, new } => {
+            let values = [("old", old.as_str()), ("new", new.as_str())];
+            let renamed = window.strings.with_all(Text::ChatRenamed, &values);
+            (*time, None, text(renamed).color(color(palette.muted)))
+        }
     };
 
     let stamp = text(clock(time, &window.zone))

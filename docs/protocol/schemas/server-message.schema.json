@@ -222,6 +222,44 @@
       ]
     },
     {
+      "description": "Tells that a user has a new name.",
+      "type": "object",
+      "properties": {
+        "new": {
+          "description": "The new name of the user.",
+          "$ref": "#/$defs/Name"
+        },
+        "old": {
+          "description": "The earlier name of the user.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the `rename` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time of the change.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "rename"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "old",
+        "new",
+        "time"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {
@@ -353,6 +391,11 @@
           "description": "The account does not have the permission for the request.",
           "type": "string",
           "const": "not-permitted"
+        },
+        {
+          "description": "The account changed its name a short time ago.",
+          "type": "string",
+          "const": "too-soon"
         },
         {
           "description": "The server has a problem and cannot do the task.",

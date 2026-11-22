@@ -8,7 +8,7 @@ use post_proto::{
 };
 
 use post_rules::{
-    Account, AccountId, InviteError, Limits, RegisterError, RevokeError, Rules, later,
+    Account, AccountId, InviteError, Limits, RegisterError, RenameError, RevokeError, Rules, later,
 };
 
 use crate::store::{Store, StoreError, Stored};
@@ -187,6 +187,9 @@ impl Hub {
             ),
             ClientMessage::Revoke { reference, code } => {
                 (reference, self.revoke(from, reference, &state, &code, now))
+            }
+            ClientMessage::Rename { reference, name } => {
+                (reference, self.rename(from, reference, &state, &name, now))
             }
         };
         result.unwrap_or_else(|code| refusal(from, reference, code))
@@ -472,6 +475,40 @@ impl Hub {
             .collect();
         let message = ServerMessage::Invitations { reference, list };
         vec![Outgoing { to, message }]
+    }
+
+    fn rename(
+        &mut self,
+        from: ConnectionId,
+        reference: Option<u32>,
+        state: &State,
+        wanted: &str,
+        now: Timestamp,
+    ) -> Result<Vec<Outgoing>, Refused> {
+        let account = account_of(state)?;
+        let new = Name::parse(wanted).map_err(|_| ErrorCode::InvalidName)?;
+        let old = self
+            .rules
+            .rename(&mut self.store, account, &new, now)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(|error| match error {
+                RenameError::TooSoon => ErrorCode::TooSoon,
+                RenameError::NameTaken => ErrorCode::NameTaken,
+                RenameError::UnknownAccount => ErrorCode::ServerError,
+            })?;
+        for state in self.connections.values_mut() {
+            if let State::Present(member) = state
+                && member.account == account
+            {
+                member.name = new.clone();
+            }
+        }
+        Ok(self.to_each_member(|to| ServerMessage::Rename {
+            reference: reference.filter(|_| to == from),
+            old: old.clone(),
+            new: new.clone(),
+            time: now,
+        }))
     }
 
     fn link(&self, code: &Code) -> String {
@@ -1686,6 +1723,134 @@ mod tests {
             hub.receive(ana, &invite(3, None, None), now()),
             [to(ana, error(Some(3), ErrorCode::ServerError))]
         );
+    }
+
+    fn rename(reference: u32, name: &str) -> String {
+        ClientMessage::Rename {
+            reference: Some(reference),
+            name: name.to_owned(),
+        }
+        .encode()
+    }
+
+    fn sender_of_a_text(hub: &mut Hub, from: ConnectionId) -> Name {
+        let sent = hub.receive(from, &send(None, LOBBY, "Hello"), later());
+        match &sent[0].message {
+            ServerMessage::Message { from, .. } => from.clone(),
+            other => panic!("the server sends the text, not {other:?}"),
+        }
+    }
+
+    #[test]
+    fn changes_the_name_of_a_user_and_tells_each_user() {
+        let (mut hub, ids) = hub_with(&["ana", "ben"]);
+
+        let outgoing = hub.receive(ids[1], &rename(5, "benito"), later());
+
+        let renamed = |reference| ServerMessage::Rename {
+            reference,
+            old: name("ben"),
+            new: name("benito"),
+            time: later(),
+        };
+        assert_eq!(
+            outgoing,
+            [to(ids[0], renamed(None)), to(ids[1], renamed(Some(5)))]
+        );
+        assert_eq!(sender_of_a_text(&mut hub, ids[1]), name("benito"));
+        assert_eq!(sender_of_a_text(&mut hub, ids[0]), name("ana"));
+    }
+
+    #[test]
+    fn gives_the_new_name_to_each_connection_of_the_account() {
+        let (mut hub, ids) = hub_with(&["ana", "ben"]);
+        let second = hub.connect();
+        let server = challenged(&mut hub, second, &[]);
+        let line = identify(&hub, 1, &server, None);
+        hub.receive(second, &line, now());
+
+        let outgoing = hub.receive(ids[0], &rename(5, "anna"), later());
+
+        assert_eq!(outgoing.len(), 3);
+        assert_eq!(sender_of_a_text(&mut hub, second), name("anna"));
+        hub.disconnect(ids[0], later());
+        assert_eq!(
+            hub.disconnect(second, later()),
+            [to(
+                ids[1],
+                ServerMessage::Leave {
+                    channel: LOBBY.to_owned(),
+                    name: name("anna"),
+                    time: later(),
+                }
+            )]
+        );
+
+        let again = hub.connect();
+        let server = challenged(&mut hub, again, &[]);
+        let line = identify(&hub, 1, &server, None);
+        assert_eq!(
+            hub.receive(again, &line, later())[0],
+            to(again, welcome("anna", Role::Owner))
+        );
+    }
+
+    #[test]
+    fn refuses_a_name_change_that_breaks_a_rule() {
+        let (mut hub, ids) = hub_with(&["ana", "ben"]);
+
+        for (wanted, code) in [
+            ("Not A Name", ErrorCode::InvalidName),
+            ("a", ErrorCode::InvalidName),
+            ("ben", ErrorCode::NameTaken),
+            ("ana", ErrorCode::NameTaken),
+        ] {
+            assert_eq!(
+                hub.receive(ids[0], &rename(1, wanted), now()),
+                [to(ids[0], error(Some(1), code))],
+                "{wanted}"
+            );
+        }
+
+        assert_eq!(hub.receive(ids[0], &rename(2, "anna"), now()).len(), 2);
+        assert_eq!(
+            hub.receive(ids[0], &rename(3, "annie"), later()),
+            [to(ids[0], error(Some(3), ErrorCode::TooSoon))]
+        );
+        assert_eq!(
+            hub.receive(ids[1], &rename(4, "ana"), later()),
+            [to(ids[1], error(Some(4), ErrorCode::NameTaken))]
+        );
+        assert_eq!(sender_of_a_text(&mut hub, ids[0]), name("anna"));
+        assert_eq!(sender_of_a_text(&mut hub, ids[1]), name("ben"));
+    }
+
+    #[test]
+    fn refuses_a_name_change_before_the_sign_in() {
+        let mut hub = new_hub();
+        let id = hub.connect();
+
+        assert_eq!(
+            hub.receive(id, &rename(1, "anna"), now()),
+            [to(id, error(Some(1), ErrorCode::HelloRequired))]
+        );
+        challenged(&mut hub, id, &[]);
+        assert_eq!(
+            hub.receive(id, &rename(1, "anna"), now()),
+            [to(id, error(Some(1), ErrorCode::IdentifyRequired))]
+        );
+    }
+
+    #[test]
+    fn keeps_the_name_when_it_cannot_store_the_change() {
+        let (mut hub, ana) = with_owner();
+        hub.store.lose_its_tables();
+
+        assert_eq!(
+            hub.receive(ana, &rename(4, "anna"), now()),
+            [to(ana, error(Some(4), ErrorCode::ServerError))]
+        );
+        assert_eq!(sender_of_a_text(&mut hub, ana), name("ana"));
     }
 
     fn stored_invitation(number: u32, limit: Option<u32>, used: u32) -> post_rules::Invitation {

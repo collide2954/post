@@ -500,6 +500,40 @@ async fn two_users_exchange_text() {
 }
 
 #[tokio::test]
+async fn tells_each_user_about_a_new_name() {
+    let server = start().await;
+    let mut ana = owner(&server).await;
+    let link = invite(&mut ana).await;
+    let mut ben = join_with(server.port, 8, "ben", &link).await;
+    assert!(matches!(read(&mut ana).await, ServerMessage::Join { .. }));
+
+    let rename = ClientMessage::Rename {
+        reference: Some(3),
+        name: "benito".to_owned(),
+    };
+    write(&mut ben, &rename).await;
+
+    let ServerMessage::Rename {
+        reference: Some(3),
+        old,
+        new,
+        time,
+    } = read(&mut ben).await
+    else {
+        panic!("the user gets the new name with the number of the request");
+    };
+    assert_eq!((&old, &new), (&name("ben"), &name("benito")));
+    assert_eq!(
+        read(&mut ana).await,
+        ServerMessage::Rename {
+            reference: None,
+            old,
+            new,
+            time,
+        }
+    );
+}
+#[tokio::test]
 async fn keeps_the_connection_open_after_an_error() {
     let server = start().await;
     let mut socket = connect_v4(server.port).await;

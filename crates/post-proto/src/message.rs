@@ -92,6 +92,14 @@ pub enum ClientMessage {
         /// The code of the invitation.
         code: Code,
     },
+    /// Changes the name of the account.
+    Rename {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The new name.
+        name: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -163,6 +171,18 @@ pub enum ServerMessage {
         reference: Option<u32>,
         /// The open invitations.
         list: Vec<Invitation>,
+    },
+    /// Tells that a user has a new name.
+    Rename {
+        /// The number from the `rename` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The earlier name of the user.
+        old: Name,
+        /// The new name of the user.
+        new: Name,
+        /// The time of the change.
+        time: Timestamp,
     },
     /// Refuses a message from the client.
     Error {
@@ -236,6 +256,8 @@ pub enum ErrorCode {
     TextTooLong,
     /// The account does not have the permission for the request.
     NotPermitted,
+    /// The account changed its name a short time ago.
+    TooSoon,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -307,6 +329,7 @@ impl ErrorCode {
             Self::EmptyText => "A message must contain text.",
             Self::TextTooLong => "A message can have a maximum of 4000 characters.",
             Self::NotPermitted => "Your account does not have the permission for this request.",
+            Self::TooSoon => "You changed your name a short time ago. Try again later.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }
@@ -381,6 +404,20 @@ mod tests {
                 },
                 r#"{"type":"revoke","code":"7Hq2kdX9mPq4"}"#,
             ),
+            (
+                ClientMessage::Rename {
+                    reference: Some(4),
+                    name: "anna".to_owned(),
+                },
+                r#"{"type":"rename","ref":4,"name":"anna"}"#,
+            ),
+            (
+                ClientMessage::Rename {
+                    reference: None,
+                    name: "Not A Name".to_owned(),
+                },
+                r#"{"type":"rename","name":"Not A Name"}"#,
+            ),
         ]
     }
 
@@ -439,6 +476,25 @@ mod tests {
                 r#"{"type":"message","channel":"lobby","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi"}"#,
             ),
             (
+                ServerMessage::Error {
+                    reference: Some(2),
+                    code: ErrorCode::NoSuchChannel,
+                    text: "The channel does not exist.".to_owned(),
+                },
+                r#"{"type":"error","ref":2,"code":"no-such-channel","text":"The channel does not exist."}"#,
+            ),
+        ]
+    }
+
+    fn all_server_examples() -> Vec<(ServerMessage, &'static str)> {
+        let mut examples = server_examples();
+        examples.extend(server_list_examples());
+        examples
+    }
+
+    fn server_list_examples() -> Vec<(ServerMessage, &'static str)> {
+        vec![
+            (
                 ServerMessage::Invitations {
                     reference: Some(3),
                     list: vec![
@@ -470,12 +526,22 @@ mod tests {
                 r#"{"type":"invitations","list":[]}"#,
             ),
             (
-                ServerMessage::Error {
-                    reference: Some(2),
-                    code: ErrorCode::NoSuchChannel,
-                    text: "The channel does not exist.".to_owned(),
+                ServerMessage::Rename {
+                    reference: Some(4),
+                    old: name("ana"),
+                    new: name("anna"),
+                    time: time("2026-11-21T14:04:00.000Z"),
                 },
-                r#"{"type":"error","ref":2,"code":"no-such-channel","text":"The channel does not exist."}"#,
+                r#"{"type":"rename","ref":4,"old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
+            ),
+            (
+                ServerMessage::Rename {
+                    reference: None,
+                    old: name("ana"),
+                    new: name("anna"),
+                    time: time("2026-11-21T14:04:00.000Z"),
+                },
+                r#"{"type":"rename","old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
             ),
         ]
     }
@@ -658,14 +724,14 @@ mod tests {
 
     #[test]
     fn writes_each_server_message_as_one_line() {
-        for (message, line) in server_examples() {
+        for (message, line) in all_server_examples() {
             assert_eq!(message.encode(), line);
         }
     }
 
     #[test]
     fn reads_each_server_message() {
-        for (message, line) in server_examples() {
+        for (message, line) in all_server_examples() {
             assert_eq!(ServerMessage::decode(line).expect(line), message);
         }
     }
@@ -790,6 +856,11 @@ mod tests {
                 "not-permitted",
                 "Your account does not have the permission for this request.",
             ),
+            (
+                ErrorCode::TooSoon,
+                "too-soon",
+                "You changed your name a short time ago. Try again later.",
+            ),
         ];
         examine_error_codes(&codes);
     }
@@ -837,6 +908,9 @@ mod tests {
             r#"{"type":"revoke"}"#,
             r#"{"type":"revoke","code":"short"}"#,
             r#"{"type":"revoke","code":"7Hq2kdX9mPq4","link":"x"}"#,
+            r#"{"type":"rename"}"#,
+            r#"{"type":"rename","name":7}"#,
+            r#"{"type":"rename","old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
         ] {
             assert!(
                 matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -856,6 +930,9 @@ mod tests {
             r#"{"type":"send","channel":"lobby","text":"Hello"}"#,
             r#"{"type":"invitations"}"#,
             r#"{"type":"invitations","list":{}}"#,
+            r#"{"type":"rename","name":"anna"}"#,
+            r#"{"type":"rename","old":"ana","new":"Anna","time":"2026-11-21T14:04:00.000Z"}"#,
+            r#"{"type":"rename","old":"ana","new":"anna"}"#,
             r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z"}]}"#,
             r#"{"type":"invitations","list":[{"code":"short","link":"x","created":"2026-11-21T14:02:05.000Z","used":0}]}"#,
             r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":0,"owner":true}]}"#,

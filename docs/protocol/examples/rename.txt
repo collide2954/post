@@ -1,0 +1,24 @@
+# A user changes the name of the account.
+# The lines show the connection of the user "ana".
+# "C:" is a line from the client. "S:" is a line from the server.
+
+C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce":"BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU","supports":[]}
+S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"BgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgY","proof":"5hwWzOgUQ4MIn6-78yDakfoaiylUQV0kZw-bWt6_1MMJEbFk3epX3JzGB6NMnPIQIjHmpBOYcKe_9BM7U73hBA","requires":[]}
+C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"WCBKEQPTD835Vfhh5vrxE7KiE3TqejWYeq4_hu11zSm2jnN-RBwMom6SpX7zEaatzzVrAGqHJsTMa6zIgAiDCw"}
+S: {"type":"welcome","ref":2,"name":"ana","role":"member"}
+S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
+
+# A different account has the name "ben".
+C: {"type":"rename","ref":3,"name":"ben"}
+S: {"type":"error","ref":3,"code":"name-taken","text":"This name is not available."}
+
+# Ana takes the name "anna". Each user in the channel gets this message. Only Ana gets the number.
+C: {"type":"rename","ref":4,"name":"anna"}
+S: {"type":"rename","ref":4,"old":"ana","new":"anna","time":"2026-11-21T14:06:00.000Z"}
+
+# An account can change its name only one time in 30 days.
+C: {"type":"rename","ref":5,"name":"annie"}
+S: {"type":"error","ref":5,"code":"too-soon","text":"You changed your name a short time ago. Try again later."}
+
+# Ben changes his name.
+S: {"type":"rename","old":"ben","new":"benito","time":"2026-11-21T14:07:00.000Z"}

@@ -33,7 +33,7 @@ pub fn name_column(entries: &[Entry]) -> usize {
         .iter()
         .filter_map(|entry| match entry {
             Entry::Message { from, .. } => Some(from.as_str().len()),
-            Entry::Joined { .. } | Entry::Left { .. } => None,
+            Entry::Joined { .. } | Entry::Left { .. } | Entry::Renamed { .. } => None,
         })
         .max()
         .unwrap_or(0)
@@ -117,13 +117,24 @@ mod tests {
             },
             message("ana"),
             message("ana"),
+            Entry::Renamed {
+                time: time("2026-11-21T14:05:00.000Z"),
+                old: name("ana"),
+                new: name("anna"),
+            },
+            message("anna"),
         ];
 
         let shown: Vec<bool> = (0..entries.len())
             .map(|index| shows_name(&entries, index))
             .collect();
 
-        assert_eq!(shown, [true, false, true, false, true, false, true, false]);
+        assert_eq!(
+            shown,
+            [
+                true, false, true, false, true, false, true, false, false, true
+            ]
+        );
     }
 
     #[test]
@@ -139,6 +150,14 @@ mod tests {
         assert_eq!(
             name_column(&[message("ana"), message("benjamin"), message("cy")]),
             8
+        );
+        assert_eq!(
+            name_column(&[Entry::Renamed {
+                time: time("2026-11-21T14:03:00.000Z"),
+                old: name("ana"),
+                new: name("a-very-long-name"),
+            }]),
+            0
         );
     }
 

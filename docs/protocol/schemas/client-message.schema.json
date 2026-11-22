@@ -262,6 +262,34 @@
         "type",
         "code"
       ]
+    },
+    {
+      "description": "Changes the name of the account.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The new name.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "rename"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name"
+      ]
     }
   ],
   "$defs": {

@@ -366,6 +366,7 @@ Server:
 - A request for a new invitation gives the time to its end in seconds. The server calculates the end time, thus the clock of the client has no effect.
 - The server answers each invitation request with the full list of the open invitations.
 - The limits of the handle change (D-024) are fixed. The operator settings for them come in version 0.9.
+- The server tells each user in the channel about a handle change. The application then shows the new handle in the earlier lines of that user.
 - A line in the timeline for a person who joins or leaves still shows the start or the end of a connection. Channels and members come in version 0.3.
 - The server stores accounts, handles, and invitations. It stores no messages before version 0.4.
 

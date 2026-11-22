@@ -20,6 +20,11 @@ pub enum Entry {
         time: Timestamp,
         name: Name,
     },
+    Renamed {
+        time: Timestamp,
+        old: Name,
+        new: Name,
+    },
 }
 
 #[derive(Debug)]
@@ -101,6 +106,30 @@ impl Session {
         }
     }
 
+    pub fn rename(&mut self, name: &Name) -> ClientMessage {
+        ClientMessage::Rename {
+            reference: Some(self.request()),
+            name: name.as_str().to_owned(),
+        }
+    }
+
+    fn renamed(&mut self, old: Name, new: Name, time: Timestamp) {
+        if self.name == old {
+            self.name = new.clone();
+        }
+        for entry in &mut self.entries {
+            let name = match entry {
+                Entry::Message { from, .. } => from,
+                Entry::Joined { name, .. } | Entry::Left { name, .. } => name,
+                Entry::Renamed { .. } => continue,
+            };
+            if *name == old {
+                *name = new.clone();
+            }
+        }
+        self.entries.push(Entry::Renamed { time, old, new });
+    }
+
     fn request(&mut self) -> u32 {
         let reference = self.next_reference;
         self.next_reference = reference.wrapping_add(1);
@@ -128,6 +157,7 @@ impl Session {
                 time,
             } if channel == LOBBY => self.entries.push(Entry::Left { time, name }),
             ServerMessage::Invitations { list, .. } => self.invitations = Some(list),
+            ServerMessage::Rename { old, new, time, .. } => self.renamed(old, new, time),
             ServerMessage::Error { code, .. } => self.problem = Some(code),
             ServerMessage::Message { .. }
             | ServerMessage::Join { .. }
@@ -262,6 +292,98 @@ mod tests {
         assert_eq!(session.problem(), Some(ErrorCode::NotPermitted));
 
         let _request = session.ask_for_invitations();
+        assert_eq!(session.problem(), None);
+    }
+
+    fn rename(old: &str, new: &str, second: u8) -> ServerMessage {
+        ServerMessage::Rename {
+            reference: None,
+            old: name(old),
+            new: name(new),
+            time: time(second),
+        }
+    }
+
+    #[test]
+    fn shows_the_new_name_of_a_user_in_the_earlier_entries() {
+        let mut session = Session::new(name("ana"));
+        session.apply(join("lobby", "ben", 1));
+        session.apply(message("lobby", "ben", 2, "Hi"));
+        session.apply(message("lobby", "cy", 3, "Hello"));
+        session.apply(leave("lobby", "ben", 4));
+
+        session.apply(rename("ben", "benito", 5));
+        session.apply(rename("benito", "beni", 6));
+
+        assert_eq!(
+            session.entries(),
+            [
+                Entry::Joined {
+                    time: time(1),
+                    name: name("beni"),
+                },
+                Entry::Message {
+                    time: time(2),
+                    from: name("beni"),
+                    text: "Hi".to_owned(),
+                },
+                Entry::Message {
+                    time: time(3),
+                    from: name("cy"),
+                    text: "Hello".to_owned(),
+                },
+                Entry::Left {
+                    time: time(4),
+                    name: name("beni"),
+                },
+                Entry::Renamed {
+                    time: time(5),
+                    old: name("ben"),
+                    new: name("benito"),
+                },
+                Entry::Renamed {
+                    time: time(6),
+                    old: name("benito"),
+                    new: name("beni"),
+                },
+            ]
+        );
+        assert_eq!(session.name(), &name("ana"));
+    }
+
+    #[test]
+    fn takes_the_new_name_of_its_own_account() {
+        let mut session = Session::new(name("ana"));
+        session.apply(message("lobby", "ana", 1, "Hello"));
+
+        session.apply(ServerMessage::Rename {
+            reference: Some(4),
+            old: name("ana"),
+            new: name("anna"),
+            time: time(2),
+        });
+
+        assert_eq!(session.name(), &name("anna"));
+        assert!(matches!(
+            &session.entries()[0],
+            Entry::Message { from, .. } if *from == name("anna")
+        ));
+    }
+
+    #[test]
+    fn makes_a_rename_request_with_a_new_number() {
+        let mut session = Session::new(name("ana"));
+        session.apply(ServerMessage::error(Some(1), ErrorCode::TooSoon));
+
+        let request = session.rename(&name("anna"));
+
+        assert_eq!(
+            request,
+            ClientMessage::Rename {
+                reference: Some(1),
+                name: "anna".to_owned(),
+            }
+        );
         assert_eq!(session.problem(), None);
     }
 

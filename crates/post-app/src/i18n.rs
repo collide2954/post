@@ -56,6 +56,7 @@ texts! {
     ErrorInvalidInvitation => "error-invalid-invitation",
     ErrorServer => "error-server",
     ErrorNotPermitted => "error-not-permitted",
+    ErrorTooSoon => "error-too-soon",
     ErrorInvalidName => "error-invalid-name",
     ErrorNameTaken => "error-name-taken",
     ErrorNoSuchChannel => "error-no-such-channel",
@@ -67,6 +68,7 @@ texts! {
     ChatInputPlaceholder => "chat-input-placeholder",
     ChatJoined => "chat-joined",
     ChatLeft => "chat-left",
+    ChatRenamed => "chat-renamed",
     ChatNotSent => "chat-not-sent",
     ChatServerNotSaved => "chat-server-not-saved",
 }
@@ -149,8 +151,15 @@ impl Strings {
 
     #[must_use]
     pub fn with(&self, text: Text, variable: &str, value: &str) -> String {
+        self.with_all(text, &[(variable, value)])
+    }
+
+    #[must_use]
+    pub fn with_all(&self, text: Text, values: &[(&str, &str)]) -> String {
         let mut arguments = FluentArgs::new();
-        arguments.set(variable, value);
+        for (variable, value) in values {
+            arguments.set(*variable, *value);
+        }
         self.format(text, Some(&arguments))
     }
 
@@ -298,6 +307,22 @@ mod tests {
         assert_eq!(
             english.with(Text::ChatInputPlaceholder, "channel", "lobby"),
             "Message #lobby"
+        );
+    }
+
+    #[test]
+    fn puts_two_values_into_a_text() {
+        let english = Strings::new(Language::English);
+        let spanish = Strings::new(Language::Spanish);
+        let values = [("old", "ana"), ("new", "anna")];
+
+        assert_eq!(
+            english.with_all(Text::ChatRenamed, &values),
+            "ana is now anna"
+        );
+        assert_eq!(
+            spanish.with_all(Text::ChatRenamed, &values),
+            "ana ahora es anna"
         );
     }
 
