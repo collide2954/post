@@ -10,7 +10,7 @@ use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::view::{self, Window};
 use post_client::{Event, Link};
-use post_proto::{ClientMessage, ErrorCode, Name, ServerMessage, Timestamp};
+use post_proto::{ClientMessage, ErrorCode, Key, Name, Role, ServerMessage, Timestamp};
 
 const SCREENSHOT_VARIABLE: &str = "POST_SCREENSHOTS";
 
@@ -64,7 +64,8 @@ fn connecting_app(mode: Mode) -> App {
 fn chat_app(mode: Mode) -> (App, Outbox) {
     let mut app = connecting_app(mode);
     let attempt = app.target().expect("a connection is in progress").attempt;
-    let (link, mut messages) = Link::channel(name("ana"), 8);
+    let (link, mut messages) =
+        Link::channel(name("ana"), Role::Member, Key::from_bytes([1; 32]), 8);
     app.update(Message::Connection(attempt, Event::Connected(link)));
 
     let join = |who: &str, clock: &str| ServerMessage::Join {

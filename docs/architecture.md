@@ -86,8 +86,7 @@ The server keeps its storage in a data directory. In development mode, the direc
 - `home` finds the directories of the user for the settings and for the data.
 - `profile` keeps the profiles in files (D-147). A profile has a name, a seed, and a list of the servers that it knows. A lock file lets only one window use a profile.
 - `connection` opens the WebSocket, does the sign-in, and gives the events of the connection as a stream. It examines the proof of the server before it calculates the account key.
-- `session` holds the timeline of one connection and makes the `send` messages.
-- `address` reads a server address for the temporary `guest` message. It goes away together with that message.
+- `session` holds the timeline of one connection. It makes the requests of the user, and it keeps the list of open invitations.
 
 ## The application crate
 

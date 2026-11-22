@@ -26,7 +26,6 @@ unic-langid.workspace = true
 [dev-dependencies]
 futures-util.workspace = true
 iced_test.workspace = true
-post-rules.workspace = true
 post-server.workspace = true
 post-testing.workspace = true
 tokio.workspace = true

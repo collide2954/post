@@ -86,7 +86,7 @@ fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match shell.window.app.update(message) {
         Effect::None => Task::none(),
         Effect::FocusName => operation::focus(view::NAME_FIELD),
-        Effect::FocusDraft => operation::focus(view::DRAFT_FIELD),
+
         Effect::FocusNext => operation::focus_next(),
         Effect::FocusPrevious => operation::focus_previous(),
         Effect::Connected(server) => {

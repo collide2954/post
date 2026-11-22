@@ -11,22 +11,15 @@ use post_app::app::Message;
 use post_app::i18n::Language;
 use post_app::shell;
 use post_client::{Destination, Event, Home, Identity, Seed, sign_in};
-use post_proto::{ClientMessage, Code, Name, ServerMessage, Timestamp};
-use post_rules::Limits;
+use post_proto::{ClientMessage, Name, ServerMessage};
 use post_server::Server;
 use post_server::config::Config;
-use post_server::store::Store;
 use post_testing::Directory;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 
 const PATIENCE: Duration = Duration::from_secs(30);
 const QUIET: Duration = Duration::from_millis(40);
-const BEN: [u8; 32] = [2; 32];
-const LIMITS: Limits = Limits {
-    rename_interval: 0,
-    name_reserved: 0,
-};
 
 struct Driver<P: Program + 'static> {
     program: P,
@@ -103,7 +96,7 @@ where
 struct Backstage {
     runtime: Runtime,
     port: u16,
-    invitation: Code,
+    owner_link: String,
     _stop: oneshot::Sender<()>,
     _data: Directory,
 }
@@ -112,46 +105,14 @@ impl Backstage {
     fn address(&self) -> String {
         format!("localhost:{}", self.port)
     }
-
-    fn invite_link(&self) -> String {
-        format!("http://{}/i/{}", self.address(), self.invitation)
-    }
 }
 
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
 }
 
-fn code(text: &str) -> Code {
-    Code::parse(text).expect(text)
-}
-
 fn home(directory: &Directory) -> Home {
     Home::at(directory.path())
-}
-
-fn add_ben_and_an_invitation(config: &Config) -> Code {
-    let mut store = Store::open(&config.database()).expect("a store");
-    let server = store.server_key().expect("a server key").public();
-    let mut rules = store.rules(LIMITS).expect("the rules of an empty store");
-    let now = Timestamp::now();
-
-    let owner = code("ownerCode001");
-    rules
-        .owner_code(&mut store, &owner, now)
-        .expect("the store takes the code")
-        .expect("the code is free");
-    let key = Seed::from_bytes(BEN).account_key(&server).public();
-    let ben = rules
-        .register(&mut store, key.as_bytes(), &name("ben"), &owner, now)
-        .expect("the store takes the account")
-        .expect("the owner code is valid");
-    let invitation = code("inviteCode01");
-    rules
-        .invite(&mut store, ben.id, &invitation, None, None, now)
-        .expect("the store takes the invitation")
-        .expect("the owner can invite");
-    invitation
 }
 
 fn start_server() -> Backstage {
@@ -161,11 +122,14 @@ fn start_server() -> Backstage {
         data: data.path().to_owned(),
         ..Config::development(0)
     };
-    let invitation = add_ben_and_an_invitation(&config);
     let server = runtime
         .block_on(Server::bind(&config))
         .expect("the server can bind");
     let port = server.addresses()[0].port();
+    let owner_link = server
+        .owner_link()
+        .expect("a new server has no owner")
+        .to_owned();
     let (stop, stopped) = oneshot::channel::<()>();
     runtime.spawn(server.run(async {
         let _ = stopped.await;
@@ -173,27 +137,35 @@ fn start_server() -> Backstage {
     Backstage {
         runtime,
         port,
-        invitation,
+        owner_link,
         _stop: stop,
         _data: data,
     }
 }
 
-fn answer_as_ben(backstage: &Backstage) {
-    let destination = Destination::parse(&backstage.address()).expect("a valid address");
+fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
+    let destination = Destination::parse(&backstage.owner_link).expect("a valid owner link");
     let identity = Identity {
-        seed: Seed::from_bytes(BEN),
-        name: None,
+        seed: Seed::from_bytes([2; 32]),
+        name: Some(name("ben")),
     };
-    let (ready, is_ready) = std::sync::mpsc::channel();
+    let (invited, invitation) = std::sync::mpsc::channel();
     backstage.runtime.spawn(async move {
         let mut events = Box::pin(sign_in(destination, identity, None));
         let mut link = None;
         while let Some(event) = events.next().await {
             match event {
                 Event::Connected(connected) => {
+                    let invite = ClientMessage::Invite {
+                        reference: None,
+                        lifetime: None,
+                        uses: None,
+                    };
+                    assert!(connected.send(invite));
                     link = Some(connected);
-                    let _ = ready.send(());
+                }
+                Event::Received(ServerMessage::Invitations { list, .. }) => {
+                    let _ = invited.send(list[0].link.clone());
                 }
                 Event::Received(ServerMessage::Message { from, .. }) if from == name("ana") => {
                     let answer = ClientMessage::Send {
@@ -208,15 +180,15 @@ fn answer_as_ben(backstage: &Backstage) {
             }
         }
     });
-    is_ready
+    invitation
         .recv_timeout(PATIENCE)
-        .expect("ben connects in time");
+        .expect("ben makes an invitation in time")
 }
 
 #[test]
 fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     let backstage = start_server();
-    answer_as_ben(&backstage);
+    let invite_link = invite_and_answer_as_ben(&backstage);
     let directory = Directory::new();
     let mut driver = Driver::start(shell::application(
         Language::English,
@@ -224,7 +196,7 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     ));
 
     driver.expect("Connect");
-    driver.send(Message::AddressChanged(backstage.invite_link()));
+    driver.send(Message::AddressChanged(invite_link));
     driver.type_text("ana");
     driver.act("type tab");
     driver.act("type enter");
@@ -263,7 +235,7 @@ fn a_user_signs_in_again_with_the_account_of_the_profile() {
         Some(home(&directory)),
     ));
     first.expect("Connect");
-    first.send(Message::AddressChanged(backstage.invite_link()));
+    first.send(Message::AddressChanged(backstage.owner_link.clone()));
     first.type_text("ana");
     first.act("type enter");
     first.expect("ana · connected");
@@ -309,7 +281,7 @@ fn a_user_sees_a_note_when_the_profile_cannot_save_the_server() {
     let servers = directory.join("profiles").join("1").join("servers.toml");
     std::fs::create_dir(servers).expect("a directory in the place of the file");
 
-    driver.send(Message::AddressChanged(backstage.invite_link()));
+    driver.send(Message::AddressChanged(backstage.owner_link.clone()));
     driver.type_text("ana");
     driver.act("type enter");
 

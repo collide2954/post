@@ -13,7 +13,6 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::{WebSocketStream, client_async_with_config};
 
-use crate::ServerAddress;
 use crate::destination::{Destination, Security};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -52,28 +51,26 @@ pub struct Identity {
 pub struct Link {
     name: Name,
     role: Role,
-    server: Option<Key>,
+    server: Key,
     queue: mpsc::Sender<ClientMessage>,
 }
 
 impl Link {
     #[must_use]
-    pub fn channel(name: Name, capacity: usize) -> (Self, mpsc::Receiver<ClientMessage>) {
+    pub fn channel(
+        name: Name,
+        role: Role,
+        server: Key,
+        capacity: usize,
+    ) -> (Self, mpsc::Receiver<ClientMessage>) {
         let (queue, messages) = mpsc::channel(capacity);
         let link = Self {
             name,
-            role: Role::Member,
-            server: None,
+            role,
+            server,
             queue,
         };
         (link, messages)
-    }
-
-    #[must_use]
-    pub fn of_account(mut self, role: Role, server: Key) -> Self {
-        self.role = role;
-        self.server = Some(server);
-        self
     }
 
     #[must_use]
@@ -87,8 +84,8 @@ impl Link {
     }
 
     #[must_use]
-    pub fn server(&self) -> Option<&Key> {
-        self.server.as_ref()
+    pub fn server(&self) -> &Key {
+        &self.server
     }
 
     #[must_use]
@@ -98,8 +95,7 @@ impl Link {
 }
 
 enum State {
-    Start { address: ServerAddress, name: Name },
-    SignIn(Box<SignIn>),
+    Start(Box<SignIn>),
     Open(Box<Open>),
     End,
 }
@@ -110,19 +106,9 @@ struct SignIn {
     known: Option<Key>,
 }
 
-struct Account {
-    name: Name,
-    role: Role,
-    server: Key,
-}
-
 struct Open {
     socket: Socket,
     queue: mpsc::Receiver<ClientMessage>,
-}
-
-pub fn connect(address: ServerAddress, name: Name) -> impl Stream<Item = Event> + Send + 'static {
-    stream::unfold(State::Start { address, name }, step)
 }
 
 pub fn sign_in(
@@ -135,29 +121,16 @@ pub fn sign_in(
         identity,
         known,
     };
-    stream::unfold(State::SignIn(Box::new(start)), step)
+    stream::unfold(State::Start(Box::new(start)), step)
 }
 
 async fn step(state: State) -> Option<(Event, State)> {
     match state {
-        State::SignIn(start) => Some(match start.open().await {
-            Ok((socket, account)) => {
-                let (link, queue) = Link::channel(account.name, QUEUE_MESSAGES);
-                (
-                    Event::Connected(link.of_account(account.role, account.server)),
-                    State::Open(Box::new(Open { socket, queue })),
-                )
-            }
-            Err(reason) => (Event::Disconnected(reason), State::End),
-        }),
-        State::Start { address, name } => Some(match open(&address, &name).await {
-            Ok((socket, name)) => {
-                let (link, queue) = Link::channel(name, QUEUE_MESSAGES);
-                (
-                    Event::Connected(link),
-                    State::Open(Box::new(Open { socket, queue })),
-                )
-            }
+        State::Start(start) => Some(match start.open().await {
+            Ok((socket, link, queue)) => (
+                Event::Connected(link),
+                State::Open(Box::new(Open { socket, queue })),
+            ),
             Err(reason) => (Event::Disconnected(reason), State::End),
         }),
         State::Open(mut open) => Some(match open.next().await {
@@ -168,30 +141,13 @@ async fn step(state: State) -> Option<(Event, State)> {
     }
 }
 
-async fn open(address: &ServerAddress, name: &Name) -> Result<(Socket, Name), Disconnect> {
-    let mut socket = dial(address).await.ok_or(Disconnect::Unreachable)?;
-    let hello = ClientMessage::Guest {
-        reference: None,
-        protocol: PROTOCOL_VERSION,
-        name: name.as_str().to_owned(),
-    };
-    write(&mut socket, &hello).await?;
-    match timeout(ANSWER_TIMEOUT, read(&mut socket)).await {
-        Ok(Ok(ServerMessage::Welcome { name, .. })) => Ok((socket, name)),
-        Ok(Ok(ServerMessage::Error { code, .. })) => Err(Disconnect::Refused(code)),
-        Ok(Ok(_)) => Err(Disconnect::Protocol),
-        Ok(Err(reason)) => Err(reason),
-        Err(_) => Err(Disconnect::Unreachable),
-    }
-}
-
 impl SignIn {
-    async fn open(&self) -> Result<(Socket, Account), Disconnect> {
+    async fn open(&self) -> Result<(Socket, Link, mpsc::Receiver<ClientMessage>), Disconnect> {
         if self.destination.security() == Security::Tls {
             return Err(Disconnect::NoTls);
         }
         let address = self.destination.address().to_string();
-        let mut socket = dial_address(self.destination.address())
+        let mut socket = dial(self.destination.address())
             .await
             .ok_or(Disconnect::Unreachable)?;
         let client = post_crypto::nonce();
@@ -262,7 +218,8 @@ impl SignIn {
         let ServerMessage::Welcome { name, role, .. } = welcome else {
             return Err(Disconnect::Protocol);
         };
-        Ok((socket, Account { name, role, server }))
+        let (link, queue) = Link::channel(name, role, server, QUEUE_MESSAGES);
+        Ok((socket, link, queue))
     }
 }
 
@@ -274,32 +231,12 @@ async fn answer(socket: &mut Socket) -> Result<ServerMessage, Disconnect> {
     }
 }
 
-async fn dial_address(address: &Address) -> Option<Socket> {
+async fn dial(address: &Address) -> Option<Socket> {
     let config = WebSocketConfig::default()
         .max_message_size(Some(MAX_LINE_BYTES))
         .max_frame_size(Some(MAX_LINE_BYTES));
     let candidates = lookup_host(address.to_string()).await.ok()?;
     for candidate in candidates {
-        let attempt = async {
-            let stream = TcpStream::connect(candidate).await.ok()?;
-            let url = format!("ws://{address}/");
-            let (socket, _) = client_async_with_config(url, stream, Some(config))
-                .await
-                .ok()?;
-            Some(socket)
-        };
-        if let Ok(Some(socket)) = timeout(CONNECT_TIMEOUT, attempt).await {
-            return Some(socket);
-        }
-    }
-    None
-}
-
-async fn dial(address: &ServerAddress) -> Option<Socket> {
-    let config = WebSocketConfig::default()
-        .max_message_size(Some(MAX_LINE_BYTES))
-        .max_frame_size(Some(MAX_LINE_BYTES));
-    for candidate in address.candidates() {
         let attempt = async {
             let stream = TcpStream::connect(candidate).await.ok()?;
             let url = format!("ws://{address}/");

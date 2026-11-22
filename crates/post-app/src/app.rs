@@ -25,7 +25,6 @@ pub enum Message {
 pub enum Effect {
     None,
     FocusName,
-    FocusDraft,
     FocusNext,
     FocusPrevious,
     Connected(KnownServer),
@@ -251,12 +250,12 @@ impl App {
         let Screen::Connecting { form, target } = &mut self.screen else {
             return Effect::None;
         };
-        let server = link.server().map(|key| KnownServer {
+        let server = KnownServer {
             address: target.destination.address().to_string(),
-            key: *key,
+            key: *link.server(),
             name: link.name().clone(),
             certificate: None,
-        });
+        };
         self.screen = Screen::Chat(Box::new(Chat {
             form: std::mem::take(form),
             target: target.clone(),
@@ -265,9 +264,6 @@ impl App {
             draft: String::new(),
             notice: None,
         }));
-        let Some(server) = server else {
-            return Effect::FocusDraft;
-        };
         server.clone().remember_in(&mut self.servers);
         Effect::Connected(server)
     }
@@ -442,11 +438,8 @@ mod tests {
 
     fn chatting(who: &str, capacity: usize) -> (App, Outbox) {
         let mut app = connecting(who);
-        let (link, mut messages) = Link::channel(name(who), capacity);
-        let message = connection(
-            &app,
-            Event::Connected(link.of_account(Role::Member, key(1))),
-        );
+        let (link, mut messages) = Link::channel(name(who), Role::Member, key(1), capacity);
+        let message = connection(&app, Event::Connected(link));
         assert_eq!(
             app.update(message),
             Effect::Connected(server("localhost:7678", 1, who))
@@ -648,9 +641,9 @@ mod tests {
     fn opens_the_chat_screen_when_the_server_accepts_the_user() {
         let mut app = connecting("ana");
         let before = app.target().cloned();
-        let (link, _messages) = Link::channel(name("ana-2"), 4);
+        let (link, _messages) = Link::channel(name("ana-2"), Role::Owner, key(1), 4);
 
-        let message = connection(&app, Event::Connected(link.of_account(Role::Owner, key(1))));
+        let message = connection(&app, Event::Connected(link));
         let effect = app.update(message);
 
         assert_eq!(
@@ -667,18 +660,6 @@ mod tests {
     }
 
     #[test]
-    fn opens_the_chat_screen_of_a_connection_without_an_account() {
-        let mut app = connecting("ana");
-        let (link, _messages) = Link::channel(name("ana"), 4);
-
-        let message = connection(&app, Event::Connected(link));
-
-        assert_eq!(app.update(message), Effect::FocusDraft);
-        assert!(matches!(app.screen(), Screen::Chat(_)));
-        assert_eq!(app.servers(), []);
-    }
-
-    #[test]
     fn knows_the_server_at_the_next_connection() {
         let known = vec![
             server("chat.example.org:443", 2, "ana"),
@@ -687,11 +668,8 @@ mod tests {
         let mut app = App::new(Mode::Light, known);
         typed(&mut app, "localhost:7678", "");
         app.update(Message::Connect);
-        let (link, _messages) = Link::channel(name("ana"), 4);
-        let message = connection(
-            &app,
-            Event::Connected(link.of_account(Role::Member, key(3))),
-        );
+        let (link, _messages) = Link::channel(name("ana"), Role::Member, key(3), 4);
+        let message = connection(&app, Event::Connected(link));
         app.update(message);
 
         assert_eq!(
@@ -773,7 +751,7 @@ mod tests {
         let old = app.target().expect("a connection is in progress").attempt;
         app.update(Message::Leave);
         app.update(Message::Connect);
-        let (link, _messages) = Link::channel(name("ana"), 4);
+        let (link, _messages) = Link::channel(name("ana"), Role::Member, key(1), 4);
 
         for event in [
             Event::Connected(link),
