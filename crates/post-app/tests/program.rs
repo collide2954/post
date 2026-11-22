@@ -1,5 +1,5 @@
 use std::net::Ipv4Addr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -44,8 +44,29 @@ where
             emulator,
             events,
         };
+        driver.wait_until_ready();
         driver.pump();
         driver
+    }
+
+    fn wait_until_ready(&mut self) {
+        let start = Instant::now();
+        loop {
+            match self.events.try_recv() {
+                Ok(emulator::Event::Action(action)) => {
+                    self.emulator.perform(&self.program, action);
+                }
+                Ok(emulator::Event::Ready) => return,
+                Ok(emulator::Event::Failed(instruction)) => {
+                    panic!("the instruction failed: {instruction}")
+                }
+                Err(error) if error.is_closed() => panic!("the emulator stopped"),
+                Err(_) => {
+                    assert!(start.elapsed() < PATIENCE, "the emulator is not ready");
+                    thread::sleep(Duration::from_millis(2));
+                }
+            }
+        }
     }
 
     fn pump(&mut self) {
@@ -69,11 +90,32 @@ where
     fn act(&mut self, line: &str) {
         let instruction = Instruction::parse(line).unwrap_or_else(|_| panic!("not valid: {line}"));
         self.emulator.run(&self.program, instruction);
+        self.wait_until_ready();
         self.pump();
     }
 
     fn type_text(&mut self, text: &str) {
-        for character in text.chars() {
+        self.type_after("", text);
+    }
+
+    fn type_after(&mut self, before: &str, text: &str) {
+        let mut characters = text.chars();
+        let Some(first) = characters.next() else {
+            return;
+        };
+        let shown = format!("{before}{first}");
+        let start = Instant::now();
+        loop {
+            self.act(&format!("type \"{first}\""));
+            if self.shows(&shown) {
+                break;
+            }
+            assert!(
+                start.elapsed() < PATIENCE,
+                "no field takes the text: {text}"
+            );
+        }
+        for character in characters {
             self.act(&format!("type \"{character}\""));
         }
     }
@@ -85,9 +127,10 @@ where
 
     fn sign_up(&mut self, to: String, name: &str) {
         self.send(address(to));
-        self.send(Message::FocusNext);
-        self.type_text(name);
-        self.act("type enter");
+        self.send(Message::Servers(servers::Message::NameChanged(
+            name.to_owned(),
+        )));
+        self.send(Message::Servers(servers::Message::Connect));
     }
 
     fn shows(&self, text: &str) -> bool {
@@ -108,6 +151,18 @@ where
         let start = Instant::now();
         while self.shows(text) {
             assert!(start.elapsed() < PATIENCE, "the text stays: {text}");
+            self.pump();
+        }
+    }
+
+    fn expect_in_file(&mut self, file: &Path, part: &str) {
+        let start = Instant::now();
+        while !std::fs::read_to_string(file).is_ok_and(|text| text.contains(part)) {
+            assert!(
+                start.elapsed() < PATIENCE,
+                "{} does not contain: {part}",
+                file.display()
+            );
             self.pump();
         }
     }
@@ -309,9 +364,8 @@ fn join(backstage: &Backstage, link: &str, who: &str) {
         .expect("the user joins in time");
 }
 
-fn known_servers(directory: &Directory) -> String {
-    let servers = directory.join("profiles").join("1").join("servers.toml");
-    std::fs::read_to_string(servers).expect("a servers file")
+fn servers_file(directory: &Directory) -> PathBuf {
+    directory.join("profiles").join("1").join("servers.toml")
 }
 
 fn settings_file(directory: &Directory) -> PathBuf {
@@ -620,18 +674,17 @@ fn a_user_changes_the_name_and_cannot_change_it_again_at_once() {
 
     driver.act("click \"Change name\"");
     driver.expect("Your name on this server");
-    driver.type_text("2");
+    driver.type_after("ana", "2");
     driver.act("type enter");
 
     driver.expect("ana2 · connected");
     driver.expect("ana is now ana2");
     assert!(!driver.shows("Your name on this server"));
-    let servers = known_servers(&directory);
-    assert!(servers.contains("name = \"ana2\""), "{servers}");
+    driver.expect_in_file(&servers_file(&directory), "name = \"ana2\"");
 
     driver.act("click \"Change name\"");
     driver.expect("Your name on this server");
-    driver.type_text("3");
+    driver.type_after("ana2", "3");
     driver.act("type enter");
     driver.expect("You changed your name a short time ago. Try again later.");
 
@@ -736,13 +789,9 @@ fn a_user_accepts_the_certificate_of_a_server_and_signs_in_with_tls() {
     driver.act("click \"Accept the certificate\"");
 
     driver.expect("ana · connected");
-    let servers = directory.join("profiles").join("1").join("servers.toml");
-    let servers = std::fs::read_to_string(servers).expect("a servers file");
-    assert!(servers.contains("tls = true"), "{servers}");
-    assert!(
-        servers.contains(&format!("certificate = \"{fingerprint}\"")),
-        "{servers}"
-    );
+    let servers = servers_file(&directory);
+    driver.expect_in_file(&servers, "tls = true");
+    driver.expect_in_file(&servers, &format!("certificate = \"{fingerprint}\""));
 }
 
 #[test]
