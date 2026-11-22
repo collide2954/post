@@ -2,6 +2,17 @@
 
 This file lists the changes in each version of Post. The newest version is first. Decision record D-109 gives the rules for version numbers.
 
+## 0.2.2 - 2026-11-22
+
+This version is the second step to version 0.3 (D-180). The application shows the channels.
+
+- Remove the temporary channel `lobby`. A server has no channel at its first start (D-136).
+- Add a sidebar to the chat screen. It shows the server, the user, and the channels of the user. A window that is narrower than 700 pixels shows a menu in its place.
+- Add the Channels panel. A user makes a channel, joins a public channel, and opens a channel there.
+- Open the Channels panel after the sign-in for a user who is not a member of a channel.
+- Keep a draft for each channel.
+- Refuse a `join`, `leave`, or `message` message from a server if its channel name breaks the rules for a channel name.
+
 ## 0.2.1 - 2026-11-22
 
 This version is the first step to version 0.3 (D-180). The server has channels. The application does not show them at this time.
