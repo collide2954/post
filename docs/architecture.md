@@ -53,7 +53,8 @@ Verus proves `base64` and the rules of `name`, `code`, `part`, and `time`. The [
 - `seed` holds the secret seed of a profile. It calculates the account key for a server, and it writes and reads the text form of the seed.
 - `keys` holds the server key and the account key. It makes and examines the proofs of the sign-in.
 - `transcript` writes the bytes that a proof of the sign-in signs.
-- `hex` writes and reads the hexadecimal text of the seed.
+- `hex` writes and reads hexadecimal text, for the seed and for a fingerprint.
+- `fingerprint` holds the SHA-256 fingerprint of a TLS certificate (D-073).
 - `random` makes random values and invitation codes.
 
 A test examines the proofs in the example conversations of the protocol specification.
