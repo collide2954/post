@@ -512,3 +512,66 @@ Other records give more functions that are not in Post:
 
 - The specification as the only help.
 - Official libraries for more languages.
+
+### D-181 Invitation to a private channel
+
+**Date.** 2026-11-22.
+
+**Decision.** The owner of a private channel invites a member of the server by handle. The channel then shows in the channel list of that member, with the mark "invited". The member joins the channel or ignores the invitation.
+
+**Reason.** No person is put into a channel. A member is only in the channels that the member selected (D-136). An invitation by handle goes only to the person that the owner selected.
+
+**Not selected.**
+
+- The owner adds a member directly.
+- An invite link for the channel. A link can go to people that the owner did not select.
+
+### D-184 Idle time for the away state
+
+**Date.** 2026-11-22.
+
+**Decision.** The away state (D-019) starts automatically after 10 minutes with no keyboard input and no mouse input on the computer. The application asks the operating system for the idle time. If the operating system does not give the idle time, the application uses the time with no input in its own window.
+
+**Reason.** A person who works in a different program is at the computer and can answer. The dot must tell the truth about that.
+
+**Not selected.**
+
+- Only the input in the window of Post. A person who works in a different program then shows as away.
+
+### D-185 Owner of a channel
+
+**Date.** 2026-11-22.
+
+**Decision.** A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel while the owner has that role. The owner first gives the channel to a different member, or the owner deletes the channel.
+
+**Reason.** A channel never stays without control, also before the operator tools come (D-142). A member never gets a channel by surprise.
+
+**Not selected.**
+
+- A channel with no owner until an operator gives it to a member.
+- The member who is longest in the channel becomes the owner automatically.
+
+### D-189 One presence for a profile
+
+**Date.** 2026-11-22.
+
+**Decision.** The presence settings of a user apply to all servers of the profile. These settings are the away state, the away note, and the selection to show as offline (D-019). The application has one control for them.
+
+**Reason.** One control is simple. A profile is already one part of the life of a user (D-147).
+
+**Not selected.**
+
+- One presence control for each server.
+
+### D-190 Fixed kind of a channel
+
+**Date.** 2026-11-22.
+
+**Decision.** The owner selects the kind of a channel, public or private (D-006), when the owner makes the channel. The kind does not change later.
+
+**Reason.** The messages of a private channel never show to people who got no invitation. Each chat tells the truth about who can read it.
+
+**Not selected.**
+
+- A kind that the owner can change in the two directions.
+- A change from public to private only.

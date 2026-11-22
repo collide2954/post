@@ -53,13 +53,13 @@ The `tools` directory holds the scripts of the automatic checks and the program 
 |---|---|
 | 0.1 | Slice: two users chat in one channel |
 | 0.2 | Identity, handles, handle change, invitations, TLS, application profiles, first settings screen, text size, protocol console |
-| 0.3 | Channels, members, presence, split panes, sidebar favorites |
-| 0.4 | History, unread counts, read position, drafts |
+| 0.3 | Channels, members, presence, typing indicator, slash commands, automatic reconnect, split panes, sidebar favorites |
+| 0.4 | History, unread counts, read position, drafts, pending messages, hide and mute |
 | 0.5 | Direct messages |
 | 0.6 | Replies, reactions, edit, delete, mentions, keyword highlights, mentions view, text format |
 | 0.7 | Files and images |
 | 0.8 | Search, notifications, message links, saved messages, export |
-| 0.9 | Moderation tools, administration in the application, server settings and limits, join policies, client requirements |
+| 0.9 | Moderation tools, moderators, channel modes, administration in the application, server settings and limits, join policies, client requirements |
 | 0.10 | Sealed chats |
 | 0.11 | Recovery phrase, device link, keychain, passphrase, application lock, account proof |
 | 0.12 | Voice: transport, relay, and sound path |
@@ -79,6 +79,8 @@ The public web view is an open decision (D-032). If the project selects it, it g
 - A thin voice slice directly after direct messages.
 
 **History.** On 2026-11-21, the question round for version 0.2 gave a version to functions that had none (D-167, D-173). The handle change, the first settings screen, and the text size went into version 0.2. The join policies went into version 0.9, the other appearance settings into version 0.15, and the links that open Post into version 0.16. On the same day, the client requirements went into version 0.9 (D-176).
+
+On 2026-11-22, the question round for version 0.3 gave a version to more functions (D-180, D-191). The typing indicator, the slash commands, and the automatic reconnect went into version 0.3. The pending messages, the hide function, and the mute function went into version 0.4. The moderators and the channel modes went into version 0.9.
 
 ### D-101 Tests first
 
@@ -476,3 +478,68 @@ The proof shows two properties. The reader gives back each value that the writer
 **Not selected.**
 
 - The library `base64`. Many projects use it, but the text form of keys then has no proof.
+
+### D-180 Content of version 0.3
+
+**Date.** 2026-11-22.
+
+**Decision.** Version 0.3 contains the functions that the roadmap gives (D-100). These rules also apply:
+
+- A member can make a channel, join a public channel, and leave a channel. A channel is public or private (D-006), and it has a topic (D-007).
+- The owner of a channel can rename the channel, give it to a different member, and delete it (D-185).
+- Moderators, announcement mode, and archive mode come in version 0.9 with the moderation tools (D-058, D-138). The powers to remove a member and to ban a member come in the same version.
+- The typing indicator (D-018) is in version 0.3, together with presence.
+- The slash commands (D-086) start in version 0.3 with the commands for the functions of this version. Each later version adds its commands.
+- The sidebar shows a mark on a chat that has new messages. The mark is for one run of the application only. Unread counts and the read position come in version 0.4.
+- The application connects again automatically after a connection stops (D-093). The user cannot write while the connection is down. Pending messages come in version 0.4, when each message gets an identifier.
+
+**Reason.** Version 0.3 gives a server its structure. The powers over people come later, together with their log. The typing indicator and presence are short signals that use the same part of the protocol. A user who is in more than one channel must see where the new messages are.
+
+**Not selected.**
+
+- Moderators and channel modes in version 0.3.
+- Only public channels in version 0.3.
+- The typing indicator in version 0.5 or in version 0.6.
+- The slash commands in version 0.6 or in version 0.15.
+- No mark for new messages before version 0.4.
+- Pending messages in version 0.3. Without identifiers, a message can arrive two times.
+- A connection that the user must start again by hand.
+
+### D-191 Details of version 0.3
+
+**Date.** 2026-11-22.
+
+**Decision.** These rules apply to version 0.3.
+
+Channels:
+
+- A channel name has 2 to 30 characters (D-023). The interface shows the character `#` before the name. The protocol does not use this character.
+- A topic is one line with a maximum of 300 characters.
+- A member can be the owner of a maximum of 10 channels. The operator setting for this limit comes in version 0.9 (D-134).
+- A channel rename obeys the limits of a handle change (D-024). The owner can rename a channel one time in 30 days, and the old name stays reserved for 30 days.
+- The channel list shows each public channel of the server with its name, its topic, and the number of its members. It also shows the private channels that invited the user.
+- Only the owner invites a member to a private channel. The member can refuse the invitation, and the owner can cancel it.
+- A server has no channel at its first start (D-136). The temporary channel `lobby` of version 0.1 and version 0.2 goes away.
+- A line in the timeline tells that a person joined or left the channel (D-124). It does not tell that a connection started or stopped. The presence dot shows that.
+
+Presence and the typing indicator:
+
+- A member sees the presence of the members of the channels that the member is in.
+- If an account has more than one connection, the other members see the state of the connection that is most present.
+- An away note has a maximum of 80 characters.
+- A user who shows as offline sends no typing signal.
+
+Application:
+
+- After a connection stops, the application waits 1 second and then tries again. Each later wait is two times the wait before it, to a maximum of 60 seconds.
+- Hide and mute (D-150) come in version 0.4 with the unread counts.
+- The quick switcher (D-079) comes in version 0.3.
+- The member list shows the members of the chat in the pane that has the focus.
+- The application keeps the arrangement of the panes in the profile.
+
+Engineering:
+
+- The proved rules core of the server gets the rules for channels and their members (D-178).
+- The protocol version stays 0 (D-156).
+
+**Reason.** These points are too small for a question, but each client and each server must agree on them. A written rule prevents a different result in each part of the code.

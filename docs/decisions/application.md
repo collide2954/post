@@ -355,3 +355,69 @@ Each later version adds its own settings. The other appearance settings come in 
 **Not selected.**
 
 - The Servers screen at each start.
+
+**History.** In version 0.3, the sidebar replaces the Servers screen (D-079). The application then connects to each server of the profile at the start (D-187).
+
+### D-182 Model of the split panes
+
+**Date.** 2026-11-22.
+
+**Decision.** A user can split a pane to the right or down (D-080). A new pane can split again. The user moves the line between two panes to change their sizes. Each pane shows one chat.
+
+**Reason.** This is the model of a code editor and of a terminal multiplexer, and many users know it. The toolkit has a widget for it.
+
+**Not selected.**
+
+- Columns only.
+- A maximum of two panes.
+
+### D-183 Order of the member list
+
+**Date.** 2026-11-22.
+
+**Decision.** The member list (D-079) shows the owner of the channel first. The moderators come next, from version 0.9. The other members come last. In each group, the members sort by name. A dot shows the presence of each member (D-019).
+
+**Reason.** This is the order of an IRC client. The roles in a channel are easy to see.
+
+**Not selected.**
+
+- An order by presence: online, away, and offline.
+- One list by name only.
+
+### D-186 Place of the favorites
+
+**Date.** 2026-11-22.
+
+**Decision.** The application keeps the favorites (D-150) in a file in the profile, on the computer of the user. The server does not get them.
+
+**Reason.** The function needs no protocol and no data on the server. The operator cannot see which chats a person marked.
+
+**Not selected.**
+
+- The favorites on the server, the same on each device of the user.
+
+### D-187 Connections at the start
+
+**Date.** 2026-11-22.
+
+**Decision.** At the start, the application connects to each server of the profile. If the user disconnects a server by hand, that server stays disconnected until the user connects it again. This rule also applies after the next start.
+
+**Reason.** The sidebar shows all communities immediately, as an IRC client with automatic connect does.
+
+**Not selected.**
+
+- A connection only to the server that was last in use.
+- No connection at the start.
+
+### D-188 Title of a server
+
+**Date.** 2026-11-22.
+
+**Decision.** The address of a server is its name. The sidebar shows the address as the title of the section of the server (D-079). A server has no other name.
+
+**Reason.** No person can give a server a false name. People have no display names for the same reason (D-025).
+
+**Not selected.**
+
+- A name that the operator sets.
+- A name that each user gives to a server in the application.
