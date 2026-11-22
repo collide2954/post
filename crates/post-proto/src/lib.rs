@@ -2,6 +2,7 @@ mod address;
 mod ascii;
 mod base64;
 mod bytes;
+mod channel;
 mod code;
 mod codec;
 mod message;
@@ -13,6 +14,7 @@ mod time;
 
 pub use address::{Address, AddressError, Host};
 pub use bytes::{BytesError, Key, Nonce, Signature};
+pub use channel::{ChannelName, ChannelNameError};
 pub use code::{Code, CodeError};
 #[cfg(verus_keep_ghost)]
 pub use code::{is_code, is_code_character};
@@ -24,7 +26,9 @@ pub use message::{
 pub use name::{Name, NameError};
 pub use part::{Part, PartError};
 pub use schema::{client_message_schema, server_message_schema};
-pub use text::{MAX_TEXT_CHARACTERS, TextError, check_text};
+pub use text::{
+    MAX_TEXT_CHARACTERS, MAX_TOPIC_CHARACTERS, TextError, TopicError, check_text, check_topic,
+};
 #[cfg(verus_keep_ghost)]
 pub use time::last_millis;
 pub use time::{Timestamp, TimestampError};

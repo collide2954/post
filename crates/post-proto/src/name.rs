@@ -99,7 +99,7 @@ impl Clone for Name {
     }
 }
 
-fn has_permitted_characters(bytes: &[u8]) -> (permitted: bool)
+pub(crate) fn has_permitted_characters(bytes: &[u8]) -> (permitted: bool)
     ensures
         permitted == has_name_characters(bytes@),
 {
