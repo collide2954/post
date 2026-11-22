@@ -182,6 +182,7 @@ A member of the server can make a channel. That member is the owner of the chann
 
 - A channel is public or private. The owner selects the kind when the owner makes the channel. The kind does not change.
 - Each member of the server can join a public channel. At this time, only the owner is a member of a private channel.
+- A public channel is in the channel list of the server. A private channel is not in the list.
 - A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel.
 - An account can be the owner of a maximum of 10 channels.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
@@ -350,6 +351,17 @@ The server answers with a `leave` message or with an `error` message. Each membe
 - If the user is not a member of the channel, the error is `not-member`.
 - If the user is the owner of the channel, the error is `owner-cannot-leave`.
 
+### `channels`
+
+The `channels` message asks for the channel list of the server.
+
+| Field | Value |
+|---|---|
+| `type` | `"channels"` |
+| `ref` | Optional. |
+
+The server answers with one or more `channels` messages, or with an `error` message.
+
 ## Messages from the server
 
 ### `challenge`
@@ -409,6 +421,28 @@ The `ready` message tells that the state after the sign-in is complete. The serv
 | `type` | `"ready"` |
 
 A client that connects again uses this message. If a channel that the client knew got no `channel` message before the `ready` message, the user is not a member of that channel now.
+
+### `channels`
+
+The `channels` message gives a part of the channel list of the server. The list contains each public channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"channels"` |
+| `ref` | The value from the request, if it had one. |
+| `list` | The channels of this part. |
+| `more` | Optional. The value `true` tells that a later `channels` message gives more channels. |
+
+The server sorts the channels by name. One message contains a maximum of 40 channels.
+
+Each entry of the list is an object with these fields:
+
+| Field | Value |
+|---|---|
+| `channel` | The name of the channel. |
+| `kind` | The kind of the channel: `"public"` or `"private"`. |
+| `topic` | The topic of the channel. The topic can be empty. |
+| `members` | The number of the members of the channel. |
 
 ### `join`
 
@@ -537,5 +571,5 @@ Each file in the [examples](examples) directory shows one connection.
 | [rename.txt](examples/rename.txt) | A user changes the name of the account. |
 | [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
 | [two-users.txt](examples/two-users.txt) | Two users exchange text. |
-| [channels.txt](examples/channels.txt) | A user makes a channel, joins a channel, and leaves a channel. |
+| [channels.txt](examples/channels.txt) | A user makes a channel, joins a channel, leaves a channel, and gets the channel list. |
 | [errors.txt](examples/errors.txt) | The server refuses other messages. |

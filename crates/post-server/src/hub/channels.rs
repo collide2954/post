@@ -1,4 +1,4 @@
-use post_proto::{ChannelKind, ChannelName, ErrorCode, LOBBY, ServerMessage};
+use post_proto::{ChannelKind, ChannelName, ErrorCode, LOBBY, ListedChannel, ServerMessage};
 use post_rules::{AccountId, Channel, ChannelLimits, CreateError, JoinError, Kind, LeaveError};
 
 use super::{
@@ -11,6 +11,8 @@ pub const CHANNEL_LIMITS: ChannelLimits = ChannelLimits {
     rename_interval: 30 * DAY,
     name_reserved: 30 * DAY,
 };
+
+const LISTED_IN_ONE_MESSAGE: usize = 40;
 
 impl Hub {
     pub(super) fn create_channel(
@@ -112,6 +114,42 @@ impl Hub {
         )
     }
 
+    pub(super) fn list_channels(&self, request: &Request<'_>) -> Answer {
+        let account = account_of(request.state)?;
+        let (channels, _) = self.channels.rows();
+        let mut list: Vec<ListedChannel> = channels
+            .iter()
+            .filter(|channel| !channel.kind.is_private() || channel.is_invited(account))
+            .map(|channel| ListedChannel {
+                channel: channel.name.clone(),
+                kind: kind_of(channel),
+                topic: channel.topic.clone(),
+                members: u32::try_from(channel.members.len()).unwrap_or(u32::MAX),
+            })
+            .collect();
+        list.sort_by(|first, second| first.channel.cmp(&second.channel));
+        let mut parts: Vec<Vec<ListedChannel>> = list
+            .chunks(LISTED_IN_ONE_MESSAGE)
+            .map(<[ListedChannel]>::to_vec)
+            .collect();
+        if parts.is_empty() {
+            parts.push(Vec::new());
+        }
+        let count = parts.len();
+        Ok(parts
+            .into_iter()
+            .enumerate()
+            .map(|(part, list)| Outgoing {
+                to: request.from,
+                message: ServerMessage::Channels {
+                    reference: request.reference,
+                    list,
+                    more: part + 1 < count,
+                },
+            })
+            .collect())
+    }
+
     fn visible(&self, account: AccountId, channel: &str) -> Result<&Channel, Refused> {
         let name = ChannelName::parse(channel).map_err(|_| ErrorCode::NoSuchChannel)?;
         let channel = self
@@ -179,11 +217,7 @@ impl Hub {
         Some(ServerMessage::Channel {
             reference,
             channel: channel.name.clone(),
-            kind: if channel.kind.is_private() {
-                ChannelKind::Private
-            } else {
-                ChannelKind::Public
-            },
+            kind: kind_of(channel),
             topic: channel.topic.clone(),
             owner: self.rules.name_of(channel.owner)?.clone(),
             created: channel.created,
@@ -192,5 +226,13 @@ impl Hub {
 
     fn connections_of(&self, account: AccountId) -> impl Iterator<Item = ConnectionId> {
         self.online.get(&account).into_iter().flatten().copied()
+    }
+}
+
+fn kind_of(channel: &Channel) -> ChannelKind {
+    if channel.kind.is_private() {
+        ChannelKind::Private
+    } else {
+        ChannelKind::Public
     }
 }

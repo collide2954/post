@@ -20,8 +20,8 @@ pub use code::{Code, CodeError};
 pub use code::{is_code, is_code_character};
 pub use codec::{DecodeError, MAX_LINE_BYTES};
 pub use message::{
-    ChannelKind, ClientMessage, DEFAULT_PORT, ErrorCode, Invitation, LOBBY, PROTOCOL_VERSION, Role,
-    ServerMessage,
+    ChannelKind, ClientMessage, DEFAULT_PORT, ErrorCode, Invitation, LOBBY, ListedChannel,
+    PROTOCOL_VERSION, Role, ServerMessage,
 };
 pub use name::{Name, NameError};
 pub use part::{Part, PartError};

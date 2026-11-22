@@ -152,6 +152,41 @@
       ]
     },
     {
+      "description": "Gives a part of the channel list of the server.",
+      "type": "object",
+      "properties": {
+        "list": {
+          "description": "The channels of this part, in the sequence of their names.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ListedChannel"
+          }
+        },
+        "more": {
+          "description": "The value `true` tells that a later message gives more channels.",
+          "type": "boolean"
+        },
+        "ref": {
+          "description": "The number from the request, if it had one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channels"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "list"
+      ]
+    },
+    {
       "description": "Tells that a user came into a channel.",
       "type": "object",
       "properties": {
@@ -575,6 +610,37 @@
       "description": "A public key: 32 bytes as base64url text with no `=` characters.",
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "ListedChannel": {
+      "description": "A channel in the channel list.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "kind": {
+          "description": "The kind of the channel.",
+          "$ref": "#/$defs/ChannelKind"
+        },
+        "members": {
+          "description": "The number of the members of the channel.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "topic": {
+          "description": "The topic of the channel. The topic can be empty.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "kind",
+        "topic",
+        "members"
+      ]
     },
     "Name": {
       "description": "The name of a user: 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore.",

@@ -1,4 +1,4 @@
-# A user makes a channel, joins a channel, and leaves a channel.
+# A user makes a channel, joins a channel, leaves a channel, and gets the channel list.
 # The lines show the connection of the user "ana". She has an account on the server.
 # "C:" is a line from the client. "S:" is a line from the server.
 
@@ -52,3 +52,7 @@ S: {"type":"message","ref":9,"channel":"general","from":"ana","time":"2026-11-21
 # Ana is not a member of the channel "dev", thus she cannot send a text to it.
 C: {"type":"send","ref":10,"channel":"dev","text":"Hello"}
 S: {"type":"error","ref":10,"code":"not-member","text":"You are not a member of this channel."}
+
+# Ana asks for the channel list. The list contains the public channels of the server.
+C: {"type":"channels","ref":11}
+S: {"type":"channels","ref":11,"list":[{"channel":"dev","kind":"public","topic":"","members":1},{"channel":"general","kind":"public","topic":"","members":1}]}

@@ -1,4 +1,6 @@
-use post_proto::{ChannelKind, ChannelName, ClientMessage, ErrorCode, LOBBY, Role, ServerMessage};
+use post_proto::{
+    ChannelKind, ChannelName, ClientMessage, ErrorCode, LOBBY, ListedChannel, Role, ServerMessage,
+};
 use post_rules::{AccountId, ChannelChange, ChannelHead, ChannelId, ChannelStorage as _, Kind};
 use post_testing::Directory;
 
@@ -517,4 +519,118 @@ fn keeps_the_temporary_lobby_and_the_channels_apart() {
 
     assert_eq!(to_the_lobby.len(), 3);
     assert_eq!(to_the_channel.len(), 1);
+}
+
+fn list(reference: u32) -> String {
+    ClientMessage::Channels {
+        reference: Some(reference),
+    }
+    .encode()
+}
+
+fn listed(title: &str, members: u32) -> ListedChannel {
+    ListedChannel {
+        channel: channel(title),
+        kind: ChannelKind::Public,
+        topic: String::new(),
+        members,
+    }
+}
+
+#[test]
+fn lists_the_public_channels_by_name_with_the_number_of_their_members() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &create(2, "dev", ChannelKind::Public), now());
+    hub.receive(ids[0], &create(3, "secret", ChannelKind::Private), now());
+    hub.receive(ids[2], &join(4, "general"), now());
+
+    for id in [ids[0], ids[2]] {
+        assert_eq!(
+            hub.receive(id, &list(5), now()),
+            [to(
+                id,
+                ServerMessage::Channels {
+                    reference: Some(5),
+                    list: vec![listed("dev", 1), listed("general", 2)],
+                    more: false,
+                }
+            )]
+        );
+    }
+}
+
+#[test]
+fn gives_an_empty_list_when_the_server_has_no_public_channel() {
+    let (mut hub, ana) = with_owner();
+    hub.receive(ana, &create(1, "secret", ChannelKind::Private), now());
+
+    assert_eq!(
+        hub.receive(ana, &list(2), now()),
+        [to(
+            ana,
+            ServerMessage::Channels {
+                reference: Some(2),
+                list: Vec::new(),
+                more: false,
+            }
+        )]
+    );
+}
+
+#[test]
+fn gives_a_long_channel_list_in_parts() {
+    let (mut hub, ids) = hub_with(&["ana", "ben", "cy", "dee", "eli"]);
+    for (person, id) in ids.iter().enumerate() {
+        for number in 0..9 {
+            let title = format!("room-{person}-{number}");
+            hub.receive(*id, &create(1, &title, ChannelKind::Public), now());
+        }
+    }
+
+    let outgoing = hub.receive(ids[4], &list(7), now());
+
+    let parts: Vec<(Option<u32>, Vec<String>, bool)> = outgoing
+        .iter()
+        .map(|part| match &part.message {
+            ServerMessage::Channels {
+                reference,
+                list,
+                more,
+            } => {
+                assert_eq!(part.to, ids[4]);
+                let names = list.iter().map(|entry| entry.channel.to_string()).collect();
+                (*reference, names, *more)
+            }
+            other => panic!("the server sends the channel list, not {other:?}"),
+        })
+        .collect();
+    assert_eq!(parts.len(), 2);
+    assert_eq!(
+        (parts[0].0, parts[0].1.len(), parts[0].2),
+        (Some(7), 40, true)
+    );
+    assert_eq!(
+        (parts[1].0, parts[1].1.len(), parts[1].2),
+        (Some(7), 5, false)
+    );
+    let names: Vec<&String> = parts.iter().flat_map(|part| &part.1).collect();
+    assert!(names.is_sorted());
+    assert_eq!(names[0], "room-0-0");
+    assert_eq!(names[44], "room-4-8");
+}
+
+#[test]
+fn refuses_the_channel_list_before_the_sign_in() {
+    let mut hub = new_hub();
+    let id = hub.connect();
+
+    assert_eq!(
+        hub.receive(id, &list(1), now()),
+        [to(id, error(Some(1), ErrorCode::HelloRequired))]
+    );
+    challenged(&mut hub, id, &[]);
+    assert_eq!(
+        hub.receive(id, &list(1), now()),
+        [to(id, error(Some(1), ErrorCode::IdentifyRequired))]
+    );
 }

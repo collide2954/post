@@ -379,6 +379,29 @@
         "type",
         "channel"
       ]
+    },
+    {
+      "description": "Asks for the channel list of the server.",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channels"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
     }
   ],
   "$defs": {

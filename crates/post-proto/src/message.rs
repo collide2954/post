@@ -126,6 +126,12 @@ pub enum ClientMessage {
         /// The name of the channel, without the `#` sign.
         channel: String,
     },
+    /// Asks for the channel list of the server.
+    Channels {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+    },
 }
 
 /// A message from the server to a client.
@@ -176,6 +182,17 @@ pub enum ServerMessage {
     },
     /// Tells that the state after the sign-in is complete.
     Ready {},
+    /// Gives a part of the channel list of the server.
+    Channels {
+        /// The number from the request, if it had one.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The channels of this part, in the sequence of their names.
+        list: Vec<ListedChannel>,
+        /// The value `true` tells that a later message gives more channels.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        more: bool,
+    },
     /// Tells that a user came into a channel.
     Join {
         /// The name of the channel, without the `#` sign.
@@ -261,6 +278,20 @@ pub struct Invitation {
     pub uses: Option<u32>,
     /// The number of accounts that the invitation made.
     pub used: u32,
+}
+
+/// A channel in the channel list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ListedChannel {
+    /// The name of the channel, without the `#` sign.
+    pub channel: ChannelName,
+    /// The kind of the channel.
+    pub kind: ChannelKind,
+    /// The topic of the channel. The topic can be empty.
+    pub topic: String,
+    /// The number of the members of the channel.
+    pub members: u32,
 }
 
 /// The cause of an error.
@@ -353,7 +384,8 @@ impl ClientMessage {
             | Self::Rename { reference, .. }
             | Self::ChannelCreate { reference, .. }
             | Self::Join { reference, .. }
-            | Self::Leave { reference, .. } => *reference,
+            | Self::Leave { reference, .. }
+            | Self::Channels { reference } => *reference,
         }
     }
 

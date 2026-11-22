@@ -231,6 +231,7 @@ impl Hub {
             }
             ClientMessage::Join { channel, .. } => self.join_channel(request, &channel),
             ClientMessage::Leave { channel, .. } => self.leave_channel(request, &channel),
+            ClientMessage::Channels { .. } => self.list_channels(request),
         }
     }
 

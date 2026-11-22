@@ -1,7 +1,8 @@
 use std::num::NonZeroU32;
 
 use super::{
-    ChannelKind, ClientMessage, ErrorCode, Invitation, PROTOCOL_VERSION, Role, ServerMessage,
+    ChannelKind, ClientMessage, ErrorCode, Invitation, ListedChannel, PROTOCOL_VERSION, Role,
+    ServerMessage,
 };
 use crate::{
     ChannelName, Code, DecodeError, Key, MAX_LINE_BYTES, Name, Nonce, Part, Signature, Timestamp,
@@ -51,6 +52,14 @@ fn client_examples() -> Vec<(ClientMessage, &'static str)> {
 
 fn channel_requests() -> Vec<(ClientMessage, &'static str)> {
     vec![
+        (
+            ClientMessage::Channels { reference: Some(8) },
+            r#"{"type":"channels","ref":8}"#,
+        ),
+        (
+            ClientMessage::Channels { reference: None },
+            r#"{"type":"channels"}"#,
+        ),
         (
             ClientMessage::Join {
                 reference: Some(6),
@@ -266,6 +275,35 @@ fn all_server_examples() -> Vec<(ServerMessage, &'static str)> {
 
 fn server_list_examples() -> Vec<(ServerMessage, &'static str)> {
     vec![
+        (
+            ServerMessage::Channels {
+                reference: Some(8),
+                list: vec![
+                    ListedChannel {
+                        channel: channel("dev-2"),
+                        kind: ChannelKind::Public,
+                        topic: "Plans for the week".to_owned(),
+                        members: 12,
+                    },
+                    ListedChannel {
+                        channel: channel("general"),
+                        kind: ChannelKind::Private,
+                        topic: String::new(),
+                        members: 1,
+                    },
+                ],
+                more: true,
+            },
+            r#"{"type":"channels","ref":8,"list":[{"channel":"dev-2","kind":"public","topic":"Plans for the week","members":12},{"channel":"general","kind":"private","topic":"","members":1}],"more":true}"#,
+        ),
+        (
+            ServerMessage::Channels {
+                reference: None,
+                list: Vec::new(),
+                more: false,
+            },
+            r#"{"type":"channels","list":[]}"#,
+        ),
         (
             ServerMessage::Invitations {
                 reference: Some(3),
@@ -738,6 +776,8 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"join","channel":"general","name":"ben","time":"2026-11-21T14:02:05.000Z"}"#,
         r#"{"type":"leave"}"#,
         r#"{"type":"leave","channel":"general","name":"ben"}"#,
+        r#"{"type":"channels","list":[]}"#,
+        r#"{"type":"channels","more":true}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -773,6 +813,12 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"join","channel":"general"}"#,
         r#"{"type":"leave","channel":"general"}"#,
         r#"{"type":"leave","ref":"7","channel":"general","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
+        r#"{"type":"channels"}"#,
+        r#"{"type":"channels","list":[],"more":"yes"}"#,
+        r#"{"type":"channels","list":[{"channel":"general","kind":"public","topic":""}]}"#,
+        r#"{"type":"channels","list":[{"channel":"general","kind":"public","topic":"","members":-1}]}"#,
+        r#"{"type":"channels","list":[{"channel":"General","kind":"public","topic":"","members":1}]}"#,
+        r#"{"type":"channels","list":[{"channel":"general","kind":"public","topic":"","members":1,"owner":"ana"}]}"#,
         r#"{"type":"channel-create","channel":"general","kind":"public"}"#,
     ] {
         assert!(
@@ -841,4 +887,18 @@ fn describes_each_decode_error() {
     );
     assert!(std::error::Error::source(&invalid).is_some());
     assert!(std::error::Error::source(&DecodeError::TooLong).is_none());
+}
+
+#[test]
+fn reads_a_channel_list_that_tells_that_it_is_complete() {
+    let line = r#"{"type":"channels","list":[],"more":false}"#;
+
+    assert_eq!(
+        ServerMessage::decode(line).expect(line),
+        ServerMessage::Channels {
+            reference: None,
+            list: Vec::new(),
+            more: false,
+        }
+    );
 }
