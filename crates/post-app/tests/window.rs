@@ -147,7 +147,7 @@ fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
     let (mut app, outbox) = signed_in_app(mode, role);
     let message = |from: &str, clock: &str, text: &str| ServerMessage::Message {
         reference: None,
-        channel: "general".to_owned(),
+        channel: channel("general"),
         from: name(from),
         time: time(clock),
         text: text.to_owned(),
@@ -156,7 +156,7 @@ fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
         channel_state("general"),
         ServerMessage::Ready {},
         ServerMessage::Join {
-            channel: "general".to_owned(),
+            channel: channel("general"),
             name: name("ben"),
             time: time("14:02:05"),
         },
@@ -170,7 +170,7 @@ fn chat_app_as(mode: Mode, role: Role) -> (App, Outbox) {
         ),
         ServerMessage::Leave {
             reference: None,
-            channel: "general".to_owned(),
+            channel: channel("general"),
             name: name("ben"),
             time: time("14:05:00"),
         },
@@ -629,7 +629,7 @@ fn channels_app(mode: Mode, role: Role) -> (App, Outbox) {
         channel_state("dev"),
         ServerMessage::Message {
             reference: None,
-            channel: "dev".to_owned(),
+            channel: channel("dev"),
             from: name("ben"),
             time: time("14:06:00"),
             text: "This is the channel for the code.".to_owned(),

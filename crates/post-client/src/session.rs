@@ -302,22 +302,18 @@ impl Session {
         }
     }
 
-    fn record(&mut self, channel: &str, entry: Entry) {
-        if let Ok(channel) = ChannelName::parse(channel)
-            && let Some(state) = self.channels.get_mut(&channel)
-        {
+    fn record(&mut self, channel: &ChannelName, entry: Entry) {
+        if let Some(state) = self.channels.get_mut(channel) {
             state.entries.push(entry);
         }
     }
 
-    fn left(&mut self, channel: &str, name: Name, time: Timestamp) {
-        if name == self.name
-            && let Ok(channel) = ChannelName::parse(channel)
-        {
-            self.channels.remove(&channel);
-            return;
+    fn left(&mut self, channel: &ChannelName, name: Name, time: Timestamp) {
+        if name == self.name {
+            self.channels.remove(channel);
+        } else {
+            self.record(channel, Entry::Left { time, name });
         }
-        self.record(channel, Entry::Left { time, name });
     }
 
     fn renamed(&mut self, old: &Name, new: &Name, time: Timestamp) {

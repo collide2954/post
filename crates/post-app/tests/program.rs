@@ -332,7 +332,7 @@ fn invite_and_answer_in_a_channel_as_ben(backstage: &Backstage, channel: &str) -
                 {
                     let answer = ClientMessage::Send {
                         reference: None,
-                        channel,
+                        channel: channel.as_str().to_owned(),
                         text: "Hi ana".to_owned(),
                     };
                     assert!(link.as_ref().is_some_and(|link| link.send(answer)));

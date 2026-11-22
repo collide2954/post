@@ -301,7 +301,7 @@ mod tests {
             "[::1]x",
             "caf\u{e9}.example",
             ":7678",
-            "#lobby",
+            "#general",
             "chat..example.org",
             ".example.org",
             "example.org.",

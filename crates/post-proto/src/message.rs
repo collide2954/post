@@ -8,7 +8,6 @@ use crate::{ChannelName, Code, Key, Name, Nonce, Part, Signature, Timestamp};
 
 pub const PROTOCOL_VERSION: u32 = 0;
 pub const DEFAULT_PORT: u16 = 7678;
-pub const LOBBY: &str = "lobby";
 
 /// A message from a client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -196,7 +195,7 @@ pub enum ServerMessage {
     /// Tells that a user came into a channel.
     Join {
         /// The name of the channel, without the `#` sign.
-        channel: String,
+        channel: ChannelName,
         /// The name of the user.
         name: Name,
         /// The time when the user came in.
@@ -208,7 +207,7 @@ pub enum ServerMessage {
         #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
         reference: Option<u32>,
         /// The name of the channel, without the `#` sign.
-        channel: String,
+        channel: ChannelName,
         /// The name of the user.
         name: Name,
         /// The time when the user went out.
@@ -220,7 +219,7 @@ pub enum ServerMessage {
         #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
         reference: Option<u32>,
         /// The name of the channel, without the `#` sign.
-        channel: String,
+        channel: ChannelName,
         /// The name of the sender.
         from: Name,
         /// The time when the server got the message.

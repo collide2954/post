@@ -193,7 +193,7 @@ mod tests {
     fn message(from: &str, text: &str) -> ServerMessage {
         ServerMessage::Message {
             reference: None,
-            channel: "general".to_owned(),
+            channel: channel("general"),
             from: name(from),
             time: clock(),
             text: text.to_owned(),

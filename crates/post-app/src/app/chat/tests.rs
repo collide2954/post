@@ -156,7 +156,7 @@ fn records_what_the_server_sends() {
     let (mut chat, _outbox) = chat(4);
 
     let effect = chat.receive(ServerMessage::Join {
-        channel: "general".to_owned(),
+        channel: channel("general"),
         name: name("ben"),
         time: time(),
     });
@@ -588,7 +588,7 @@ fn state(reference: Option<u32>, title: &str) -> ServerMessage {
 fn left(title: &str, who: &str) -> ServerMessage {
     ServerMessage::Leave {
         reference: None,
-        channel: title.to_owned(),
+        channel: channel(title),
         name: name(who),
         time: time(),
     }
@@ -808,7 +808,7 @@ fn forgets_an_error_when_the_user_selects_a_channel() {
 fn text_in(title: &str, text: &str) -> ServerMessage {
     ServerMessage::Message {
         reference: None,
-        channel: title.to_owned(),
+        channel: channel(title),
         from: name("ben"),
         time: time(),
         text: text.to_owned(),

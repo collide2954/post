@@ -15,27 +15,27 @@ fn time(second: u8) -> Timestamp {
     Timestamp::parse(&format!("2026-11-21T14:02:{second:02}.000Z")).expect("valid")
 }
 
-fn join(channel: &str, who: &str, second: u8) -> ServerMessage {
+fn join(title: &str, who: &str, second: u8) -> ServerMessage {
     ServerMessage::Join {
-        channel: channel.to_owned(),
+        channel: channel(title),
         name: name(who),
         time: time(second),
     }
 }
 
-fn leave(channel: &str, who: &str, second: u8) -> ServerMessage {
+fn leave(title: &str, who: &str, second: u8) -> ServerMessage {
     ServerMessage::Leave {
         reference: None,
-        channel: channel.to_owned(),
+        channel: channel(title),
         name: name(who),
         time: time(second),
     }
 }
 
-fn message(channel: &str, from: &str, second: u8, text: &str) -> ServerMessage {
+fn message(title: &str, from: &str, second: u8, text: &str) -> ServerMessage {
     ServerMessage::Message {
         reference: None,
-        channel: channel.to_owned(),
+        channel: channel(title),
         from: name(from),
         time: time(second),
         text: text.to_owned(),

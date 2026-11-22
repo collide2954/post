@@ -1,12 +1,10 @@
-use post_proto::{
-    ChannelKind, ChannelName, ClientMessage, ErrorCode, ListedChannel, Role, ServerMessage,
-};
+use post_proto::{ChannelKind, ClientMessage, ErrorCode, ListedChannel, Role, ServerMessage};
 use post_rules::{AccountId, ChannelChange, ChannelHead, ChannelId, ChannelStorage as _, Kind};
 use post_testing::Directory;
 
 use super::{
-    challenged, error, hub_with, identify, later, name, new_hub, now, owner_code, random, ready,
-    registered, send, settings, to, welcome, with_owner,
+    challenged, channel, error, hub_with, identify, later, name, new_hub, now, owner_code, random,
+    ready, registered, send, settings, to, welcome, with_owner,
 };
 use crate::hub::{ConnectionId, Hub};
 use crate::store::{Store, StoreError};
@@ -18,10 +16,6 @@ fn create(reference: u32, channel: &str, kind: ChannelKind) -> String {
         kind,
     }
     .encode()
-}
-
-fn channel(text: &str) -> ChannelName {
-    ChannelName::parse(text).expect(text)
 }
 
 fn state(reference: Option<u32>, title: &str, kind: ChannelKind, owner: &str) -> ServerMessage {
@@ -245,7 +239,7 @@ fn leave(reference: u32, channel: &str) -> String {
 
 fn joined(title: &str, who: &str) -> ServerMessage {
     ServerMessage::Join {
-        channel: title.to_owned(),
+        channel: channel(title),
         name: name(who),
         time: now(),
     }
@@ -310,7 +304,7 @@ fn a_member_leaves_a_channel_and_each_member_gets_the_news() {
 
     let left = |reference| ServerMessage::Leave {
         reference,
-        channel: "general".to_owned(),
+        channel: channel("general"),
         name: name("ben"),
         time: later(),
     };
@@ -439,7 +433,7 @@ fn sends_a_text_to_each_connection_of_each_member_of_the_channel() {
 
     let message = |reference| ServerMessage::Message {
         reference,
-        channel: "general".to_owned(),
+        channel: channel("general"),
         from: name("ben"),
         time: later(),
         text: "Hello".to_owned(),

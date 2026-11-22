@@ -192,7 +192,7 @@
       "properties": {
         "channel": {
           "description": "The name of the channel, without the `#` sign.",
-          "type": "string"
+          "$ref": "#/$defs/ChannelName"
         },
         "name": {
           "description": "The name of the user.",
@@ -221,7 +221,7 @@
       "properties": {
         "channel": {
           "description": "The name of the channel, without the `#` sign.",
-          "type": "string"
+          "$ref": "#/$defs/ChannelName"
         },
         "name": {
           "description": "The name of the user.",
@@ -259,7 +259,7 @@
       "properties": {
         "channel": {
           "description": "The name of the channel, without the `#` sign.",
-          "type": "string"
+          "$ref": "#/$defs/ChannelName"
         },
         "from": {
           "description": "The name of the sender.",

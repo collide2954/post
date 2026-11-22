@@ -314,7 +314,7 @@ mod tests {
             ("https://", DestinationError::Invalid),
             ("local host", DestinationError::Invalid),
             ("ws://localhost:7678", DestinationError::Invalid),
-            ("#lobby", DestinationError::Invalid),
+            ("#general", DestinationError::Invalid),
             ("chat.example.org:port", DestinationError::InvalidPort),
             ("localhost:0", DestinationError::InvalidPort),
             ("http://chat.example.org", DestinationError::NotLocal),
@@ -339,7 +339,7 @@ mod tests {
                 "https://chat.example.org/i/7Hq2kdX9mPq4?x=1",
                 DestinationError::InvalidLink,
             ),
-            ("chat.example.org/lobby", DestinationError::InvalidLink),
+            ("chat.example.org/general", DestinationError::InvalidLink),
         ] {
             assert_eq!(Destination::parse(text), Err(error), "{text:?}");
         }

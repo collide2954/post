@@ -56,7 +56,7 @@ impl Hub {
         let channel = self.channels.by_id(id).ok_or(ErrorCode::ServerError)?;
         let mut outgoing = self.states_for(channel, member.account, request);
         outgoing.extend(self.to_each_member_of(channel, |_| ServerMessage::Join {
-            channel: name.as_str().to_owned(),
+            channel: name.clone(),
             name: member.name.clone(),
             time: request.now,
         }));
@@ -82,7 +82,7 @@ impl Hub {
                 to,
                 message: ServerMessage::Leave {
                     reference: request.reference.filter(|_| to == request.from),
-                    channel: name.as_str().to_owned(),
+                    channel: name.clone(),
                     name: member.name.clone(),
                     time: request.now,
                 },
@@ -100,7 +100,7 @@ impl Hub {
         Ok(
             self.to_each_member_of(channel, |to| ServerMessage::Message {
                 reference: request.reference.filter(|_| to == request.from),
-                channel: channel.name.as_str().to_owned(),
+                channel: channel.name.clone(),
                 from: member.name.clone(),
                 time: request.now,
                 text: text.to_owned(),

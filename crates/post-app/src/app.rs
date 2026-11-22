@@ -444,16 +444,16 @@ mod tests {
             Effect::Remember(server("localhost:7678", 1, who))
         );
         assert!(matches!(app.screen(), Screen::Chat(_)));
-        let general = ServerMessage::Channel {
+        let state = ServerMessage::Channel {
             reference: None,
-            channel: ChannelName::parse("general").expect("valid"),
+            channel: general(),
             kind: ChannelKind::Public,
             topic: String::new(),
             owner: name(who),
             created: time(),
         };
         let received = [
-            (general, Effect::None),
+            (state, Effect::None),
             (ServerMessage::Ready {}, Effect::FocusDraft),
         ];
         for (message, effect) in received {
@@ -491,9 +491,13 @@ mod tests {
         Timestamp::parse("2026-11-21T14:02:00.000Z").expect("valid")
     }
 
+    fn general() -> ChannelName {
+        ChannelName::parse("general").expect("valid")
+    }
+
     fn joined(who: &str) -> ServerMessage {
         ServerMessage::Join {
-            channel: "general".to_owned(),
+            channel: general(),
             name: name(who),
             time: time(),
         }

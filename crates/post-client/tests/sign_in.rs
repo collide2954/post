@@ -892,7 +892,7 @@ fn a_link_gives_messages_and_typed_lines_to_its_queue() {
     let (link, mut queue) = Link::channel(name("ana"), Role::Member, server_key().public(), 2);
     let hello = ClientMessage::Send {
         reference: None,
-        channel: "lobby".to_owned(),
+        channel: "general".to_owned(),
         text: "Hello".to_owned(),
     };
 

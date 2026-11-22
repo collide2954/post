@@ -267,7 +267,7 @@ async fn share_the_channel_general(owner: &mut Socket, member: &mut Socket, who:
     ));
     for socket in [owner, member] {
         assert!(
-            matches!(read(socket).await, ServerMessage::Join { channel, name: joined, .. } if channel == "general" && joined == name(who))
+            matches!(read(socket).await, ServerMessage::Join { channel, name: joined, .. } if channel.as_str() == "general" && joined == name(who))
         );
     }
 }
@@ -684,7 +684,7 @@ async fn two_users_exchange_text() {
         panic!("the sender gets the message");
     };
     assert_eq!(reference, Some(1));
-    assert_eq!(channel, "general");
+    assert_eq!(channel.as_str(), "general");
     assert_eq!(from, name("ana"));
     assert_eq!(text, "Hello");
     assert_eq!(
@@ -704,7 +704,7 @@ async fn two_users_exchange_text() {
     };
     write(&mut ben, &leave).await;
     assert!(
-        matches!(read(&mut ana).await, ServerMessage::Leave { channel, name: left, .. } if channel == "general" && left == name("ben"))
+        matches!(read(&mut ana).await, ServerMessage::Leave { channel, name: left, .. } if channel.as_str() == "general" && left == name("ben"))
     );
 }
 

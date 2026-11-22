@@ -112,18 +112,18 @@ fn other_requests() -> Vec<(ClientMessage, &'static str)> {
         (
             ClientMessage::Send {
                 reference: Some(1),
-                channel: "lobby".to_owned(),
+                channel: "general".to_owned(),
                 text: "Hello".to_owned(),
             },
-            r#"{"type":"send","ref":1,"channel":"lobby","text":"Hello"}"#,
+            r#"{"type":"send","ref":1,"channel":"general","text":"Hello"}"#,
         ),
         (
             ClientMessage::Send {
                 reference: None,
-                channel: "lobby".to_owned(),
+                channel: "general".to_owned(),
                 text: "two\nlines".to_owned(),
             },
-            r#"{"type":"send","channel":"lobby","text":"two\nlines"}"#,
+            r#"{"type":"send","channel":"general","text":"two\nlines"}"#,
         ),
         (
             ClientMessage::Invite {
@@ -212,25 +212,25 @@ fn server_examples() -> Vec<(ServerMessage, &'static str)> {
         ),
         (
             ServerMessage::Join {
-                channel: "lobby".to_owned(),
+                channel: channel("general"),
                 name: name("ben"),
                 time: time("2026-11-21T14:02:05.000Z"),
             },
-            r#"{"type":"join","channel":"lobby","name":"ben","time":"2026-11-21T14:02:05.000Z"}"#,
+            r#"{"type":"join","channel":"general","name":"ben","time":"2026-11-21T14:02:05.000Z"}"#,
         ),
         (
             ServerMessage::Leave {
                 reference: None,
-                channel: "lobby".to_owned(),
+                channel: channel("general"),
                 name: name("ben"),
                 time: time("2026-11-21T14:03:00.000Z"),
             },
-            r#"{"type":"leave","channel":"lobby","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
+            r#"{"type":"leave","channel":"general","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
         ),
         (
             ServerMessage::Leave {
                 reference: Some(7),
-                channel: "general".to_owned(),
+                channel: channel("general"),
                 name: name("ana"),
                 time: time("2026-11-21T14:03:00.000Z"),
             },
@@ -239,22 +239,22 @@ fn server_examples() -> Vec<(ServerMessage, &'static str)> {
         (
             ServerMessage::Message {
                 reference: Some(1),
-                channel: "lobby".to_owned(),
+                channel: channel("general"),
                 from: name("ana"),
                 time: time("2026-11-21T14:02:07.120Z"),
                 text: "Hello".to_owned(),
             },
-            r#"{"type":"message","ref":1,"channel":"lobby","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#,
+            r#"{"type":"message","ref":1,"channel":"general","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#,
         ),
         (
             ServerMessage::Message {
                 reference: None,
-                channel: "lobby".to_owned(),
+                channel: channel("general"),
                 from: name("ben"),
                 time: time("2026-11-21T14:02:09.480Z"),
                 text: "Hi".to_owned(),
             },
-            r#"{"type":"message","channel":"lobby","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi"}"#,
+            r#"{"type":"message","channel":"general","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi"}"#,
         ),
         (
             ServerMessage::Error {
@@ -507,11 +507,6 @@ fn the_protocol_version_is_zero() {
 }
 
 #[test]
-fn the_one_channel_has_the_name_lobby() {
-    assert_eq!(crate::LOBBY, "lobby");
-}
-
-#[test]
 fn the_default_port_spells_post_on_a_telephone_keypad() {
     assert_eq!(crate::DEFAULT_PORT, 7678);
 }
@@ -721,7 +716,7 @@ fn each_error_code_has_a_word_form_and_a_text() {
 fn writes_a_line_break_in_a_text_as_an_escape() {
     let line = ClientMessage::Send {
         reference: None,
-        channel: "lobby".to_owned(),
+        channel: "general".to_owned(),
         text: "one\r\ntwo".to_owned(),
     }
     .encode();
@@ -739,16 +734,16 @@ fn refuses_a_line_that_is_not_a_known_message() {
         "{}",
         r#"{"type":"dance"}"#,
         r#"{"type":"send"}"#,
-        r#"{"type":"send","channel":"lobby"}"#,
+        r#"{"type":"send","channel":"general"}"#,
         r#"{"type":"send","channel":7,"text":"Hello"}"#,
-        r#"{"type":"send","channel":"lobby","text":"Hello","extra":1}"#,
-        r#"{"type":"send","ref":-1,"channel":"lobby","text":"Hello"}"#,
-        r#"{"type":"send","ref":4294967296,"channel":"lobby","text":"Hello"}"#,
-        r#"{"type":"send","ref":1.5,"channel":"lobby","text":"Hello"}"#,
-        r#"{"type":"SEND","channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"send","channel":"general","text":"Hello","extra":1}"#,
+        r#"{"type":"send","ref":-1,"channel":"general","text":"Hello"}"#,
+        r#"{"type":"send","ref":4294967296,"channel":"general","text":"Hello"}"#,
+        r#"{"type":"send","ref":1.5,"channel":"general","text":"Hello"}"#,
+        r#"{"type":"SEND","channel":"general","text":"Hello"}"#,
         r#"{"type":"guest","protocol":0,"name":"ana"}"#,
         r#"{"type":"welcome","name":"ana","role":"member"}"#,
-        r#"{"type":"send","channel":"lobby","text":"Hello"} x"#,
+        r#"{"type":"send","channel":"general","text":"Hello"} x"#,
         r#"{"type":"invite","lifetime":0}"#,
         r#"{"type":"invite","lifetime":-1}"#,
         r#"{"type":"invite","lifetime":4294967296}"#,
@@ -791,10 +786,10 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
     for line in [
         r#"{"type":"welcome","name":"Ana","role":"member"}"#,
         r#"{"type":"welcome","name":"a","role":"member"}"#,
-        r#"{"type":"join","channel":"lobby","name":"ben","time":"yesterday"}"#,
-        r#"{"type":"join","channel":"lobby","name":"ben","time":1795269727120}"#,
+        r#"{"type":"join","channel":"general","name":"ben","time":"yesterday"}"#,
+        r#"{"type":"join","channel":"general","name":"ben","time":1795269727120}"#,
         r#"{"type":"error","code":"no-such-code","text":"x"}"#,
-        r#"{"type":"send","channel":"lobby","text":"Hello"}"#,
+        r#"{"type":"send","channel":"general","text":"Hello"}"#,
         r#"{"type":"invitations"}"#,
         r#"{"type":"invitations","list":{}}"#,
         r#"{"type":"rename","name":"anna"}"#,
@@ -811,6 +806,9 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T14:02:05.000Z","members":1}"#,
         r#"{"type":"ready","ref":1}"#,
         r#"{"type":"join","channel":"general"}"#,
+        r#"{"type":"join","channel":"Not A Name","name":"ben","time":"2026-11-21T14:02:05.000Z"}"#,
+        r#"{"type":"leave","channel":"g","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
+        r#"{"type":"message","channel":"General","from":"ana","time":"2026-11-21T14:02:07.120Z","text":"Hello"}"#,
         r#"{"type":"leave","channel":"general"}"#,
         r#"{"type":"leave","ref":"7","channel":"general","name":"ben","time":"2026-11-21T14:03:00.000Z"}"#,
         r#"{"type":"channels"}"#,
@@ -831,9 +829,9 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
 #[test]
 fn refuses_a_message_on_more_than_one_line() {
     for line in [
-        "{\"type\":\"send\",\n\"channel\":\"lobby\",\"text\":\"Hello\"}",
-        "{\"type\":\"send\",\"channel\":\"lobby\",\"text\":\"Hello\"}\n",
-        "{\"type\":\"send\",\r\"channel\":\"lobby\",\"text\":\"Hello\"}",
+        "{\"type\":\"send\",\n\"channel\":\"general\",\"text\":\"Hello\"}",
+        "{\"type\":\"send\",\"channel\":\"general\",\"text\":\"Hello\"}\n",
+        "{\"type\":\"send\",\r\"channel\":\"general\",\"text\":\"Hello\"}",
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::LineBreak)),
@@ -850,7 +848,7 @@ fn refuses_a_message_on_more_than_one_line() {
 fn refuses_a_line_that_is_too_long() {
     assert_eq!(MAX_LINE_BYTES, 65_536);
 
-    let start = r#"{"type":"send","channel":"lobby","text":""#;
+    let start = r#"{"type":"send","channel":"general","text":""#;
     let end = r#""}"#;
     let fill = MAX_LINE_BYTES - start.len() - end.len();
 

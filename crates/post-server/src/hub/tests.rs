@@ -2,8 +2,8 @@ use std::num::NonZeroU32;
 
 use post_crypto::{Exchange, Seed};
 use post_proto::{
-    ChannelKind, ClientMessage, Code, ErrorCode, Invitation, Key, Name, Nonce, Part, Role,
-    ServerMessage, Signature, Timestamp,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, Key, Name, Nonce, Part,
+    Role, ServerMessage, Signature, Timestamp,
 };
 
 use post_rules::{Change, Storage as _};
@@ -27,6 +27,10 @@ fn later() -> Timestamp {
 
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
+}
+
+fn channel(text: &str) -> ChannelName {
+    ChannelName::parse(text).expect(text)
 }
 
 fn send(reference: Option<u32>, channel: &str, text: &str) -> String {
@@ -129,7 +133,7 @@ fn sends_a_text_to_each_member_and_gives_the_number_only_to_the_sender() {
 
     let message = |reference| ServerMessage::Message {
         reference,
-        channel: "general".to_owned(),
+        channel: channel("general"),
         from: name("ben"),
         time: now(),
         text: "Hello".to_owned(),
@@ -156,7 +160,7 @@ fn keeps_the_text_as_the_user_wrote_it() {
             ids[0],
             ServerMessage::Message {
                 reference: None,
-                channel: "general".to_owned(),
+                channel: channel("general"),
                 from: name("ana"),
                 time: now(),
                 text: "  two\n  lines  ".to_owned(),
