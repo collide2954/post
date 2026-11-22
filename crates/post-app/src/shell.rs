@@ -8,7 +8,9 @@ use iced::{
 use jiff::tz::TimeZone;
 use post_client::{Home, Identity, Profile, Profiles, Seed};
 
-use crate::app::{App, Effect, Message, StartProblem, Target};
+use crate::app::servers::Target;
+use crate::app::start::StartProblem;
+use crate::app::{App, Effect, Message};
 use crate::i18n::{Language, Strings, Text};
 use crate::palette::Mode;
 use crate::view::{self, Window};

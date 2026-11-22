@@ -5,7 +5,8 @@ use iced::keyboard::key::Named;
 use iced::{Pixels, Settings, Size};
 use iced_test::{Simulator, selector};
 use jiff::tz::TimeZone;
-use post_app::app::{App, Message, StartProblem};
+use post_app::app::start::StartProblem;
+use post_app::app::{App, Message, chat, servers};
 use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
 use post_app::view::{self, Window};
@@ -51,13 +52,15 @@ fn new_app(mode: Mode) -> App {
 
 fn connect_app(mode: Mode) -> App {
     let mut app = new_app(mode);
-    app.update(Message::NameChanged("ana".to_owned()));
+    app.update(Message::Servers(servers::Message::NameChanged(
+        "ana".to_owned(),
+    )));
     app
 }
 
 fn connecting_app(mode: Mode) -> App {
     let mut app = connect_app(mode);
-    app.update(Message::Connect);
+    app.update(Message::Servers(servers::Message::Connect));
     app
 }
 
@@ -115,7 +118,7 @@ fn the_name_field_gets_the_keys_that_the_user_types() {
 
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::NameChanged(name)] if name == "a"),
+        matches!(messages.as_slice(), [Message::Servers(servers::Message::NameChanged(name))] if name == "a"),
         "{messages:?}"
     );
 }
@@ -132,7 +135,7 @@ fn the_server_field_shows_the_local_address() {
 
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::AddressChanged(address)] if address == "localhost:76780"),
+        matches!(messages.as_slice(), [Message::Servers(servers::Message::AddressChanged(address))] if address == "localhost:76780"),
         "{messages:?}"
     );
 }
@@ -147,7 +150,10 @@ fn the_connect_button_and_the_enter_key_start_a_connection() {
         .expect("the connect screen has a button");
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::Connect]),
+        matches!(
+            messages.as_slice(),
+            [Message::Servers(servers::Message::Connect)]
+        ),
         "{messages:?}"
     );
 
@@ -158,7 +164,10 @@ fn the_connect_button_and_the_enter_key_start_a_connection() {
     interface.tap_key(Named::Enter);
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::Connect]),
+        matches!(
+            messages.as_slice(),
+            [Message::Servers(servers::Message::Connect)]
+        ),
         "{messages:?}"
     );
 }
@@ -166,8 +175,10 @@ fn the_connect_button_and_the_enter_key_start_a_connection() {
 #[test]
 fn the_connect_screen_shows_a_problem() {
     let mut app = new_app(Mode::Light);
-    app.update(Message::NameChanged("a".to_owned()));
-    app.update(Message::Connect);
+    app.update(Message::Servers(servers::Message::NameChanged(
+        "a".to_owned(),
+    )));
+    app.update(Message::Servers(servers::Message::Connect));
     let window = window(app, Language::English);
     let mut interface = simulator(&window);
 
@@ -207,7 +218,10 @@ fn the_fields_do_not_change_while_the_application_connects() {
 
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::Leave]),
+        matches!(
+            messages.as_slice(),
+            [Message::Servers(servers::Message::Cancel)]
+        ),
         "{messages:?}"
     );
 }
@@ -249,7 +263,7 @@ fn the_message_field_sends_the_draft_with_the_enter_key() {
 
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::DraftChanged(draft), Message::Send] if draft == "h"),
+        matches!(messages.as_slice(), [Message::Chat(chat::Message::DraftChanged(draft)), Message::Chat(chat::Message::Send)] if draft == "h"),
         "{messages:?}"
     );
 }
@@ -266,7 +280,7 @@ fn the_leave_button_leaves_the_chat() {
 
     let messages: Vec<Message> = interface.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::Leave]),
+        matches!(messages.as_slice(), [Message::Chat(chat::Message::Leave)]),
         "{messages:?}"
     );
 }

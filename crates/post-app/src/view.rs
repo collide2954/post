@@ -11,7 +11,10 @@ use jiff::tz::TimeZone;
 use post_client::Entry;
 use post_proto::LOBBY;
 
-use crate::app::{App, Chat, Form, Message, Screen, StartProblem, Target};
+use crate::app::chat::{self, Chat};
+use crate::app::servers::{self, Form, Target};
+use crate::app::start::StartProblem;
+use crate::app::{App, Message, Screen};
 use crate::i18n::{Strings, Text};
 use crate::palette::{Mode, Palette, Rgb};
 use crate::timeline::{clock, name_column, shows_name};
@@ -72,12 +75,24 @@ pub fn view(window: &Window) -> Element<'_, Message> {
     let palette = Palette::of(window.app.mode());
     match window.app.screen() {
         Screen::Stopped(problem) => stopped_screen(&window.strings, problem, palette),
-        Screen::Connect(form) => connect_screen(&window.strings, form, None, palette),
-        Screen::Connecting { form, target } => {
-            connect_screen(&window.strings, form, Some(target), palette)
-        }
+        Screen::Servers(servers) => connect_screen(
+            &window.strings,
+            servers.form(),
+            servers.connecting(),
+            palette,
+        ),
         Screen::Chat(chat) => chat_screen(window, chat, palette),
     }
+}
+
+const CONNECT: Message = Message::Servers(servers::Message::Connect);
+
+fn address_changed(address: String) -> Message {
+    Message::Servers(servers::Message::AddressChanged(address))
+}
+
+fn name_changed(name: String) -> Message {
+    Message::Servers(servers::Message::NameChanged(name))
 }
 
 fn stopped_screen<'a>(
@@ -107,14 +122,14 @@ fn connect_screen<'a>(
     let idle = connecting.is_none();
 
     let address = text_input("localhost", &form.address)
-        .on_input_maybe(idle.then_some(Message::AddressChanged))
-        .on_submit_maybe(idle.then_some(Message::Connect))
+        .on_input_maybe(idle.then_some(address_changed))
+        .on_submit_maybe(idle.then_some(CONNECT))
         .padding([8, 10])
         .style(move |_, status| field_style(palette, status, 1.0));
     let name = text_input("", &form.name)
         .id(NAME_FIELD)
-        .on_input_maybe(idle.then_some(Message::NameChanged))
-        .on_submit_maybe(idle.then_some(Message::Connect))
+        .on_input_maybe(idle.then_some(name_changed))
+        .on_submit_maybe(idle.then_some(CONNECT))
         .padding([8, 10])
         .style(move |_, status| field_style(palette, status, 1.0));
 
@@ -135,11 +150,11 @@ fn connect_screen<'a>(
     };
 
     let action = if idle {
-        primary_button(strings.text(Text::ConnectButton), Message::Connect, palette)
+        primary_button(strings.text(Text::ConnectButton), CONNECT, palette)
     } else {
         primary_button(
             strings.text(Text::ConnectCancelButton),
-            Message::Leave,
+            Message::Servers(servers::Message::Cancel),
             palette,
         )
     };
@@ -172,7 +187,11 @@ fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Elem
         text(strings.with(Text::ChatStatus, "name", session.name().as_str()))
             .size(13)
             .color(color(palette.muted)),
-        link_button(strings.text(Text::ChatLeaveButton), Message::Leave, palette),
+        link_button(
+            strings.text(Text::ChatLeaveButton),
+            Message::Chat(chat::Message::Leave),
+            palette
+        ),
     ]
     .spacing(12)
     .align_y(Alignment::Center)
@@ -203,8 +222,8 @@ fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Elem
         chat.draft(),
     )
     .id(DRAFT_FIELD)
-    .on_input(Message::DraftChanged)
-    .on_submit(Message::Send)
+    .on_input(|draft| Message::Chat(chat::Message::DraftChanged(draft)))
+    .on_submit(Message::Chat(chat::Message::Send))
     .padding([14, 16])
     .style(move |_, status| field_style(palette, status, 0.0));
 

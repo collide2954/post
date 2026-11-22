@@ -96,7 +96,7 @@ The server keeps its storage in a data directory. In development mode, the direc
 
 The application uses the iced toolkit (D-077).
 
-- `app` holds the state of the application and the update logic. It does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the message field".
+- `app` holds the state of the application and the update logic. It has one module for each screen: `start`, `servers`, and `chat`. It does not use the toolkit, it reads no file, and it holds no secret. An update returns an effect, for example "put the focus in the name field".
 - `timeline` holds the rules that prepare a timeline entry for the window: the local time and the groups of messages.
 - `palette` holds the colors of light mode and dark mode. A test examines the contrast of each color.
 - `i18n` holds the texts of the interface. The catalogs for English and Latin American Spanish are in `crates/post-app/i18n`.

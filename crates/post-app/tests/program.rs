@@ -7,7 +7,7 @@ use iced::{Program, Size, Theme};
 use iced_test::emulator::{self, Emulator, Mode};
 use iced_test::futures::futures::channel::mpsc;
 use iced_test::{Instruction, Simulator};
-use post_app::app::Message;
+use post_app::app::{Message, servers};
 use post_app::i18n::Language;
 use post_app::shell;
 use post_client::{Destination, Event, Home, Identity, Seed, Trust, sign_in};
@@ -107,6 +107,10 @@ impl Backstage {
     }
 }
 
+fn address(text: String) -> Message {
+    Message::Servers(servers::Message::AddressChanged(text))
+}
+
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
 }
@@ -196,7 +200,7 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
     ));
 
     driver.expect("Connect");
-    driver.send(Message::AddressChanged(invite_link));
+    driver.send(address(invite_link));
     driver.type_text("ana");
     driver.act("type tab");
     driver.act("type enter");
@@ -235,7 +239,7 @@ fn a_user_signs_in_again_with_the_account_of_the_profile() {
         Some(home(&directory)),
     ));
     first.expect("Connect");
-    first.send(Message::AddressChanged(backstage.owner_link.clone()));
+    first.send(address(backstage.owner_link.clone()));
     first.type_text("ana");
     first.act("type enter");
     first.expect("ana · connected");
@@ -246,7 +250,7 @@ fn a_user_signs_in_again_with_the_account_of_the_profile() {
         Some(home(&directory)),
     ));
     second.expect("Connect");
-    second.send(Message::AddressChanged(backstage.address()));
+    second.send(address(backstage.address()));
     second.act("type enter");
 
     second.expect("ana · connected");
@@ -262,7 +266,7 @@ fn a_user_without_an_account_sees_that_an_invite_link_is_necessary() {
     ));
 
     driver.expect("Connect");
-    driver.send(Message::AddressChanged(backstage.address()));
+    driver.send(address(backstage.address()));
     driver.type_text("ana");
     driver.act("type enter");
 
@@ -281,7 +285,7 @@ fn a_user_sees_a_note_when_the_profile_cannot_save_the_server() {
     let servers = directory.join("profiles").join("1").join("servers.toml");
     std::fs::create_dir(servers).expect("a directory in the place of the file");
 
-    driver.send(Message::AddressChanged(backstage.owner_link.clone()));
+    driver.send(address(backstage.owner_link.clone()));
     driver.type_text("ana");
     driver.act("type enter");
 
@@ -301,7 +305,7 @@ fn a_user_sees_a_problem_when_no_server_answers() {
     ));
 
     driver.expect("Conectar");
-    driver.send(Message::AddressChanged(format!("localhost:{port}")));
+    driver.send(address(format!("localhost:{port}")));
     driver.type_text("ana");
     driver.act("type enter");
 
