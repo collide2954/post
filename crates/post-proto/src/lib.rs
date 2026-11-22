@@ -24,4 +24,6 @@ pub use name::{Name, NameError};
 pub use part::{Part, PartError};
 pub use schema::{client_message_schema, server_message_schema};
 pub use text::{MAX_TEXT_CHARACTERS, TextError, check_text};
+#[cfg(verus_keep_ghost)]
+pub use time::last_millis;
 pub use time::{Timestamp, TimestampError};

@@ -10,9 +10,11 @@ use vstd::prelude::*;
 #[cfg(verus_keep_ghost)]
 use vstd::string::StringSliceAdditionalSpecFns;
 
+#[cfg(verus_keep_ghost)]
+pub use text::last_millis;
 use text::{LAST_MILLIS, read_text, write_text};
 #[cfg(verus_keep_ghost)]
-use text::{last_millis, lemma_the_text_of_each_time, time_text};
+use text::{lemma_the_text_of_each_time, time_text};
 
 mod date;
 mod text;
@@ -26,7 +28,12 @@ pub struct Timestamp(u64);
 pub struct TimestampError;
 
 impl Timestamp {
-    pub exec const MAX: Self = Self(LAST_MILLIS);
+    pub exec const MAX: Self
+        ensures
+            Self::MAX.millis() == last_millis(),
+    {
+        Self(LAST_MILLIS)
+    }
 
     #[verifier::type_invariant]
     spec fn is_in_range(self) -> bool {

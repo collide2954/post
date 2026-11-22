@@ -12,6 +12,7 @@ The repository is one Cargo workspace (decision record D-097). Each crate depend
 | `post-client` | The client logic without an interface | `post-proto` |
 | `post-server` | The server. The program has the name `post-server`. | `post-crypto`, `post-proto` |
 | `post-crypto` | Keys and proofs of accounts and servers | `post-proto` |
+| `post-rules` | The proved rules of a server for accounts, handles, and invitations | `post-proto` |
 | `post-proto` | Message types, codec, and protocol rules | No other crate of Post |
 | `post-testing` | Helpers for the tests | No other crate of Post |
 
@@ -58,6 +59,16 @@ Verus proves `base64` and the rules of `name`, `code`, `part`, and `time`. The [
 A test examines the proofs in the example conversations of the protocol specification.
 
 Verus proves `transcript`, `hex`, the text form of the seed, and the generator of invitation codes in `random` (see the [verification](verification.md) document).
+
+## The rules crate
+
+`post-rules` is the rules core of the server (D-178). It has no input and no output, and Verus proves it (see the [verification](verification.md) document).
+
+- `row` holds the rows of the data: an account, an invitation, and a reserved name. It also holds the changes that the core gives to the storage.
+- `rule` holds the rules as specifications, and the small decisions about time.
+- `rules` holds the state and one function for each operation. An operation examines the rules, gives the changes to the storage, and only then changes the state.
+
+The server does not use this crate yet. At this time, the SQL statements of the server make these decisions.
 
 ## The server crate
 

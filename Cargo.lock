@@ -2916,6 +2916,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "post-rules"
+version = "0.1.3"
+dependencies = [
+ "post-proto",
+ "vstd",
+]
+
+[[package]]
 name = "post-server"
 version = "0.1.3"
 dependencies = [

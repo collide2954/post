@@ -35,6 +35,7 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 | The hexadecimal code of the seed | `crates/post-crypto/src/hex.rs` | The writer makes exactly the two characters that the specification gives for each byte. The reader accepts a text only if it is the text of some bytes, and it gives these bytes. Two different sequences of bytes never give the same text. |
 | The text form of the seed | `crates/post-crypto/src/seed/text.rs` | The writer makes exactly the text that the specification gives for a seed. The reader accepts a text only if it is the text of a seed, with or without one line end. It then gives that seed. |
 | The generator of invitation codes | `crates/post-crypto/src/random.rs` | The generator gives only codes that obey the rule, thus it cannot stop with an error. A code has the characters of the first 12 fair bytes, in sequence. Each of the 62 characters comes from exactly 4 of the 248 fair byte values. |
+| The rules of the server for accounts, handles, and invitations | `crates/post-rules/src` | Each operation keeps four rules. A key has one account at most. A handle has one owner at most. The server has one owner at most. Each invitation code is one invitation. An invitation is not used more times than its limit. A new account uses only an open invitation. A reserved handle goes only to its account until the reserved time ends. A handle change waits for the minimum interval. Only the owner makes an invitation. If the core refuses a request, or if the storage fails, the state does not change. The core accepts stored rows only if they obey the rules. |
 
 ## Holes
 
@@ -46,7 +47,8 @@ A hole is code or an assumption that has no proof. Each hole is in this list.
 |---|---|
 | The rule for the text of a message. The white space and the count of characters come from the standard library. | Open |
 | The rules for addresses. | Open |
-| The rules of the server for accounts, handles, and invitations. | Open |
+| The connection of the server to the rules core. The server does not use the core yet. | Open |
+| The agreement between the state of the rules core and the changes that it gives to the storage. Tests examine it. | Open |
 | The steps of the sign-in in the server and in the client. | Open |
 | The readers of the client for invite links, server addresses, and profile names. | Open |
 
