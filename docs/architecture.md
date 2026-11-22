@@ -35,6 +35,7 @@ The sender sees the message only when it comes back from the server. Thus all us
 - `address` holds the form of a server address that the client and the server share.
 - `bytes`, `code`, and `part` hold the text forms of keys, signatures, invitation codes, and the words for parts of the protocol.
 - `time` holds the time type. It writes and reads the one time form of the protocol.
+- `base64` writes and reads the base64url text of keys, random values, and signatures (D-179).
 - `ascii` holds the classes of characters that the rules use.
 - `message` holds the message types. The doc comments on these types go into the JSON Schemas.
 - `codec` writes a message as one line and reads a line.
@@ -42,7 +43,7 @@ The sender sees the message only when it comes back from the server. Thus all us
 
 A test compares the schemas and the example conversations in `docs/protocol` with the code. The check fails if they do not agree.
 
-Verus proves the rules of `name`, `code`, `part`, and `time`. The [verification](verification.md) document tells what each proof shows.
+Verus proves `base64` and the rules of `name`, `code`, `part`, and `time`. The [verification](verification.md) document tells what each proof shows.
 
 ## The cryptography crate
 

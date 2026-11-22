@@ -30,6 +30,7 @@ Verus uses Rust 1.99.1 for the proofs. The normal build uses the Rust release th
 | The name of a user | `crates/post-proto/src/name.rs` | The rule is 2 to 20 characters from a to z, 0 to 9, hyphen, and underscore. The reader accepts exactly the texts that obey the rule. For each other text, it gives the error that the specification gives. Each value that the proved code makes obeys the rule. |
 | The code of an invitation | `crates/post-proto/src/code.rs` | The rule is 12 characters, each a letter or a digit. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
 | The word for a part of the protocol | `crates/post-proto/src/part.rs` | The rule is 2 to 20 characters, each a lower-case letter or a hyphen, with no hyphen at the start or the end. The reader accepts exactly the texts that obey the rule. Each value that the proved code makes obeys the rule. |
+| The text form of keys, random values, and signatures | `crates/post-proto/src/base64.rs` | The writer makes exactly the base64url text that the specification gives. The reader accepts a text only if it is the text of a value, and it gives that value. Two different values of the same length never give the same text. |
 | The messages that the sign-in proofs sign | `crates/post-crypto/src/transcript.rs` | The writer makes exactly the bytes that the specification gives. A message gives its parts: two messages of the same type are equal only if all their parts are equal. A message of the server proof is never equal to a message of the account proof. |
 | The hexadecimal code of the seed | `crates/post-crypto/src/hex.rs` | The writer makes exactly the two characters that the specification gives for each byte. The reader accepts a text only if it is the text of some bytes, and it gives these bytes. Two different sequences of bytes never give the same text. |
 | The text form of the seed | `crates/post-crypto/src/seed/text.rs` | The writer makes exactly the text that the specification gives for a seed. The reader accepts a text only if it is the text of a seed, with or without one line end. It then gives that seed. |
@@ -44,7 +45,7 @@ A hole is code or an assumption that has no proof. Each hole is in this list.
 | Hole | State |
 |---|---|
 | The rule for the text of a message. The white space and the count of characters come from the standard library. | Open |
-| The rules for addresses, and the text form of keys, random values, and signatures. | Open |
+| The rules for addresses. | Open |
 | The rules of the server for accounts, handles, and invitations. | Open |
 | The steps of the sign-in in the server and in the client. | Open |
 | The readers of the client for invite links, server addresses, and profile names. | Open |

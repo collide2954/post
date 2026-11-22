@@ -1,5 +1,6 @@
 mod address;
 mod ascii;
+mod base64;
 mod bytes;
 mod code;
 mod codec;

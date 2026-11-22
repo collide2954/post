@@ -1,13 +1,11 @@
 use std::borrow::Cow;
-use std::fmt;
+use std::fmt::{self, Write as _};
 
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-const LONGEST_BYTES: usize = 64;
+use crate::base64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BytesError;
@@ -19,21 +17,6 @@ impl fmt::Display for BytesError {
 }
 
 impl std::error::Error for BytesError {}
-
-const fn text_length(bytes: usize) -> usize {
-    (bytes * 4).div_ceil(3)
-}
-
-fn decode<const N: usize>(text: &str) -> Result<[u8; N], BytesError> {
-    if text.len() != text_length(N) {
-        return Err(BytesError);
-    }
-    let mut buffer = [0; LONGEST_BYTES + 2];
-    let length = URL_SAFE_NO_PAD
-        .decode_slice(text, &mut buffer)
-        .map_err(|_| BytesError)?;
-    buffer[..length].try_into().map_err(|_| BytesError)
-}
 
 macro_rules! byte_text {
     ($name:ident, $length:literal, $pattern:literal, $description:literal) => {
@@ -54,13 +37,17 @@ macro_rules! byte_text {
             }
 
             pub fn parse(text: &str) -> Result<Self, BytesError> {
-                decode(text).map(Self)
+                base64::decode(text.as_bytes())
+                    .map(Self)
+                    .ok_or(BytesError)
             }
         }
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str(&URL_SAFE_NO_PAD.encode(self.0))
+                base64::encode(&self.0)
+                    .into_iter()
+                    .try_for_each(|byte| formatter.write_char(char::from(byte)))
             }
         }
 
