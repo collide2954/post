@@ -1,5 +1,5 @@
 use post_proto::{ErrorCode, Name, ServerMessage};
-use post_rules::{AccountId, ChannelInviteError};
+use post_rules::{AccountId, ChannelInviteError, InvitationError, RefuseError};
 
 use super::{Answer, ConnectionId, Hub, Outgoing, Request, present};
 
@@ -36,6 +36,63 @@ impl Hub {
                     channel: channel.name.clone(),
                     name: name.clone(),
                     owner: member.name.clone(),
+                    time: request.now,
+                }
+            }),
+        )
+    }
+
+    pub(super) fn cancel_invitation(
+        &mut self,
+        request: &Request<'_>,
+        channel: &str,
+        wanted: &str,
+    ) -> Answer {
+        let member = present(request.state)?;
+        let found = self.visible(member.account, channel)?;
+        if found.owner != member.account {
+            return Err(ErrorCode::NotPermitted);
+        }
+        let (id, title) = (found.id, found.name.clone());
+        let name = Name::parse(wanted).map_err(|_| ErrorCode::NoSuchUser)?;
+        let account = self.rules.id_of(&name).ok_or(ErrorCode::NoSuchUser)?;
+        self.channels
+            .cancel(&mut self.store, member.account, id, account)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(|error| match error {
+                InvitationError::NoSuchChannel => ErrorCode::NoSuchChannel,
+                InvitationError::NotPermitted => ErrorCode::NotPermitted,
+                InvitationError::NotInvited => ErrorCode::NotInvited,
+            })?;
+        Ok(
+            self.to_the_two(request, [member.account, account], |reference| {
+                ServerMessage::ChannelCancel {
+                    reference,
+                    channel: title.clone(),
+                    name: name.clone(),
+                    time: request.now,
+                }
+            }),
+        )
+    }
+
+    pub(super) fn refuse_invitation(&mut self, request: &Request<'_>, channel: &str) -> Answer {
+        let member = present(request.state)?;
+        let found = self.visible(member.account, channel)?;
+        let (id, owner, title) = (found.id, found.owner, found.name.clone());
+        self.channels
+            .refuse(&mut self.store, member.account, id)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(|error| match error {
+                RefuseError::NoSuchChannel => ErrorCode::NoSuchChannel,
+                RefuseError::NotInvited => ErrorCode::NotInvited,
+            })?;
+        Ok(
+            self.to_the_two(request, [owner, member.account], |reference| {
+                ServerMessage::ChannelRefuse {
+                    reference,
+                    channel: title.clone(),
+                    name: member.name.clone(),
                     time: request.now,
                 }
             }),

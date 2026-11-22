@@ -236,6 +236,12 @@ impl Hub {
             ClientMessage::ChannelInvite { channel, name, .. } => {
                 self.invite_to_channel(request, &channel, &name)
             }
+            ClientMessage::ChannelCancel { channel, name, .. } => {
+                self.cancel_invitation(request, &channel, &name)
+            }
+            ClientMessage::ChannelRefuse { channel, .. } => {
+                self.refuse_invitation(request, &channel)
+            }
         }
     }
 

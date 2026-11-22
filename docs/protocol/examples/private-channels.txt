@@ -4,6 +4,7 @@
 
 # Ana signs in. She is the owner of the public channel "general" and of the private channel "secret".
 # The user "cy" has an open invitation to the channel "secret".
+# Ana has an open invitation to the private channel "garden" of the user "dee".
 C: {"type":"hello","protocol":0,"address":"chat.example.org:443","nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","supports":[]}
 S: {"type":"challenge","protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI","proof":"ZeA2ResstAfHtxRGEs6knEtI14hfp-IrwWCnVdDajcWimrtB6_yXo33nRHzuebREmPcb2GQo1XPcZONrCBKXCw","requires":[]}
 C: {"type":"identify","key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
@@ -11,6 +12,7 @@ S: {"type":"welcome","name":"ana","role":"member"}
 S: {"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T13:00:00.000Z"}
 S: {"type":"channel","channel":"secret","kind":"private","topic":"","owner":"ana","created":"2026-11-21T13:30:00.000Z"}
 S: {"type":"channel-invite","channel":"secret","name":"cy","owner":"ana","time":"2026-11-21T13:35:00.000Z"}
+S: {"type":"channel-invite","channel":"garden","name":"ana","owner":"dee","time":"2026-11-21T13:50:00.000Z"}
 S: {"type":"ready"}
 
 # Ana invites the user "ben". Ana and Ben get the message.
@@ -27,3 +29,15 @@ S: {"type":"join","channel":"secret","name":"ben","time":"2026-11-21T14:13:00.00
 # The channel "general" is public, thus it has no invitations.
 C: {"type":"channel-invite","ref":3,"channel":"general","name":"cy"}
 S: {"type":"error","ref":3,"code":"not-private","text":"Only a private channel has invitations."}
+
+# Ana cancels the invitation of Cy. Ana and Cy get the message.
+C: {"type":"channel-cancel","ref":4,"channel":"secret","name":"cy"}
+S: {"type":"channel-cancel","ref":4,"channel":"secret","name":"cy","time":"2026-11-21T14:14:00.000Z"}
+
+# Cy has no invitation now.
+C: {"type":"channel-cancel","ref":5,"channel":"secret","name":"cy"}
+S: {"type":"error","ref":5,"code":"not-invited","text":"The user has no invitation to this channel."}
+
+# Ana refuses the invitation to the channel "garden". Ana and Dee get the message.
+C: {"type":"channel-refuse","ref":6,"channel":"garden"}
+S: {"type":"channel-refuse","ref":6,"channel":"garden","name":"ana","time":"2026-11-21T14:15:00.000Z"}

@@ -70,6 +70,36 @@ fn invitation_requests() -> Vec<(ClientMessage, &'static str)> {
             },
             r#"{"type":"channel-invite","channel":"secret","name":"Not A Name"}"#,
         ),
+        (
+            ClientMessage::ChannelCancel {
+                reference: Some(14),
+                channel: "secret".to_owned(),
+                name: "ben".to_owned(),
+            },
+            r#"{"type":"channel-cancel","ref":14,"channel":"secret","name":"ben"}"#,
+        ),
+        (
+            ClientMessage::ChannelCancel {
+                reference: None,
+                channel: "secret".to_owned(),
+                name: "ben".to_owned(),
+            },
+            r#"{"type":"channel-cancel","channel":"secret","name":"ben"}"#,
+        ),
+        (
+            ClientMessage::ChannelRefuse {
+                reference: Some(15),
+                channel: "secret".to_owned(),
+            },
+            r#"{"type":"channel-refuse","ref":15,"channel":"secret"}"#,
+        ),
+        (
+            ClientMessage::ChannelRefuse {
+                reference: None,
+                channel: "secret".to_owned(),
+            },
+            r#"{"type":"channel-refuse","channel":"secret"}"#,
+        ),
     ]
 }
 
@@ -386,6 +416,42 @@ fn invitation_events() -> Vec<(ServerMessage, &'static str)> {
                 time: time("2026-11-21T14:12:00.000Z"),
             },
             r#"{"type":"channel-invite","channel":"secret","name":"ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelCancel {
+                reference: Some(14),
+                channel: channel("secret"),
+                name: name("ben"),
+                time: time("2026-11-21T14:14:00.000Z"),
+            },
+            r#"{"type":"channel-cancel","ref":14,"channel":"secret","name":"ben","time":"2026-11-21T14:14:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelCancel {
+                reference: None,
+                channel: channel("secret"),
+                name: name("ben"),
+                time: time("2026-11-21T14:14:00.000Z"),
+            },
+            r#"{"type":"channel-cancel","channel":"secret","name":"ben","time":"2026-11-21T14:14:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelRefuse {
+                reference: Some(15),
+                channel: channel("secret"),
+                name: name("ben"),
+                time: time("2026-11-21T14:15:00.000Z"),
+            },
+            r#"{"type":"channel-refuse","ref":15,"channel":"secret","name":"ben","time":"2026-11-21T14:15:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelRefuse {
+                reference: None,
+                channel: channel("secret"),
+                name: name("ben"),
+                time: time("2026-11-21T14:15:00.000Z"),
+            },
+            r#"{"type":"channel-refuse","channel":"secret","name":"ben","time":"2026-11-21T14:15:00.000Z"}"#,
         ),
     ]
 }
@@ -910,6 +976,11 @@ fn each_error_code_of_a_channel_has_a_word_form_and_a_text() {
             "The user already has an invitation to this channel.",
         ),
         (
+            ErrorCode::NotInvited,
+            "not-invited",
+            "The user has no invitation to this channel.",
+        ),
+        (
             ErrorCode::InvalidChannelName,
             "invalid-channel-name",
             "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore.",
@@ -1015,6 +1086,10 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"channel-invite","channel":"secret"}"#,
         r#"{"type":"channel-invite","name":"ben"}"#,
         r#"{"type":"channel-invite","channel":"secret","name":"ben","owner":"ana"}"#,
+        r#"{"type":"channel-cancel","channel":"secret"}"#,
+        r#"{"type":"channel-cancel","name":"ben"}"#,
+        r#"{"type":"channel-refuse"}"#,
+        r#"{"type":"channel-refuse","channel":"secret","name":"ben"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -1075,6 +1150,10 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel-invite","channel":"secret","name":"ben","time":"2026-11-21T14:12:00.000Z"}"#,
         r#"{"type":"channel-invite","channel":"secret","name":"Ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
         r#"{"type":"channel-invite","channel":"Secret","name":"ben","owner":"ana","time":"2026-11-21T14:12:00.000Z"}"#,
+        r#"{"type":"channel-cancel","channel":"secret","name":"ben"}"#,
+        r#"{"type":"channel-cancel","channel":"secret","name":"Ben","time":"2026-11-21T14:14:00.000Z"}"#,
+        r#"{"type":"channel-refuse","channel":"secret","time":"2026-11-21T14:15:00.000Z"}"#,
+        r#"{"type":"channel-refuse","channel":"Secret","name":"ben","time":"2026-11-21T14:15:00.000Z"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

@@ -348,6 +348,7 @@ pub fn error_text(code: ErrorCode) -> Text {
         ErrorCode::NoSuchMember => Text::ErrorNoSuchMember,
         ErrorCode::NotPrivate => Text::ErrorNotPrivate,
         ErrorCode::AlreadyInvited => Text::ErrorAlreadyInvited,
+        ErrorCode::NotInvited => Text::ErrorNotInvited,
         ErrorCode::BadMessage
         | ErrorCode::HelloRequired
         | ErrorCode::DuplicateHello
@@ -1161,6 +1162,7 @@ mod tests {
             (ErrorCode::NoSuchMember, Text::ErrorNoSuchMember),
             (ErrorCode::NotPrivate, Text::ErrorNotPrivate),
             (ErrorCode::AlreadyInvited, Text::ErrorAlreadyInvited),
+            (ErrorCode::NotInvited, Text::ErrorNotInvited),
             (ErrorCode::BadMessage, Text::ErrorOther),
             (ErrorCode::HelloRequired, Text::ErrorOther),
             (ErrorCode::DuplicateHello, Text::ErrorOther),

@@ -186,7 +186,11 @@ fn refuses_an_invitation_to_a_channel_that_breaks_a_rule() {
 fn refuses_a_change_of_an_invitation_to_a_channel_before_the_sign_in() {
     let (mut hub, _ids) = with_secret();
     let id = hub.connect();
-    let lines = [invite(1, "secret", "ben")];
+    let lines = [
+        invite(1, "secret", "ben"),
+        cancel(1, "secret", "ben"),
+        refuse(1, "secret"),
+    ];
 
     for line in &lines {
         assert_eq!(
@@ -206,10 +210,163 @@ fn refuses_a_change_of_an_invitation_to_a_channel_before_the_sign_in() {
 #[test]
 fn answers_with_a_server_error_when_it_cannot_store_an_invitation_to_a_channel() {
     let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(2, "secret", "ben"), now());
     hub.store.lose_its_tables();
 
     assert_eq!(
-        hub.receive(ids[0], &invite(3, "secret", "ben"), now()),
+        hub.receive(ids[0], &invite(3, "secret", "cy"), now()),
         [to(ids[0], error(Some(3), ErrorCode::ServerError))]
     );
+    assert_eq!(
+        hub.receive(ids[0], &cancel(4, "secret", "ben"), now()),
+        [to(ids[0], error(Some(4), ErrorCode::ServerError))]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &refuse(5, "secret"), now()),
+        [to(ids[1], error(Some(5), ErrorCode::ServerError))]
+    );
+}
+
+fn cancel(reference: u32, channel: &str, name: &str) -> String {
+    ClientMessage::ChannelCancel {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+        name: name.to_owned(),
+    }
+    .encode()
+}
+
+fn refuse(reference: u32, channel: &str) -> String {
+    ClientMessage::ChannelRefuse {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+    }
+    .encode()
+}
+
+fn canceled(reference: Option<u32>, who: &str) -> ServerMessage {
+    ServerMessage::ChannelCancel {
+        reference,
+        channel: channel("secret"),
+        name: name(who),
+        time: later(),
+    }
+}
+
+fn refused(reference: Option<u32>, who: &str) -> ServerMessage {
+    ServerMessage::ChannelRefuse {
+        reference,
+        channel: channel("secret"),
+        name: name(who),
+        time: later(),
+    }
+}
+
+#[test]
+fn the_owner_cancels_an_invitation_and_the_two_users_get_the_news() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+
+    let outgoing = hub.receive(ids[0], &cancel(5, "secret", "ben"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], canceled(Some(5), "ben")),
+            to(ids[1], canceled(None, "ben")),
+        ]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &join(6, "secret"), later()),
+        [to(ids[1], error(Some(6), ErrorCode::NoSuchChannel))]
+    );
+}
+
+#[test]
+fn an_invited_user_refuses_the_invitation_and_the_two_users_get_the_news() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+
+    let outgoing = hub.receive(ids[1], &refuse(5, "secret"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], refused(None, "ben")),
+            to(ids[1], refused(Some(5), "ben")),
+        ]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &join(6, "secret"), later()),
+        [to(ids[1], error(Some(6), ErrorCode::NoSuchChannel))]
+    );
+    let again = hub.receive(ids[0], &invite(7, "secret", "ben"), later());
+    assert_eq!(again.len(), 2);
+}
+
+#[test]
+fn does_not_give_an_invitation_that_ended_after_the_sign_in() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[0], &invite(3, "secret", "ben"), now());
+    hub.receive(ids[0], &invite(4, "secret", "cy"), now());
+    hub.receive(ids[0], &cancel(5, "secret", "ben"), now());
+    hub.receive(ids[2], &refuse(6, "secret"), now());
+
+    let id = hub.connect();
+    let server = challenged(&mut hub, id, &[]);
+    let line = identify(&hub, 1, &server, None);
+
+    assert_eq!(
+        hub.receive(id, &line, now()),
+        [
+            to(id, welcome("ana", Role::Owner)),
+            to(id, state(None, "general", ChannelKind::Public, "ana")),
+            to(id, state(None, "secret", ChannelKind::Private, "ana")),
+            to(id, ready()),
+        ]
+    );
+}
+
+#[test]
+fn refuses_to_end_an_invitation_when_a_rule_does_not_permit_it() {
+    let (mut hub, ids) = with_secret();
+    hub.receive(ids[1], &join(3, "general"), now());
+    hub.receive(ids[0], &invite(4, "secret", "ben"), now());
+
+    for (title, wanted, code) in [
+        ("secret", "cy", ErrorCode::NotInvited),
+        ("secret", "ana", ErrorCode::NotInvited),
+        ("secret", "dan", ErrorCode::NoSuchUser),
+        ("secret", "Not A Name", ErrorCode::NoSuchUser),
+        ("general", "ben", ErrorCode::NotInvited),
+        ("garden", "ben", ErrorCode::NoSuchChannel),
+    ] {
+        assert_eq!(
+            hub.receive(ids[0], &cancel(5, title, wanted), now()),
+            [to(ids[0], error(Some(5), code))],
+            "{title} {wanted}"
+        );
+    }
+    assert_eq!(
+        hub.receive(ids[1], &cancel(6, "secret", "ben"), now()),
+        [to(ids[1], error(Some(6), ErrorCode::NotPermitted))]
+    );
+    assert_eq!(
+        hub.receive(ids[2], &cancel(7, "secret", "ben"), now()),
+        [to(ids[2], error(Some(7), ErrorCode::NoSuchChannel))]
+    );
+
+    for (who, title, code) in [
+        (ids[0], "secret", ErrorCode::NotInvited),
+        (ids[1], "general", ErrorCode::NotInvited),
+        (ids[2], "general", ErrorCode::NotInvited),
+        (ids[2], "secret", ErrorCode::NoSuchChannel),
+        (ids[1], "garden", ErrorCode::NoSuchChannel),
+    ] {
+        assert_eq!(
+            hub.receive(who, &refuse(8, title), now()),
+            [to(who, error(Some(8), code))],
+            "{title}"
+        );
+    }
 }

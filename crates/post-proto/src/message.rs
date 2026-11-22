@@ -179,6 +179,24 @@ pub enum ClientMessage {
         /// The name of the user.
         name: String,
     },
+    /// Cancels an invitation to a private channel. Only the owner of the channel can cancel it.
+    ChannelCancel {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+        /// The name of the invited user.
+        name: String,
+    },
+    /// Refuses the invitation of the user to a private channel.
+    ChannelRefuse {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -357,6 +375,30 @@ pub enum ServerMessage {
         /// The time when the owner made the invitation.
         time: Timestamp,
     },
+    /// Tells that the owner canceled an invitation to a private channel.
+    ChannelCancel {
+        /// The number from the `channel-cancel` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The name of the user who had the invitation.
+        name: Name,
+        /// The time when the owner canceled the invitation.
+        time: Timestamp,
+    },
+    /// Tells that a user refused an invitation to a private channel.
+    ChannelRefuse {
+        /// The number from the `channel-refuse` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The name of the user who had the invitation.
+        name: Name,
+        /// The time when the user refused the invitation.
+        time: Timestamp,
+    },
     /// Refuses a message from the client.
     Error {
         /// The number from the refused message, if it had one.
@@ -465,6 +507,8 @@ pub enum ErrorCode {
     NotPrivate,
     /// The user already has an invitation to the channel.
     AlreadyInvited,
+    /// The user has no invitation to the channel.
+    NotInvited,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -509,7 +553,9 @@ impl ClientMessage {
             | Self::ChannelRename { reference, .. }
             | Self::ChannelGive { reference, .. }
             | Self::ChannelDelete { reference, .. }
-            | Self::ChannelInvite { reference, .. } => *reference,
+            | Self::ChannelInvite { reference, .. }
+            | Self::ChannelCancel { reference, .. }
+            | Self::ChannelRefuse { reference, .. } => *reference,
         }
     }
 
@@ -582,6 +628,7 @@ impl ErrorCode {
             Self::NoSuchMember => "The user is not a member of this channel.",
             Self::NotPrivate => "Only a private channel has invitations.",
             Self::AlreadyInvited => "The user already has an invitation to this channel.",
+            Self::NotInvited => "The user has no invitation to this channel.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }

@@ -562,6 +562,67 @@
         "channel",
         "name"
       ]
+    },
+    {
+      "description": "Cancels an invitation to a private channel. Only the owner of the channel can cancel it.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the invited user.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-cancel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name"
+      ]
+    },
+    {
+      "description": "Refuses the invitation of the user to a private channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-refuse"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel"
+      ]
     }
   ],
   "$defs": {

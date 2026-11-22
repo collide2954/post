@@ -61,6 +61,7 @@ error-no-such-user = El servidor no tiene un usuario con este nombre.
 error-no-such-member = Este usuario no es miembro del canal.
 error-not-private = Solo un canal privado tiene invitaciones.
 error-already-invited = Este usuario ya tiene una invitación al canal.
+error-not-invited = Este usuario no tiene una invitación al canal.
 error-empty-text = Un mensaje debe tener texto.
 error-text-too-long = Un mensaje puede tener 4000 caracteres como máximo.
 error-other = El servidor rechazó la solicitud.

@@ -561,6 +561,82 @@
       ]
     },
     {
+      "description": "Tells that the owner canceled an invitation to a private channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "name": {
+          "description": "The name of the user who had the invitation.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the `channel-cancel` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time when the owner canceled the invitation.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-cancel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "time"
+      ]
+    },
+    {
+      "description": "Tells that a user refused an invitation to a private channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "name": {
+          "description": "The name of the user who had the invitation.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the `channel-refuse` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time when the user refused the invitation.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-refuse"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "name",
+        "time"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {
@@ -767,6 +843,11 @@
           "description": "The user already has an invitation to the channel.",
           "type": "string",
           "const": "already-invited"
+        },
+        {
+          "description": "The user has no invitation to the channel.",
+          "type": "string",
+          "const": "not-invited"
         },
         {
           "description": "The server has a problem and cannot do the task.",

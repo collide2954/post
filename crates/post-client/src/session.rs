@@ -291,7 +291,9 @@ impl Session {
             | ServerMessage::ChannelRename { .. }
             | ServerMessage::ChannelGive { .. }
             | ServerMessage::ChannelDelete { .. }
-            | ServerMessage::ChannelInvite { .. } => {}
+            | ServerMessage::ChannelInvite { .. }
+            | ServerMessage::ChannelCancel { .. }
+            | ServerMessage::ChannelRefuse { .. } => {}
         }
     }
 

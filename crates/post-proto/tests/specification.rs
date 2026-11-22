@@ -124,10 +124,12 @@ fn the_schemas_list_each_message_type() {
     assert_eq!(
         client,
         [
+            "channel-cancel",
             "channel-create",
             "channel-delete",
             "channel-give",
             "channel-invite",
+            "channel-refuse",
             "channel-rename",
             "channel-topic",
             "channels",
@@ -152,9 +154,11 @@ fn the_schemas_list_each_message_type() {
         [
             "challenge",
             "channel",
+            "channel-cancel",
             "channel-delete",
             "channel-give",
             "channel-invite",
+            "channel-refuse",
             "channel-rename",
             "channel-topic",
             "channels",

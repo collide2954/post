@@ -80,6 +80,7 @@ texts! {
     ErrorNoSuchMember => "error-no-such-member",
     ErrorNotPrivate => "error-not-private",
     ErrorAlreadyInvited => "error-already-invited",
+    ErrorNotInvited => "error-not-invited",
     ErrorInvalidName => "error-invalid-name",
     ErrorNameTaken => "error-name-taken",
     ErrorNoSuchChannel => "error-no-such-channel",

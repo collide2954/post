@@ -180,6 +180,7 @@ A member of the server can make a channel. That member is the owner of the chann
 
 - A channel is public or private. The owner selects the kind when the owner makes the channel. The kind does not change.
 - Each member of the server can join a public channel. A user can join a private channel only with an invitation from its owner.
+- The owner can cancel an invitation, and the invited user can refuse it.
 - A public channel is in the channel list of the server. A user sees a private channel in the list only when the user has an invitation to it.
 - A channel always has one owner, and the owner is a member of the channel. The owner cannot leave the channel.
 - An account can be the owner of a maximum of 10 channels.
@@ -457,6 +458,37 @@ The server answers with a `channel-invite` message or with an `error` message. E
 - If the user with the name is a member of the channel, the error is `already-member`.
 - If the user with the name already has an invitation to the channel, the error is `already-invited`.
 
+### `channel-cancel`
+
+The `channel-cancel` message cancels an invitation to a private channel. The user cannot join the channel with the invitation after that.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-cancel"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+| `name` | The name of the invited user. |
+
+The server answers with a `channel-cancel` message or with an `error` message. Each connection of the owner and each connection of the invited user get the `channel-cancel` message.
+
+- If the user who sends the message is not the owner of the channel, the error is `not-permitted`.
+- If the server has no user with the name, the error is `no-such-user`.
+- If the user with the name has no invitation to the channel, the error is `not-invited`.
+
+### `channel-refuse`
+
+The `channel-refuse` message refuses an invitation to a private channel. The user who has the invitation sends it.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-refuse"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+
+The server answers with a `channel-refuse` message or with an `error` message. Each connection of the owner and each connection of the invited user get the `channel-refuse` message.
+
+- If the user has no invitation to the channel, the error is `not-invited`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -670,6 +702,30 @@ The `channel-invite` message tells that a user has an invitation to a private ch
 | `owner` | The name of the owner of the channel. |
 | `time` | The time when the owner made the invitation. |
 
+### `channel-cancel`
+
+The `channel-cancel` message tells that the owner of a private channel canceled an invitation. The owner and the user who had the invitation get the message.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-cancel"` |
+| `ref` | The value from the `channel-cancel` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The name of the channel. |
+| `name` | The name of the user who had the invitation. |
+| `time` | The time when the owner canceled the invitation. |
+
+### `channel-refuse`
+
+The `channel-refuse` message tells that a user refused an invitation to a private channel. The owner and the user who had the invitation get the message.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-refuse"` |
+| `ref` | The value from the `channel-refuse` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The name of the channel. |
+| `name` | The name of the user who had the invitation. |
+| `time` | The time when the user refused the invitation. |
+
 ### `error`
 
 The `error` message refuses a message from the client. The connection stays open.
@@ -714,6 +770,7 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `no-such-member` | The channel has no member with the name. |
 | `not-private` | The channel is public, thus it has no invitations. |
 | `already-invited` | The user already has an invitation to the channel. |
+| `not-invited` | The user has no invitation to the channel. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations
