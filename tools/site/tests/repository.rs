@@ -142,6 +142,7 @@ fn makes_each_page_and_each_file_of_the_website() {
         "architecture.html".to_owned(),
         "threat-model.html".to_owned(),
         "verification.html".to_owned(),
+        "performance.html".to_owned(),
         "changelog.html".to_owned(),
         "protocol/index.html".to_owned(),
         "decisions/index.html".to_owned(),

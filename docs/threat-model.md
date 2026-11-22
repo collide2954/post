@@ -1,6 +1,6 @@
 # Threat model
 
-This document tells what Post protects, against whom, and what Post does not protect. It describes version 0.2, and the project wrote it before the work on that version (decision record D-075). A version that changes a security function also changes this document.
+This document tells what Post protects, against whom, and what Post does not protect. It describes version 0.2. The project wrote it before the work on that version (decision record D-075), and examined it again when the version was complete. A version that changes a security function also changes this document.
 
 No independent audit of Post exists. The project wrote this document itself.
 
@@ -111,7 +111,7 @@ No recovery phrase exists before version 0.11 (D-064). A user who loses the prof
 
 ### An attacker who wants to stop the service
 
-The server limits the length of a line and the number of lines that wait for a slow connection. It closes a connection that does not read. Rate limits and bans come in version 0.9 (D-134, D-140). Post gives no full protection against an attacker who can send much traffic.
+The server limits the length of a line and the number of lines that wait for a slow connection. It closes a connection that does not read. In version 0.2, the server does not limit the number of connections, and a connection has no time limit for the sign-in. Rate limits and bans come in version 0.9 (D-134, D-140). Post gives no full protection against an attacker who can send much traffic.
 
 ## What Post does not protect
 

@@ -2,7 +2,7 @@
 
 ## State of Post
 
-Post is at the start of its development. Version 0.1 has no accounts and no encryption, and it connects only to a server on the same computer. Do not use it for real conversations.
+Post is at the start of its development. Version 0.2 has accounts and TLS, but the server can read each message, and the server has no rate limits. Do not use it for real conversations.
 
 No independent audit of Post exists. The [threat model](docs/threat-model.md) tells what Post protects and what it does not protect.
 
