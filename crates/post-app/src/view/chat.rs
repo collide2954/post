@@ -4,7 +4,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Background, Element, Fill, Pixels};
 use post_client::Entry;
-use post_proto::{Invitation, Timestamp};
+use post_proto::{ChannelKind, Invitation, ListedChannel, Timestamp};
 
 use super::widgets::{
     bar, choice, color, divider, entry, field_style, heading, label, link, link_button, page_link,
@@ -14,7 +14,9 @@ use super::{
     BAR_HEIGHT, DRAFT_FIELD, LINE_HEIGHT, MONO_FONT, NAME_CHARACTER_WIDTH, PANEL_FIELD,
     SIDEBAR_WIDTH, SMALL_SIZE, STRONG_FONT, TEXT_SIZE, WIDE_WIDTH, Window,
 };
-use crate::app::chat::{self, Account, Chat, Invitations, Lifetime, Open, Panel, Place, Uses};
+use crate::app::chat::{
+    self, Account, Channels, Chat, Invitations, Lifetime, Open, Panel, Place, Uses,
+};
 use crate::app::{Message, Page, servers};
 use crate::i18n::{Strings, Text};
 use crate::palette::Palette;
@@ -33,6 +35,7 @@ pub(super) fn chat_screen<'a>(
             Some(Open::Invitations(panel)) => invitations_panel(window, chat, panel, palette),
             Some(Open::Account(account)) => account_panel(strings, chat, account, palette),
             Some(Open::Menu) => panel_page(navigation(strings, chat, palette)),
+            Some(Open::Channels(panel)) => channels_panel(strings, chat, panel, palette),
         };
         let header = chat_bar(strings, chat, is_wide, palette);
         let main = column![container(header).height(BAR_HEIGHT), body];
@@ -61,9 +64,15 @@ pub(super) fn chat_bar<'a>(
     let mut links = row![].spacing(4);
     if chat.panel().is_some() {
         links = links.push(link(Text::NavBackButton, chat::Message::Close));
-    } else if !is_wide {
-        let open = chat::Message::Open(Panel::Menu);
-        links = links.push(link(Text::ChatMenuButton, open));
+    } else {
+        if matches!(chat.place(), Place::Channel(_)) {
+            let leave = chat::Message::LeaveChannel;
+            links = links.push(link(Text::ChatLeaveChannelButton, leave));
+        }
+        if !is_wide {
+            let open = chat::Message::Open(Panel::Menu);
+            links = links.push(link(Text::ChatMenuButton, open));
+        }
     }
     bar(format!("#{}", chat.place().name()), None, links, palette)
 }
@@ -90,7 +99,10 @@ pub(super) fn navigation<'a>(
     for (name, _) in chat.session().channels() {
         places = places.push(place(Place::Channel(name.clone())));
     }
-    let mut actions = column![];
+    let mut actions = column![action(
+        Text::ChatChannelsButton,
+        chat::Message::Open(Panel::Channels)
+    )];
     if chat.is_owner() {
         let open = chat::Message::Open(Panel::Invitations);
         actions = actions.push(action(Text::ChatInvitationsButton, open));
@@ -332,6 +344,100 @@ pub(super) fn account_panel<'a>(
             primary_button(strings.text(Text::AccountRenameButton), rename, palette)
         ],
     ])
+}
+
+pub(super) fn channels_panel<'a>(
+    strings: &Strings,
+    chat: &'a Chat,
+    panel: &'a Channels,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let make = Message::Chat(chat::Message::MakeChannel);
+    let field = text_input("", &panel.name)
+        .id(PANEL_FIELD)
+        .on_input(|name| Message::Chat(chat::Message::ChannelNameChanged(name)))
+        .on_submit(make.clone())
+        .padding([8, 10])
+        .style(move |_, status| field_style(palette, status, 1.0));
+    let kinds = [
+        (ChannelKind::Public, Text::ChannelsKindPublic),
+        (ChannelKind::Private, Text::ChannelsKindPrivate),
+    ]
+    .into_iter()
+    .map(|(kind, text)| {
+        let select = Message::Chat(chat::Message::KindSelected(kind));
+        choice(strings.text(text), kind == panel.kind, select, palette)
+    });
+    let feedback: Element<'a, Message> = match panel.problem_text().or_else(|| chat.notice()) {
+        Some(problem) => paragraph(strings.text(problem), palette.danger),
+        None => Space::new().height(LINE_HEIGHT).into(),
+    };
+    let button = primary_button(strings.text(Text::ChannelsMakeButton), make, palette);
+
+    let mut content = column![
+        heading(strings.text(Text::ChannelsTitle)),
+        label(strings.text(Text::ChannelsNameLabel), palette),
+        field,
+        Space::new().height(4),
+        row![row(kinds).spacing(6), space::horizontal(), button].align_y(Alignment::Center),
+        feedback,
+        divider(palette),
+    ];
+    match chat.session().listed() {
+        None => {
+            let loading = strings.text(Text::ChannelsLoading);
+            content = content.push(paragraph(loading, palette.muted));
+        }
+        Some([]) => {
+            let empty = strings.text(Text::ChannelsEmpty);
+            content = content.push(paragraph(empty, palette.muted));
+        }
+        Some(list) => {
+            for listed in list {
+                content = content
+                    .push(channel_row(strings, chat, listed, palette))
+                    .push(divider(palette));
+            }
+        }
+    }
+    panel_page(content)
+}
+
+pub(super) fn channel_row<'a>(
+    strings: &Strings,
+    chat: &Chat,
+    listed: &'a ListedChannel,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let members = if listed.members == 1 {
+        strings.text(Text::ChannelsMember)
+    } else {
+        strings.with(Text::ChannelsMembers, "count", &listed.members.to_string())
+    };
+    let detail = if listed.topic.is_empty() {
+        members
+    } else {
+        format!("{} · {members}", listed.topic)
+    };
+    let name = listed.channel.clone();
+    let (action, message) = if chat.session().channel(&name).is_some() {
+        let open = chat::Message::Select(Place::Channel(name));
+        (Text::ChannelsOpenButton, open)
+    } else {
+        (Text::ChannelsJoinButton, chat::Message::Join(name))
+    };
+
+    column![
+        row![
+            text(format!("#{}", listed.channel))
+                .font(STRONG_FONT)
+                .width(Fill),
+            link_button(strings.text(action), Some(Message::Chat(message)), palette),
+        ]
+        .align_y(Alignment::Center),
+        text(detail).size(13).color(color(palette.muted)),
+    ]
+    .into()
 }
 
 pub(super) fn clock_style(window: &Window) -> ClockStyle {

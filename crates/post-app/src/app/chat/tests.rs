@@ -2,11 +2,11 @@ use std::num::NonZeroU32;
 
 use post_client::{Destination, Entry, Fingerprint, KnownServer, Link, Outgoing, Trust};
 use post_proto::{
-    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, Key, Name, NameError,
-    Role, ServerMessage, Timestamp,
+    ChannelKind, ChannelName, ChannelNameError, ClientMessage, Code, ErrorCode, Invitation, Key,
+    Name, NameError, Role, ServerMessage, Timestamp,
 };
 
-use super::{Account, Chat, Invitations, Lifetime, Message, Open, Panel, Place, Uses};
+use super::{Account, Channels, Chat, Invitations, Lifetime, Message, Open, Panel, Place, Uses};
 use crate::app::Effect;
 use crate::app::servers::{Form, Target};
 use crate::i18n::Text;
@@ -768,4 +768,173 @@ fn opens_the_menu_and_closes_it_when_the_user_selects_a_place() {
     chat.update(Message::Open(Panel::Menu));
     assert_eq!(chat.update(Message::Close), Effect::FocusDraft);
     assert_eq!(chat.panel(), None);
+}
+
+fn channels_panel() -> (Chat, Outbox) {
+    let (mut chat, mut outbox) = chat(8);
+    assert_eq!(
+        chat.update(Message::Open(Panel::Channels)),
+        Effect::FocusPanel
+    );
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Channels { reference: Some(1) })
+    );
+    (chat, outbox)
+}
+
+fn open_channels(chat: &Chat) -> &Channels {
+    match chat.panel() {
+        Some(Open::Channels(panel)) => panel,
+        other => panic!("the channels panel is not open: {other:?}"),
+    }
+}
+
+#[test]
+fn asks_the_server_for_the_channels_when_the_panel_opens() {
+    let (chat, _outbox) = channels_panel();
+
+    assert_eq!(
+        open_channels(&chat),
+        &Channels {
+            name: String::new(),
+            kind: ChannelKind::Public,
+            problem: None,
+        }
+    );
+    assert_eq!(open_channels(&chat).problem_text(), None);
+    assert_eq!(chat.session().listed(), None);
+}
+
+#[test]
+fn makes_a_channel_with_the_name_and_the_kind_that_the_user_selects() {
+    let (mut chat, mut outbox) = channels_panel();
+    chat.update(Message::ChannelNameChanged(" general ".to_owned()));
+    chat.update(Message::KindSelected(ChannelKind::Private));
+    assert_eq!(open_channels(&chat).name, " general ");
+    assert_eq!(open_channels(&chat).kind, ChannelKind::Private);
+
+    assert_eq!(chat.update(Message::MakeChannel), Effect::None);
+
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::ChannelCreate {
+            reference: Some(2),
+            channel: "general".to_owned(),
+            kind: ChannelKind::Private,
+        })
+    );
+    assert_eq!(open_channels(&chat).problem, None);
+
+    let effect = chat.receive(state(Some(2), "general"));
+
+    assert_eq!(effect, Effect::FocusDraft);
+    assert_eq!(chat.panel(), None);
+    assert_eq!(chat.place(), &place("general"));
+}
+
+#[test]
+fn tells_the_user_about_a_channel_name_that_breaks_the_rules() {
+    let too_long = "x".repeat(31);
+    let problems = [
+        (
+            "General",
+            ChannelNameError::InvalidCharacter,
+            Text::ProblemChannelNameCharacters,
+        ),
+        (
+            "g",
+            ChannelNameError::TooShort,
+            Text::ProblemChannelNameShort,
+        ),
+        (
+            too_long.as_str(),
+            ChannelNameError::TooLong,
+            Text::ProblemChannelNameLong,
+        ),
+    ];
+    for (typed, problem, text) in problems {
+        let (mut chat, mut outbox) = channels_panel();
+        chat.update(Message::ChannelNameChanged(typed.to_owned()));
+
+        assert_eq!(chat.update(Message::MakeChannel), Effect::None);
+
+        assert_eq!(outbox(), None, "{typed}");
+        assert_eq!(open_channels(&chat).problem, Some(problem));
+        assert_eq!(open_channels(&chat).problem_text(), Some(text));
+        chat.update(Message::ChannelNameChanged("general".to_owned()));
+        assert_eq!(open_channels(&chat).problem, None);
+    }
+}
+
+#[test]
+fn tells_the_user_that_a_channel_has_the_name() {
+    let (mut chat, _outbox) = channels_panel();
+    chat.update(Message::ChannelNameChanged("general".to_owned()));
+    chat.update(Message::MakeChannel);
+
+    chat.receive(ServerMessage::error(Some(2), ErrorCode::NameTaken));
+
+    assert_eq!(chat.notice(), Some(Text::ErrorChannelNameTaken));
+    chat.update(Message::Close);
+    chat.receive(ServerMessage::error(Some(3), ErrorCode::NameTaken));
+    assert_eq!(chat.notice(), Some(Text::ErrorNameTaken));
+}
+
+#[test]
+fn joins_a_channel_of_the_list() {
+    let (mut chat, mut outbox) = channels_panel();
+
+    assert_eq!(chat.update(Message::Join(channel("dev"))), Effect::None);
+
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Join {
+            reference: Some(2),
+            channel: "dev".to_owned(),
+        })
+    );
+    assert_eq!(chat.receive(state(Some(2), "dev")), Effect::FocusDraft);
+    assert_eq!(chat.place(), &place("dev"));
+    assert_eq!(chat.panel(), None);
+}
+
+#[test]
+fn leaves_the_channel_that_the_user_sees() {
+    let (mut chat, mut outbox) = chat(8);
+
+    assert_eq!(chat.update(Message::LeaveChannel), Effect::None);
+    assert_eq!(outbox(), None);
+
+    chat.receive(state(Some(1), "general"));
+    assert_eq!(chat.update(Message::LeaveChannel), Effect::None);
+
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Leave {
+            reference: Some(1),
+            channel: "general".to_owned(),
+        })
+    );
+    assert_eq!(chat.place(), &place("general"));
+    chat.receive(left("general", "ana"));
+    assert_eq!(chat.place(), &Place::Lobby);
+}
+
+#[test]
+fn ignores_a_message_of_the_channels_panel_when_that_panel_is_not_open() {
+    let (mut chat, mut outbox) = chat(8);
+    chat.update(Message::Open(Panel::Account));
+    let before = format!("{:?}", chat.panel());
+
+    for message in [
+        Message::ChannelNameChanged("general".to_owned()),
+        Message::KindSelected(ChannelKind::Private),
+        Message::MakeChannel,
+    ] {
+        assert_eq!(chat.update(message), Effect::None);
+    }
+
+    assert_eq!(format!("{:?}", chat.panel()), before);
+    assert_eq!(outbox(), None);
 }

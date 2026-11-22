@@ -246,7 +246,7 @@ impl App {
             }
             Screen::Chat(chat) => match chat.panel() {
                 None => Effect::FocusDraft,
-                Some(chat::Open::Account(_)) => Effect::FocusPanel,
+                Some(chat::Open::Account(_) | chat::Open::Channels(_)) => Effect::FocusPanel,
                 Some(chat::Open::Invitations(_) | chat::Open::Menu) => Effect::None,
             },
             Screen::Servers(_) | Screen::Stopped(_) => Effect::None,

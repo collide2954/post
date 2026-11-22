@@ -17,8 +17,8 @@ use post_client::{
     ProfileEntry, ProfileId,
 };
 use post_proto::{
-    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, Key, Name, Role,
-    ServerMessage, Timestamp,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, Key, ListedChannel, Name,
+    Role, ServerMessage, Timestamp,
 };
 
 const SCREENSHOT_VARIABLE: &str = "POST_SCREENSHOTS";
@@ -639,6 +639,41 @@ fn channel_app(mode: Mode) -> App {
     app
 }
 
+fn listed(title: &str, topic: &str, members: u32) -> ListedChannel {
+    ListedChannel {
+        channel: ChannelName::parse(title).expect(title),
+        kind: ChannelKind::Public,
+        topic: topic.to_owned(),
+        members,
+    }
+}
+
+fn three_channels() -> Vec<ListedChannel> {
+    vec![
+        listed("garden", "Plants and flowers", 12),
+        listed("general", "", 2),
+        listed("solo", "", 1),
+    ]
+}
+
+fn channels_panel_app(mode: Mode, list: Option<Vec<ListedChannel>>) -> (App, Outbox) {
+    let (mut app, mut outbox) = channels_app(mode, Role::Member);
+    app.update(Message::Chat(chat::Message::Open(chat::Panel::Channels)));
+    let Some(ClientMessage::Channels { reference }) = outbox() else {
+        panic!("the panel asks the server for the channels");
+    };
+    if let Some(list) = list {
+        let attempt = app.target().expect("the chat has a connection").attempt;
+        let answer = ServerMessage::Channels {
+            reference,
+            list,
+            more: false,
+        };
+        app.update(Message::Connection(attempt, Event::Received(answer)));
+    }
+    (app, outbox)
+}
+
 fn general() -> chat::Place {
     chat::Place::Channel(ChannelName::parse("general").expect("a valid name"))
 }
@@ -701,6 +736,144 @@ fn the_window_shows_the_timeline_of_the_place_that_the_user_selects() {
         .find(InMainArea("#general"))
         .expect("the bar shows the name of the channel");
     assert!(interface.find(InMainArea("#lobby")).is_err());
+}
+
+#[test]
+fn the_sidebar_opens_the_channels_panel_and_the_bar_leaves_a_channel() {
+    let (app, _outbox) = channels_app(Mode::Light, Role::Member);
+    let lobby = window(app, Language::English);
+    assert!(simulator(&lobby).find("Leave channel").is_err());
+    let messages = clicked(&lobby, "Channels");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Open(chat::Panel::Channels))]
+        ),
+        "{messages:?}"
+    );
+
+    let channel = window(channel_app(Mode::Light), Language::English);
+    let messages = clicked(&channel, "Leave channel");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::LeaveChannel)]
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_channels_panel_lists_the_public_channels() {
+    let (app, _outbox) = channels_panel_app(Mode::Light, Some(three_channels()));
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Channels",
+        "Name of a new channel",
+        "Public",
+        "Private",
+        "Make a channel",
+        "#garden",
+        "Plants and flowers · 12 members",
+        "#general",
+        "2 members",
+        "#solo",
+        "1 member",
+        "Back",
+    ] {
+        interface
+            .find(InMainArea(text))
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    assert!(interface.find("Hello").is_err());
+
+    let messages = clicked(&window, "Join");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Join(name))] if name.as_str() == "garden"
+        ),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Open");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Chat(chat::Message::Select(place))] if *place == general()
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_channels_panel_tells_the_state_of_the_list() {
+    let (app, _outbox) = channels_panel_app(Mode::Light, None);
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("Post asks the server for the channels.")
+        .expect("the panel tells that the list is not there");
+
+    let (app, _outbox) = channels_panel_app(Mode::Light, Some(Vec::new()));
+    let window = self::window(app, Language::Spanish);
+    simulator(&window)
+        .find("El servidor no tiene canales públicos.")
+        .expect("the panel tells that the list is empty");
+}
+
+#[test]
+fn the_channels_panel_makes_a_channel() {
+    let (app, _outbox) = channels_panel_app(Mode::Light, Some(Vec::new()));
+    let window = window(app, Language::English);
+    let mut interface = simulator(&window);
+
+    interface
+        .click(selector::id(view::PANEL_FIELD))
+        .expect("the channels panel has a name field");
+    interface.typewrite("x");
+    interface.tap_key(Named::Enter);
+    interface
+        .click("Private")
+        .expect("the panel has a choice of the kind");
+    interface
+        .click("Make a channel")
+        .expect("the panel has a button");
+
+    let messages: Vec<Message> = interface.into_messages().collect();
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [
+                Message::Chat(chat::Message::ChannelNameChanged(name)),
+                Message::Chat(chat::Message::MakeChannel),
+                Message::Chat(chat::Message::KindSelected(ChannelKind::Private)),
+                Message::Chat(chat::Message::MakeChannel)
+            ] if name == "x"
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_channels_panel_shows_a_problem_with_the_new_channel() {
+    let (mut app, _outbox) = channels_panel_app(Mode::Light, Some(Vec::new()));
+    let name = chat::Message::ChannelNameChanged("Garden".to_owned());
+    app.update(Message::Chat(name));
+    app.update(Message::Chat(chat::Message::MakeChannel));
+    let window = self::window(app, Language::English);
+    simulator(&window)
+        .find("A channel name can contain only a to z, 0 to 9, hyphen, and underscore.")
+        .expect("the panel shows the problem of the name");
+
+    let (mut app, _outbox) = channels_panel_app(Mode::Light, Some(Vec::new()));
+    let attempt = app.target().expect("the chat has a connection").attempt;
+    let refused = ServerMessage::error(Some(9), ErrorCode::NameTaken);
+    app.update(Message::Connection(attempt, Event::Received(refused)));
+    let window = self::window(app, Language::Spanish);
+    simulator(&window)
+        .find("Un canal ya usa este nombre, o el nombre está reservado.")
+        .expect("the panel shows the answer of the server");
 }
 
 struct InMainArea(&'static str);
@@ -1547,6 +1720,16 @@ fn each_screen_draws_in_light_and_dark_mode() {
                 Language::English,
             ),
             ("channel", channel_app(mode), Language::English),
+            (
+                "channels",
+                channels_panel_app(mode, Some(three_channels())).0,
+                Language::English,
+            ),
+            (
+                "channels-es",
+                channels_panel_app(mode, None).0,
+                Language::Spanish,
+            ),
             (
                 "invitations",
                 invitations_app(mode, Some(two_invitations())).0,

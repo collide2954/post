@@ -3,7 +3,8 @@ use std::num::NonZeroU32;
 
 use post_client::{Channel, Entry, KnownServer, Link, Security, Session};
 use post_proto::{
-    ChannelName, ClientMessage, Code, LOBBY, Name, NameError, Role, ServerMessage, TextError,
+    ChannelKind, ChannelName, ChannelNameError, ClientMessage, Code, ErrorCode, LOBBY, Name,
+    NameError, Role, ServerMessage, TextError,
 };
 
 use super::servers::{Form, Target};
@@ -25,6 +26,11 @@ pub enum Message {
     NameChanged(String),
     Rename,
     Select(Place),
+    ChannelNameChanged(String),
+    KindSelected(ChannelKind),
+    MakeChannel,
+    Join(ChannelName),
+    LeaveChannel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -38,6 +44,7 @@ pub enum Panel {
     Invitations,
     Account,
     Menu,
+    Channels,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -75,6 +82,7 @@ pub enum Open {
     Invitations(Invitations),
     Account(Account),
     Menu,
+    Channels(Channels),
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -88,6 +96,13 @@ pub struct Invitations {
 pub struct Account {
     pub name: String,
     pub problem: Option<NameError>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Channels {
+    pub name: String,
+    pub kind: ChannelKind,
+    pub problem: Option<ChannelNameError>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +120,17 @@ impl Place {
             Self::Lobby => LOBBY,
             Self::Channel(name) => name.as_str(),
         }
+    }
+}
+
+impl Channels {
+    #[must_use]
+    pub fn problem_text(&self) -> Option<Text> {
+        self.problem.map(|problem| match problem {
+            ChannelNameError::InvalidCharacter => Text::ProblemChannelNameCharacters,
+            ChannelNameError::TooShort => Text::ProblemChannelNameShort,
+            ChannelNameError::TooLong => Text::ProblemChannelNameLong,
+        })
     }
 }
 
@@ -207,7 +233,12 @@ impl Chat {
             Some(Notice::NotSent) => Some(Text::ChatNotSent),
             Some(Notice::RequestNotSent) => Some(Text::ChatRequestNotSent),
             Some(Notice::ServerNotSaved) => Some(Text::ChatServerNotSaved),
-            None => self.session.problem().map(error_text),
+            None => self.session.problem().map(|code| match code {
+                ErrorCode::NameTaken if matches!(self.panel, Some(Open::Channels(_))) => {
+                    Text::ErrorChannelNameTaken
+                }
+                code => error_text(code),
+            }),
         }
     }
 
@@ -248,6 +279,17 @@ impl Chat {
                 return Effect::FocusPanel;
             }
             Message::Open(Panel::Menu) => self.panel = Some(Open::Menu),
+            Message::Open(Panel::Channels) => {
+                self.forget_the_problem();
+                self.panel = Some(Open::Channels(Channels {
+                    name: String::new(),
+                    kind: ChannelKind::Public,
+                    problem: None,
+                }));
+                let request = self.session.ask_for_channels();
+                self.request(request);
+                return Effect::FocusPanel;
+            }
             Message::Close => return self.close(),
             Message::LifetimeSelected(lifetime) => {
                 if let Some(Open::Invitations(invitations)) = &mut self.panel {
@@ -282,6 +324,28 @@ impl Chat {
             }
             Message::Rename => return self.rename(),
             Message::Select(place) => return self.select(place),
+            Message::ChannelNameChanged(name) => {
+                if let Some(Open::Channels(channels)) = &mut self.panel {
+                    channels.name = name;
+                    channels.problem = None;
+                }
+            }
+            Message::KindSelected(kind) => {
+                if let Some(Open::Channels(channels)) = &mut self.panel {
+                    channels.kind = kind;
+                }
+            }
+            Message::MakeChannel => self.make_channel(),
+            Message::Join(name) => {
+                let request = self.session.join(&name);
+                self.request(request);
+            }
+            Message::LeaveChannel => {
+                if let Place::Channel(name) = &self.place {
+                    let request = self.session.leave(name);
+                    self.request(request);
+                }
+            }
         }
         Effect::None
     }
@@ -364,6 +428,19 @@ impl Chat {
             }
             Err(TextError::TooLong) => self.notice = Some(Notice::TooLong),
             Err(TextError::Empty) => {}
+        }
+    }
+
+    fn make_channel(&mut self) {
+        let Some(Open::Channels(channels)) = &mut self.panel else {
+            return;
+        };
+        match ChannelName::parse(channels.name.trim()) {
+            Ok(name) => {
+                let request = self.session.create_channel(&name, channels.kind);
+                self.request(request);
+            }
+            Err(problem) => channels.problem = Some(problem),
         }
     }
 

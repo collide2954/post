@@ -16,7 +16,7 @@ use post_app::shell;
 use post_client::{
     Destination, Event, Fingerprint, Home, Identity, Profiles, Seed, Trust, sign_in,
 };
-use post_proto::{ClientMessage, Name, ServerMessage};
+use post_proto::{ChannelKind, ClientMessage, Name, ServerMessage};
 use post_server::Server;
 use post_server::config::{Config, Tls};
 use post_testing::Directory;
@@ -297,6 +297,14 @@ fn start_server_with(tls: Tls) -> Backstage {
 }
 
 fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
+    invite_and_answer_as_the_owner(backstage, None)
+}
+
+fn invite_and_answer_in_a_channel_as_ben(backstage: &Backstage, channel: &str) -> String {
+    invite_and_answer_as_the_owner(backstage, Some(channel.to_owned()))
+}
+
+fn invite_and_answer_as_the_owner(backstage: &Backstage, channel: Option<String>) -> String {
     let destination = Destination::parse(&backstage.owner_link).expect("a valid owner link");
     let identity = Identity {
         seed: Seed::from_bytes([2; 32]),
@@ -315,15 +323,25 @@ fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
                         uses: None,
                     };
                     assert!(connected.send(invite));
+                    if let Some(channel) = &channel {
+                        let create = ClientMessage::ChannelCreate {
+                            reference: None,
+                            channel: channel.clone(),
+                            kind: ChannelKind::Public,
+                        };
+                        assert!(connected.send(create));
+                    }
                     link = Some(connected);
                 }
                 Event::Received(ServerMessage::Invitations { list, .. }) => {
                     let _ = invited.send(list[0].link.clone());
                 }
-                Event::Received(ServerMessage::Message { from, .. }) if from == name("ana") => {
+                Event::Received(ServerMessage::Message { channel, from, .. })
+                    if from == name("ana") =>
+                {
                     let answer = ClientMessage::Send {
                         reference: None,
-                        channel: "lobby".to_owned(),
+                        channel,
                         text: "Hi ana".to_owned(),
                     };
                     assert!(link.as_ref().is_some_and(|link| link.send(answer)));
@@ -729,6 +747,49 @@ fn a_new_user_joins_with_an_invite_link_and_chats_with_a_second_user() {
         "{servers}"
     );
     assert!(servers.contains("name = \"ana\""), "{servers}");
+}
+
+#[test]
+fn a_user_joins_a_channel_chats_there_and_makes_a_channel() {
+    let backstage = start_server();
+    let invite_link = invite_and_answer_in_a_channel_as_ben(&backstage, "garden");
+    let directory = Directory::new();
+    let mut driver = open(Language::English, &directory);
+    driver.expect("Connect");
+    driver.sign_up(invite_link, "ana");
+    driver.expect("ana · connected");
+    assert!(!driver.shows("#garden"));
+
+    driver.act("click \"Channels\"");
+    driver.expect("#garden");
+    driver.expect("1 member");
+    driver.act("click \"Join\"");
+
+    driver.expect("Leave channel");
+    driver.expect("ana joined");
+    driver.type_text("Hello");
+    driver.act("type enter");
+    driver.expect("Hello");
+    driver.expect("Hi ana");
+
+    driver.act("click \"#lobby\"");
+    driver.expect_no("Hi ana");
+    driver.expect_no("Leave channel");
+
+    driver.act("click \"Channels\"");
+    driver.expect("Name of a new channel");
+    driver.expect("2 members");
+    driver.type_text("plans");
+    driver.act("click \"Make a channel\"");
+    driver.expect("#plans");
+    driver.expect("Leave channel");
+
+    driver.act("click \"#garden\"");
+    driver.expect("Hi ana");
+    driver.act("click \"Leave channel\"");
+    driver.expect_no("#garden");
+    driver.expect("#plans");
+    driver.expect_no("Leave channel");
 }
 
 #[test]
