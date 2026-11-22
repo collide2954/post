@@ -1,7 +1,8 @@
 use post_client::{
-    Destination, DestinationError, Disconnect, Event, KnownServer, Link, ProfileError, Session,
+    Destination, DestinationError, Disconnect, Event, Fingerprint, KnownServer, Link, ProfileError,
+    Session, Trust,
 };
-use post_proto::{DEFAULT_PORT, ErrorCode, Key, Name, NameError, TextError};
+use post_proto::{DEFAULT_PORT, ErrorCode, Name, NameError, TextError};
 
 use crate::i18n::{Strings, Text};
 use crate::palette::Mode;
@@ -66,7 +67,7 @@ pub struct Target {
     pub attempt: u64,
     pub destination: Destination,
     pub name: Option<Name>,
-    pub known: Option<Key>,
+    pub trust: Trust,
 }
 
 #[derive(Debug)]
@@ -204,17 +205,19 @@ impl App {
             }
         };
         let address = destination.address().to_string();
-        let known = self
-            .servers
-            .iter()
-            .find(|server| server.address == address)
-            .map(|server| server.key);
+        let known = self.servers.iter().find(|server| server.address == address);
+        let trust = Trust {
+            key: known.map(|server| server.key),
+            certificate: known
+                .and_then(|server| server.certificate.as_deref())
+                .and_then(Fingerprint::parse),
+        };
         self.attempts += 1;
         let target = Target {
             attempt: self.attempts,
             destination,
             name,
-            known,
+            trust,
         };
         self.screen = Screen::Connecting {
             form: std::mem::take(form),
@@ -254,7 +257,9 @@ impl App {
             address: target.destination.address().to_string(),
             key: *link.server(),
             name: link.name().clone(),
-            certificate: None,
+            certificate: link
+                .certificate()
+                .map(|fingerprint| fingerprint.to_string()),
         };
         self.screen = Screen::Chat(Box::new(Chat {
             form: std::mem::take(form),
@@ -348,7 +353,8 @@ impl Problem {
             Self::Disconnected(Disconnect::MissingParts) => Text::ProblemMissingParts,
             Self::Disconnected(Disconnect::NameRequired) => Text::ProblemNameRequired,
             Self::Disconnected(Disconnect::InvitationRequired) => Text::ProblemInvitationRequired,
-            Self::Disconnected(Disconnect::NoTls) => Text::ProblemNoTls,
+            Self::Disconnected(Disconnect::UnknownCertificate(_)) => Text::CertificateUnknown,
+            Self::Disconnected(Disconnect::ChangedCertificate(_)) => Text::CertificateChanged,
             Self::Disconnected(Disconnect::Refused(code)) => error_text(code),
         }
     }
@@ -383,8 +389,8 @@ pub fn error_text(code: ErrorCode) -> Text {
 #[cfg(test)]
 mod tests {
     use post_client::{
-        Destination, DestinationError, Disconnect, Entry, Event, KnownServer, Link, NameProblem,
-        ProfileError,
+        Destination, DestinationError, Disconnect, Entry, Event, Fingerprint, KnownServer, Link,
+        NameProblem, ProfileError, Trust,
     };
     use post_proto::{
         ClientMessage, ErrorCode, Key, Name, NameError, Role, ServerMessage, Timestamp,
@@ -402,6 +408,10 @@ mod tests {
 
     fn key(number: u8) -> Key {
         Key::from_bytes([number; 32])
+    }
+
+    fn fingerprint(number: u8) -> Fingerprint {
+        Fingerprint::from_bytes([number; 32])
     }
 
     fn server(address: &str, number: u8, who: &str) -> KnownServer {
@@ -579,7 +589,7 @@ mod tests {
         assert_eq!(target.attempt, 1);
         assert_eq!(target.destination, Destination::parse(LINK).expect("valid"));
         assert_eq!(target.name, Some(name("ana")));
-        assert_eq!(target.known, None);
+        assert_eq!(target.trust, Trust::default());
         let Screen::Connecting { form, .. } = app.screen() else {
             panic!("the application connects");
         };
@@ -623,8 +633,52 @@ mod tests {
             app.update(Message::Connect);
 
             let target = app.target().expect("a connection is in progress");
-            assert_eq!(target.known, expected, "{address}");
+            assert_eq!(target.trust.key, expected, "{address}");
+            assert_eq!(target.trust.certificate, None);
         }
+    }
+
+    #[test]
+    fn gives_the_accepted_certificate_of_a_known_server_to_the_connection() {
+        let pinned = KnownServer {
+            certificate: Some(fingerprint(9).to_string()),
+            ..server("home.example.org:443", 1, "ana")
+        };
+        let damaged = KnownServer {
+            certificate: Some("not a fingerprint".to_owned()),
+            ..server("localhost:7678", 2, "ana")
+        };
+        let mut app = App::new(Mode::Light, vec![pinned, damaged]);
+        typed(&mut app, "home.example.org", "");
+
+        app.update(Message::Connect);
+
+        let target = app.target().expect("a connection is in progress");
+        assert_eq!(target.trust.key, Some(key(1)));
+        assert_eq!(target.trust.certificate, Some(fingerprint(9)));
+
+        app.update(Message::Leave);
+        typed(&mut app, "localhost", "");
+        app.update(Message::Connect);
+        let target = app.target().expect("a connection is in progress");
+        assert_eq!(target.trust.certificate, None);
+    }
+
+    #[test]
+    fn remembers_the_certificate_that_the_connection_accepted() {
+        let mut app = connecting("ana");
+        let (link, _messages) = Link::channel(name("ana"), Role::Member, key(1), 4);
+        let link = link.with_certificate(Some(fingerprint(9)));
+
+        let message = connection(&app, Event::Connected(link));
+        let effect = app.update(message);
+
+        let expected = KnownServer {
+            certificate: Some("09".repeat(32)),
+            ..server("localhost:7678", 1, "ana")
+        };
+        assert_eq!(effect, Effect::Connected(expected.clone()));
+        assert_eq!(app.servers(), [expected]);
     }
 
     #[test]
@@ -684,7 +738,7 @@ mod tests {
         app.update(Message::Leave);
         app.update(Message::Connect);
         let target = app.target().expect("a second connection");
-        assert_eq!(target.known, Some(key(3)));
+        assert_eq!(target.trust.key, Some(key(3)));
     }
 
     #[test]
@@ -1066,7 +1120,14 @@ mod tests {
                 Problem::Disconnected(Disconnect::InvitationRequired),
                 Text::ProblemInvitationRequired,
             ),
-            (Problem::Disconnected(Disconnect::NoTls), Text::ProblemNoTls),
+            (
+                Problem::Disconnected(Disconnect::UnknownCertificate(fingerprint(1))),
+                Text::CertificateUnknown,
+            ),
+            (
+                Problem::Disconnected(Disconnect::ChangedCertificate(fingerprint(1))),
+                Text::CertificateChanged,
+            ),
             (
                 Problem::Disconnected(Disconnect::Refused(ErrorCode::NameTaken)),
                 Text::ErrorNameTaken,

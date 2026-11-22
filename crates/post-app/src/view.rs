@@ -154,10 +154,6 @@ fn connect_screen<'a>(
         name,
         feedback,
         row![space::horizontal(), action],
-        Space::new().height(12),
-        text(strings.text(Text::ConnectNote))
-            .size(SMALL_SIZE)
-            .color(color(palette.muted)),
     ]
     .spacing(8)
     .max_width(380);

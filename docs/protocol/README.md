@@ -14,13 +14,14 @@ The automatic checks fail if the code, the schemas, and the examples do not agre
 
 This document describes protocol version 0. Version 0 is not stable. It can change in each release of Post, and it makes no promise to other clients. Protocol version 1 starts with version 1.0 of the application.
 
-Protocol version 0 changes while the project builds Post 0.2. At this time, a connection has no TLS, and the server listens only on the local computer.
+Protocol version 0 changes while the project builds Post 0.2.
 
 ## Transport
 
 A client opens a WebSocket connection to the path `/` of the server.
 
-- At this time, the address is `ws://localhost:7678/`. The server listens only on the loopback addresses of the computer.
+- The connection uses TLS 1.3, and the address has the form `wss://chat.example.org/`. The default port is 443.
+- A connection without TLS is possible only to the local computer, for development. Its address has the form `ws://localhost:7678/`.
 - Each protocol message is one WebSocket text message.
 - The server answers a binary message with the error `bad-message`.
 

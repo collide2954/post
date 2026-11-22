@@ -30,6 +30,7 @@ pulldown-cmark = { version = "0.13.6", default-features = false, features = ["ht
 rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "crypto", "pem"] }
 rusqlite = { version = "0.43.0", default-features = false, features = ["bundled", "cache"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
+rustls-platform-verifier = "0.7.1"
 schemars = "1.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.154"

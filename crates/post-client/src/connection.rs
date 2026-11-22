@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use futures_util::{SinkExt, Stream, StreamExt, stream};
-use post_crypto::{Exchange, Seed};
+use post_crypto::{Exchange, Fingerprint, Seed};
 use post_proto::{
-    Address, ClientMessage, ErrorCode, Key, MAX_LINE_BYTES, Name, PROTOCOL_VERSION, Role,
+    ClientMessage, ErrorCode, Host, Key, MAX_LINE_BYTES, Name, PROTOCOL_VERSION, Role,
     ServerMessage,
 };
 use tokio::net::{TcpStream, lookup_host};
@@ -14,12 +14,13 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::{WebSocketStream, client_async_with_config};
 
 use crate::destination::{Destination, Security};
+use crate::tls::{self, Transport};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 const QUEUE_MESSAGES: usize = 64;
 
-type Socket = WebSocketStream<TcpStream>;
+type Socket = WebSocketStream<Transport>;
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -39,7 +40,8 @@ pub enum Disconnect {
     MissingParts,
     NameRequired,
     InvitationRequired,
-    NoTls,
+    UnknownCertificate(Fingerprint),
+    ChangedCertificate(Fingerprint),
 }
 
 pub struct Identity {
@@ -47,11 +49,18 @@ pub struct Identity {
     pub name: Option<Name>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Trust {
+    pub key: Option<Key>,
+    pub certificate: Option<Fingerprint>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Link {
     name: Name,
     role: Role,
     server: Key,
+    certificate: Option<Fingerprint>,
     queue: mpsc::Sender<ClientMessage>,
 }
 
@@ -68,9 +77,16 @@ impl Link {
             name,
             role,
             server,
+            certificate: None,
             queue,
         };
         (link, messages)
+    }
+
+    #[must_use]
+    pub fn with_certificate(mut self, certificate: Option<Fingerprint>) -> Self {
+        self.certificate = certificate;
+        self
     }
 
     #[must_use]
@@ -89,6 +105,11 @@ impl Link {
     }
 
     #[must_use]
+    pub fn certificate(&self) -> Option<Fingerprint> {
+        self.certificate
+    }
+
+    #[must_use]
     pub fn send(&self, message: ClientMessage) -> bool {
         self.queue.try_send(message).is_ok()
     }
@@ -103,7 +124,7 @@ enum State {
 struct SignIn {
     destination: Destination,
     identity: Identity,
-    known: Option<Key>,
+    trust: Trust,
 }
 
 struct Open {
@@ -114,12 +135,12 @@ struct Open {
 pub fn sign_in(
     destination: Destination,
     identity: Identity,
-    known: Option<Key>,
+    trust: Trust,
 ) -> impl Stream<Item = Event> + Send + 'static {
     let start = SignIn {
         destination,
         identity,
-        known,
+        trust,
     };
     stream::unfold(State::Start(Box::new(start)), step)
 }
@@ -143,13 +164,8 @@ async fn step(state: State) -> Option<(Event, State)> {
 
 impl SignIn {
     async fn open(&self) -> Result<(Socket, Link, mpsc::Receiver<ClientMessage>), Disconnect> {
-        if self.destination.security() == Security::Tls {
-            return Err(Disconnect::NoTls);
-        }
         let address = self.destination.address().to_string();
-        let mut socket = dial(self.destination.address())
-            .await
-            .ok_or(Disconnect::Unreachable)?;
+        let (mut socket, certificate) = dial(&self.destination, self.trust.certificate).await?;
         let client = post_crypto::nonce();
         let hello = ClientMessage::Hello {
             reference: None,
@@ -177,7 +193,7 @@ impl SignIn {
         if !exchange.server_proof_is_valid(&server, &proof) {
             return Err(Disconnect::FalseServer);
         }
-        if self.known.as_ref().is_some_and(|known| *known != server) {
+        if self.trust.key.is_some_and(|known| known != server) {
             return Err(Disconnect::DifferentServer);
         }
         if !requires.is_empty() {
@@ -219,7 +235,7 @@ impl SignIn {
             return Err(Disconnect::Protocol);
         };
         let (link, queue) = Link::channel(name, role, server, QUEUE_MESSAGES);
-        Ok((socket, link, queue))
+        Ok((socket, link.with_certificate(certificate), queue))
     }
 }
 
@@ -231,25 +247,52 @@ async fn answer(socket: &mut Socket) -> Result<ServerMessage, Disconnect> {
     }
 }
 
-async fn dial(address: &Address) -> Option<Socket> {
+async fn dial(
+    destination: &Destination,
+    accepted: Option<Fingerprint>,
+) -> Result<(Socket, Option<Fingerprint>), Disconnect> {
     let config = WebSocketConfig::default()
         .max_message_size(Some(MAX_LINE_BYTES))
         .max_frame_size(Some(MAX_LINE_BYTES));
-    let candidates = lookup_host(address.to_string()).await.ok()?;
+    let address = destination.address();
+    let host = match address.host() {
+        Host::Name(name) => name.clone(),
+        Host::Ip(ip) => ip.to_string(),
+    };
+    let candidates = lookup_host(address.to_string())
+        .await
+        .map_err(|_| Disconnect::Unreachable)?;
     for candidate in candidates {
         let attempt = async {
-            let stream = TcpStream::connect(candidate).await.ok()?;
-            let url = format!("ws://{address}/");
-            let (socket, _) = client_async_with_config(url, stream, Some(config))
+            let stream = TcpStream::connect(candidate)
                 .await
-                .ok()?;
-            Some(socket)
+                .map_err(|_| Disconnect::Unreachable)?;
+            let (stream, certificate) = match destination.security() {
+                Security::Plain => (Transport::Plain(stream), None),
+                Security::Tls => tls::secure(stream, &host, accepted).await?,
+            };
+            let (socket, _) = client_async_with_config(destination.url(), stream, Some(config))
+                .await
+                .map_err(|_| Disconnect::Unreachable)?;
+            Ok((socket, certificate))
         };
-        if let Ok(Some(socket)) = timeout(CONNECT_TIMEOUT, attempt).await {
-            return Some(socket);
+        match timeout(CONNECT_TIMEOUT, attempt).await {
+            Ok(Ok(connected)) => return Ok(connected),
+            Ok(Err(Disconnect::Unreachable)) | Err(_) => {}
+            Ok(Err(refused)) => return Err(refused),
         }
     }
-    None
+    Err(Disconnect::Unreachable)
+}
+
+impl From<tls::Problem> for Disconnect {
+    fn from(problem: tls::Problem) -> Self {
+        match problem {
+            tls::Problem::UnknownCertificate(fingerprint) => Self::UnknownCertificate(fingerprint),
+            tls::Problem::ChangedCertificate(fingerprint) => Self::ChangedCertificate(fingerprint),
+            tls::Problem::NoConnection => Self::Unreachable,
+        }
+    }
 }
 
 async fn read(socket: &mut Socket) -> Result<ServerMessage, Disconnect> {

@@ -10,7 +10,7 @@ use iced_test::{Instruction, Simulator};
 use post_app::app::Message;
 use post_app::i18n::Language;
 use post_app::shell;
-use post_client::{Destination, Event, Home, Identity, Seed, sign_in};
+use post_client::{Destination, Event, Home, Identity, Seed, Trust, sign_in};
 use post_proto::{ClientMessage, Name, ServerMessage};
 use post_server::Server;
 use post_server::config::Config;
@@ -151,7 +151,7 @@ fn invite_and_answer_as_ben(backstage: &Backstage) -> String {
     };
     let (invited, invitation) = std::sync::mpsc::channel();
     backstage.runtime.spawn(async move {
-        let mut events = Box::pin(sign_in(destination, identity, None));
+        let mut events = Box::pin(sign_in(destination, identity, Trust::default()));
         let mut link = None;
         while let Some(event) = events.next().await {
             match event {

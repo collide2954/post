@@ -4,11 +4,11 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use futures_util::{SinkExt, Stream, StreamExt};
-use post_client::{Destination, Disconnect, Event, Identity, Link, sign_in};
-use post_crypto::{Exchange, Seed, ServerKey};
+use post_client::{Destination, Disconnect, Event, Identity, Link, Trust, sign_in};
+use post_crypto::{Exchange, Fingerprint, Seed, ServerKey};
 use post_proto::{ClientMessage, ErrorCode, Key, Name, Nonce, Part, Role, ServerMessage};
 use post_server::Server;
-use post_server::config::Config;
+use post_server::config::{Config, Tls};
 use post_testing::Directory;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
@@ -24,6 +24,7 @@ type Socket = WebSocketStream<TcpStream>;
 struct Running {
     port: u16,
     owner_link: String,
+    fingerprint: Option<Fingerprint>,
     stop: oneshot::Sender<()>,
     _data: Directory,
 }
@@ -41,13 +42,19 @@ fn destination(text: &str) -> Destination {
 }
 
 async fn start_server() -> Running {
+    start_server_with(Tls::Off).await
+}
+
+async fn start_server_with(tls: Tls) -> Running {
     let data = Directory::new();
     let config = Config {
         data: data.path().to_owned(),
+        tls,
         ..Config::development(0)
     };
     let server = Server::bind(&config).await.expect("the server can bind");
     let port = server.addresses()[0].port();
+    let fingerprint = server.fingerprint();
     let owner_link = server
         .owner_link()
         .expect("a new server has no owner")
@@ -59,17 +66,26 @@ async fn start_server() -> Running {
     Running {
         port,
         owner_link,
+        fingerprint,
         stop,
         _data: data,
     }
 }
 
 fn events(to: &str, person: u8, who: Option<&str>, known: Option<Key>) -> Events {
+    let trust = Trust {
+        key: known,
+        certificate: None,
+    };
+    events_with(to, person, who, trust)
+}
+
+fn events_with(to: &str, person: u8, who: Option<&str>, trust: Trust) -> Events {
     let identity = Identity {
         seed: seed(person),
         name: who.map(name),
     };
-    Box::pin(sign_in(destination(to), identity, known))
+    Box::pin(sign_in(destination(to), identity, trust))
 }
 
 async fn next(events: &mut Events) -> Option<Event> {
@@ -489,10 +505,87 @@ async fn tells_that_a_program_at_the_address_is_not_a_post_server() {
 }
 
 #[tokio::test]
-async fn does_not_connect_to_a_server_with_tls_at_this_time() {
-    let mut ana = events("chat.example.org", 1, Some("ana"), None);
+async fn asks_about_a_certificate_that_no_authority_signed() {
+    let server = start_server_with(Tls::Own).await;
+    let fingerprint = server.fingerprint.expect("a server with TLS has one");
+    assert!(server.owner_link.starts_with("https://localhost:"));
 
-    assert_eq!(disconnected(&mut ana).await, Disconnect::NoTls);
+    let mut ana = events(&server.owner_link, 1, Some("ana"), None);
+
+    assert_eq!(
+        disconnected(&mut ana).await,
+        Disconnect::UnknownCertificate(fingerprint)
+    );
+}
+
+#[tokio::test]
+async fn signs_in_with_tls_when_the_user_accepted_the_certificate() {
+    let server = start_server_with(Tls::Own).await;
+    let fingerprint = server.fingerprint.expect("a server with TLS has one");
+    let trust = Trust {
+        key: None,
+        certificate: Some(fingerprint),
+    };
+
+    let mut ana = events_with(&server.owner_link, 1, Some("ana"), trust);
+    let link = connected(&mut ana).await;
+
+    assert_eq!(link.certificate(), Some(fingerprint));
+    assert_eq!(link.role(), Role::Owner);
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Join { .. }
+    ));
+    assert!(link.send(ClientMessage::Send {
+        reference: None,
+        channel: "lobby".to_owned(),
+        text: "Hello".to_owned(),
+    }));
+    assert!(matches!(
+        received(&mut ana).await,
+        ServerMessage::Message { text, .. } if text == "Hello"
+    ));
+}
+
+#[tokio::test]
+async fn warns_about_a_certificate_that_is_not_the_accepted_one() {
+    let server = start_server_with(Tls::Own).await;
+    let fingerprint = server.fingerprint.expect("a server with TLS has one");
+    let trust = Trust {
+        key: None,
+        certificate: Some(Fingerprint::from_bytes([7; 32])),
+    };
+
+    let mut ana = events_with(&server.owner_link, 1, Some("ana"), trust);
+
+    assert_eq!(
+        disconnected(&mut ana).await,
+        Disconnect::ChangedCertificate(fingerprint)
+    );
+}
+
+#[tokio::test]
+async fn has_no_certificate_to_remember_without_tls() {
+    let server = start_server().await;
+
+    let (_ana, link) = owner(&server).await;
+
+    assert_eq!(server.fingerprint, None);
+    assert_eq!(link.certificate(), None);
+}
+
+#[tokio::test]
+async fn does_not_connect_when_only_one_side_uses_tls() {
+    let with_tls = start_server_with(Tls::Own).await;
+    let without_tls = start_server().await;
+    let plain = format!("http://localhost:{}", with_tls.port);
+    let secure = format!("https://localhost:{}", without_tls.port);
+
+    let mut to_tls = events(&plain, 1, Some("ana"), None);
+    let mut to_plain = events(&secure, 1, Some("ana"), None);
+
+    assert_eq!(disconnected(&mut to_tls).await, Disconnect::Unreachable);
+    assert_eq!(disconnected(&mut to_plain).await, Disconnect::Unreachable);
 }
 
 #[tokio::test]

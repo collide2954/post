@@ -32,7 +32,7 @@ texts! {
     ConnectButton => "connect-button",
     ConnectCancelButton => "connect-cancel-button",
     ConnectProgress => "connect-progress",
-    ConnectNote => "connect-note",
+
     ProblemAddressEmpty => "problem-address-empty",
     ProblemAddressInvalid => "problem-address-invalid",
     ProblemAddressPort => "problem-address-port",
@@ -49,7 +49,8 @@ texts! {
     ProblemMissingParts => "problem-missing-parts",
     ProblemNameRequired => "problem-name-required",
     ProblemInvitationRequired => "problem-invitation-required",
-    ProblemNoTls => "problem-no-tls",
+    CertificateUnknown => "certificate-unknown",
+    CertificateChanged => "certificate-changed",
     ErrorUnsupportedProtocol => "error-unsupported-protocol",
     ErrorWrongAddress => "error-wrong-address",
     ErrorAccountExists => "error-account-exists",

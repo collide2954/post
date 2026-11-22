@@ -125,7 +125,7 @@ fn subscription(shell: &Shell) -> Subscription<Message> {
                 post_client::sign_in(
                     sign_in.target.destination.clone(),
                     identity,
-                    sign_in.target.known,
+                    sign_in.target.trust,
                 )
             })
             .with(target.attempt)

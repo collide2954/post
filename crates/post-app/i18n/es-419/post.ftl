@@ -9,7 +9,6 @@ connect-name-label = Nombre para una cuenta nueva
 connect-button = Conectar
 connect-cancel-button = Cancelar
 connect-progress = Conectando a { $address }…
-connect-note = Esta versión de prueba solo se conecta a un servidor en esta computadora. La conexión no tiene cifrado.
 
 problem-address-empty = Escribe la dirección del servidor.
 problem-address-invalid = Este texto no es un enlace de invitación ni una dirección de servidor.
@@ -27,7 +26,8 @@ problem-different-server = El servidor en esta dirección no es el servidor que 
 problem-missing-parts = Este servidor necesita funciones que esta versión de Post no tiene.
 problem-name-required = Escribe un nombre para tu cuenta nueva.
 problem-invitation-required = No tienes una cuenta en este servidor. Pega un enlace de invitación para unirte.
-problem-no-tls = Esta versión solo se conecta a un servidor en esta computadora.
+certificate-unknown = Este servidor tiene un certificado que ninguna autoridad pública firmó.
+certificate-changed = Advertencia: el certificado de este servidor cambió.
 
 error-unsupported-protocol = El servidor usa otra versión del protocolo.
 error-wrong-address = El servidor no usa esta dirección.

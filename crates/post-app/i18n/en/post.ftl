@@ -9,7 +9,6 @@ connect-name-label = Name for a new account
 connect-button = Connect
 connect-cancel-button = Cancel
 connect-progress = Connecting to { $address }…
-connect-note = This test version connects only to a server on this computer. The connection has no encryption.
 
 problem-address-empty = Type the address of the server.
 problem-address-invalid = This text is not an invite link or a server address.
@@ -27,7 +26,8 @@ problem-different-server = The server at this address is not the server that you
 problem-missing-parts = This server needs functions that this version of Post does not have.
 problem-name-required = Type a name for your new account.
 problem-invitation-required = You have no account on this server. Paste an invite link to join.
-problem-no-tls = This version connects only to a server on this computer.
+certificate-unknown = This server has a certificate that no public authority signed.
+certificate-changed = Warning: the certificate of this server changed.
 
 error-unsupported-protocol = The server uses a different version of the protocol.
 error-wrong-address = The server does not use this address.
