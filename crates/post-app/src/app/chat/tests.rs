@@ -2,11 +2,11 @@ use std::num::NonZeroU32;
 
 use post_client::{Destination, Entry, Fingerprint, KnownServer, Link, Outgoing, Trust};
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Invitation, Key, Name, NameError, Role, ServerMessage,
-    Timestamp,
+    ChannelKind, ChannelName, ClientMessage, Code, ErrorCode, Invitation, Key, Name, NameError,
+    Role, ServerMessage, Timestamp,
 };
 
-use super::{Account, Chat, Invitations, Lifetime, Message, Open, Panel, Uses};
+use super::{Account, Chat, Invitations, Lifetime, Message, Open, Panel, Place, Uses};
 use crate::app::Effect;
 use crate::app::servers::{Form, Target};
 use crate::i18n::Text;
@@ -561,4 +561,164 @@ fn ignores_a_panel_message_when_that_panel_is_not_open() {
 
     assert_eq!(outbox(), None);
     assert_eq!(chat.panel(), None);
+}
+
+fn channel(text: &str) -> ChannelName {
+    ChannelName::parse(text).expect(text)
+}
+
+fn place(title: &str) -> Place {
+    Place::Channel(channel(title))
+}
+
+fn state(reference: Option<u32>, title: &str) -> ServerMessage {
+    ServerMessage::Channel {
+        reference,
+        channel: channel(title),
+        kind: ChannelKind::Public,
+        topic: String::new(),
+        owner: name("ana"),
+        created: time(),
+    }
+}
+
+fn left(title: &str, who: &str) -> ServerMessage {
+    ServerMessage::Leave {
+        reference: None,
+        channel: title.to_owned(),
+        name: name(who),
+        time: time(),
+    }
+}
+
+#[test]
+fn starts_in_the_temporary_lobby() {
+    let (chat, _outbox) = chat(4);
+
+    assert_eq!(chat.place(), &Place::Lobby);
+}
+
+#[test]
+fn shows_a_channel_when_the_user_selects_it() {
+    let (mut chat, _outbox) = chat(4);
+
+    assert_eq!(chat.receive(state(None, "general")), Effect::None);
+    assert_eq!(chat.place(), &Place::Lobby);
+
+    let effect = chat.update(Message::Select(place("general")));
+    assert_eq!(effect, Effect::FocusDraft);
+    assert_eq!(chat.place(), &place("general"));
+
+    let effect = chat.update(Message::Select(Place::Lobby));
+    assert_eq!(effect, Effect::FocusDraft);
+    assert_eq!(chat.place(), &Place::Lobby);
+}
+
+#[test]
+fn does_not_show_a_channel_that_the_user_is_not_in() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(None, "general"));
+    chat.update(Message::Select(place("general")));
+
+    let effect = chat.update(Message::Select(place("garden")));
+
+    assert_eq!(effect, Effect::None);
+    assert_eq!(chat.place(), &place("general"));
+}
+
+#[test]
+fn keeps_one_draft_for_each_place() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(None, "general"));
+    chat.update(Message::DraftChanged("for the lobby".to_owned()));
+
+    chat.update(Message::Select(place("general")));
+    assert_eq!(chat.draft(), "");
+    chat.update(Message::DraftChanged("for general".to_owned()));
+
+    chat.update(Message::Select(Place::Lobby));
+    assert_eq!(chat.draft(), "for the lobby");
+    chat.update(Message::Select(place("general")));
+    assert_eq!(chat.draft(), "for general");
+}
+
+#[test]
+fn sends_the_draft_to_the_place_that_the_user_sees() {
+    let (mut chat, mut outbox) = chat(4);
+    chat.receive(state(None, "general"));
+    chat.update(Message::DraftChanged("to the lobby".to_owned()));
+    chat.update(Message::Select(place("general")));
+    chat.update(Message::DraftChanged("Hello".to_owned()));
+
+    chat.update(Message::Send);
+
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Send {
+            reference: Some(1),
+            channel: "general".to_owned(),
+            text: "Hello".to_owned(),
+        })
+    );
+    assert_eq!(chat.draft(), "");
+    chat.update(Message::Select(Place::Lobby));
+    assert_eq!(chat.draft(), "to the lobby");
+    chat.update(Message::Send);
+    assert_eq!(
+        outbox(),
+        Some(ClientMessage::Send {
+            reference: Some(2),
+            channel: "lobby".to_owned(),
+            text: "to the lobby".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn opens_a_channel_when_the_server_answers_a_request_of_this_window() {
+    let (mut chat, _outbox) = chat(4);
+    chat.update(Message::Open(Panel::Account));
+    chat.receive(ServerMessage::error(Some(1), ErrorCode::NameTaken));
+
+    let effect = chat.receive(state(Some(2), "general"));
+
+    assert_eq!(effect, Effect::FocusDraft);
+    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.panel(), None);
+    assert_eq!(chat.notice(), None);
+}
+
+#[test]
+fn goes_back_to_the_lobby_when_its_channel_goes_away() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(Some(1), "general"));
+    chat.receive(state(None, "dev"));
+    chat.update(Message::DraftChanged("not sent".to_owned()));
+
+    chat.receive(left("dev", "ana"));
+    assert_eq!(chat.place(), &place("general"));
+    chat.receive(left("general", "ben"));
+    assert_eq!(chat.place(), &place("general"));
+    assert_eq!(chat.draft(), "not sent");
+
+    let effect = chat.receive(left("general", "ana"));
+
+    assert_eq!(effect, Effect::None);
+    assert_eq!(chat.place(), &Place::Lobby);
+    assert_eq!(chat.draft(), "");
+    chat.receive(state(None, "general"));
+    chat.update(Message::Select(place("general")));
+    assert_eq!(chat.draft(), "");
+}
+
+#[test]
+fn forgets_an_error_when_the_user_selects_a_place() {
+    let (mut chat, _outbox) = chat(4);
+    chat.receive(state(None, "general"));
+    chat.receive(ServerMessage::error(Some(1), ErrorCode::NotMember));
+    assert_eq!(chat.notice(), Some(Text::ErrorNotMember));
+
+    chat.update(Message::Select(place("general")));
+
+    assert_eq!(chat.notice(), None);
 }

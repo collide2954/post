@@ -1,7 +1,10 @@
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use post_client::{KnownServer, Link, Security, Session};
-use post_proto::{ClientMessage, Code, Name, NameError, Role, ServerMessage, TextError};
+use post_proto::{
+    ChannelName, ClientMessage, Code, Name, NameError, Role, ServerMessage, TextError,
+};
 
 use super::servers::{Form, Target};
 use super::{Effect, error_text};
@@ -21,6 +24,13 @@ pub enum Message {
     Copy(Code),
     NameChanged(String),
     Rename,
+    Select(Place),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Place {
+    Lobby,
+    Channel(ChannelName),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,7 +63,8 @@ pub struct Chat {
     target: Target,
     link: Link,
     session: Session,
-    draft: String,
+    place: Place,
+    drafts: BTreeMap<Place, String>,
     notice: Option<Notice>,
     panel: Option<Open>,
 }
@@ -132,7 +143,8 @@ impl Chat {
             target,
             session: Session::new(link.name().clone()),
             link,
-            draft: String::new(),
+            place: Place::Lobby,
+            drafts: BTreeMap::new(),
             notice: None,
             panel: None,
         }
@@ -149,8 +161,13 @@ impl Chat {
     }
 
     #[must_use]
+    pub fn place(&self) -> &Place {
+        &self.place
+    }
+
+    #[must_use]
     pub fn draft(&self) -> &str {
-        &self.draft
+        self.drafts.get(&self.place).map_or("", String::as_str)
     }
 
     #[must_use]
@@ -192,7 +209,7 @@ impl Chat {
     pub fn update(&mut self, message: Message) -> Effect {
         match message {
             Message::DraftChanged(draft) => {
-                self.draft = draft;
+                self.drafts.insert(self.place.clone(), draft);
                 self.notice = None;
             }
             Message::Send => self.send(),
@@ -243,6 +260,7 @@ impl Chat {
                 }
             }
             Message::Rename => return self.rename(),
+            Message::Select(place) => return self.select(place),
         }
         Effect::None
     }
@@ -252,7 +270,22 @@ impl Chat {
             &message,
             ServerMessage::Rename { old, .. } if old == self.session.name()
         );
+        let answer = match &message {
+            ServerMessage::Channel {
+                reference: Some(_),
+                channel,
+                ..
+            } => Some(Place::Channel(channel.clone())),
+            _ => None,
+        };
         self.session.apply(message);
+        if !self.has(&self.place) {
+            self.drafts.remove(&self.place);
+            self.place = Place::Lobby;
+        }
+        if let Some(place) = answer {
+            return self.select(place);
+        }
         if !own_name_changes {
             return Effect::None;
         }
@@ -276,11 +309,33 @@ impl Chat {
         self.form
     }
 
+    fn has(&self, place: &Place) -> bool {
+        match place {
+            Place::Lobby => true,
+            Place::Channel(name) => self.session.channel(name).is_some(),
+        }
+    }
+
+    fn select(&mut self, place: Place) -> Effect {
+        if !self.has(&place) {
+            return Effect::None;
+        }
+        self.place = place;
+        self.panel = None;
+        self.forget_the_problem();
+        Effect::FocusDraft
+    }
+
     fn send(&mut self) {
-        match self.session.compose(&self.draft) {
+        let draft = self.drafts.get(&self.place).map_or("", String::as_str);
+        let composed = match &self.place {
+            Place::Lobby => self.session.compose(draft),
+            Place::Channel(name) => self.session.compose_to(name, draft),
+        };
+        match composed {
             Ok(message) => {
                 if self.link.send(message) {
-                    self.draft.clear();
+                    self.drafts.remove(&self.place);
                     self.notice = None;
                 } else {
                     self.notice = Some(Notice::NotSent);
