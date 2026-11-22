@@ -1,4 +1,5 @@
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -257,6 +258,104 @@ fn join(backstage: &Backstage, link: &str, who: &str) {
 fn known_servers(directory: &Directory) -> String {
     let servers = directory.join("profiles").join("1").join("servers.toml");
     std::fs::read_to_string(servers).expect("a servers file")
+}
+
+fn settings_file(directory: &Directory) -> PathBuf {
+    directory.join("profiles").join("1").join("settings.toml")
+}
+
+#[test]
+fn a_user_changes_the_language_and_the_application_keeps_it() {
+    let directory = Directory::new();
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+    let file = settings_file(&directory);
+    let text = std::fs::read_to_string(&file).expect("a settings file");
+    assert!(
+        text.starts_with("# The settings of this Post profile.\n"),
+        "{text}"
+    );
+    assert!(text.contains("language = \"system\"\n"), "{text}");
+
+    driver.act("click \"Settings\"");
+    driver.expect("Language");
+    driver.expect(&format!(
+        "Post keeps these settings in this file: {}",
+        file.display()
+    ));
+    driver.act("click \"Español (Latinoamérica)\"");
+    driver.expect("Idioma");
+    driver.act("click \"Más grande\"");
+    driver.expect("110%");
+    driver.act("click \"Volver\"");
+    driver.expect("Conectar");
+
+    let text = std::fs::read_to_string(&file).expect("a settings file");
+    assert!(
+        text.starts_with("# The settings of this Post profile.\n"),
+        "{text}"
+    );
+    assert!(text.contains("language = \"es-419\"\n"), "{text}");
+    assert!(text.contains("text-size = 110\n"), "{text}");
+    drop(driver);
+
+    let mut second = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    second.expect("Conectar");
+    second.act("click \"Configuración\"");
+    second.expect("110%");
+}
+
+#[test]
+fn the_application_obeys_a_change_in_the_settings_file() {
+    let directory = Directory::new();
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+    let file = settings_file(&directory);
+
+    std::fs::write(&file, "language = \"es-419\"\n").expect("a settings file");
+    driver.expect("Conectar");
+
+    std::fs::write(&file, "language = = \"en\"\n").expect("a settings file");
+    driver.act("click \"Configuración\"");
+    driver.expect(
+        "El archivo de configuración no es TOML válido. Post ignora el archivo hasta que lo corrijas.",
+    );
+
+    driver.act("click \"English\"");
+    driver.expect("Language");
+    let text = std::fs::read_to_string(&file).expect("a settings file");
+    assert!(text.contains("language = \"en\"\n"), "{text}");
+    assert!(
+        !driver.shows(
+            "The settings file is not valid TOML. Post ignores the file until you correct it."
+        )
+    );
+}
+
+#[test]
+fn a_user_sees_a_note_when_the_settings_file_cannot_take_a_change() {
+    let directory = Directory::new();
+    let file = settings_file(&directory);
+    std::fs::create_dir_all(&file).expect("a directory in the place of the file");
+    let mut driver = Driver::start(shell::application(
+        Language::English,
+        Some(home(&directory)),
+    ));
+    driver.expect("Connect");
+
+    driver.act("click \"Settings\"");
+    driver.act("click \"12 hours\"");
+
+    driver.expect("Post could not write the settings file.");
 }
 
 #[test]

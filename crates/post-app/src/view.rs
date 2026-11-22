@@ -1,23 +1,25 @@
 use std::sync::LazyLock;
 
-use iced::widget::text::LineHeight;
+use iced::widget::text::{LineHeight, Wrapping};
 use iced::widget::{
-    Column, Space, button, column, container, row, rule, scrollable, space, text, text_input,
+    Column, Row, Space, button, checkbox, column, container, responsive, row, rule, scrollable,
+    space, text, text_input,
 };
 use iced::{
     Alignment, Background, Border, Color, Element, Fill, Font, Pixels, Theme, border, font,
 };
 use jiff::tz::TimeZone;
 use post_client::{Entry, KnownServer};
-use post_proto::{Invitation, LOBBY};
+use post_proto::{Invitation, LOBBY, Timestamp};
 
 use crate::app::chat::{self, Account, Chat, Invitations, Lifetime, Open, Panel, Uses};
 use crate::app::servers::{self, Question, Servers};
 use crate::app::start::StartProblem;
-use crate::app::{App, Message, Screen};
-use crate::i18n::{Strings, Text};
+use crate::app::{self, App, Message, Page, Screen};
+use crate::i18n::{Language, Strings, Text};
 use crate::palette::{Mode, Palette, Rgb};
-use crate::timeline::{clock, date_and_clock, name_column, shows_name};
+use crate::settings::{self, Clock, Settings};
+use crate::timeline::{ClockStyle, clock, date_and_clock, name_column, shows_name};
 
 pub const ADDRESS_FIELD: &str = "address";
 pub const NAME_FIELD: &str = "name";
@@ -42,11 +44,14 @@ const SMALL_SIZE: f32 = 12.0;
 const LINE_HEIGHT: f32 = 21.0;
 const NAME_CHARACTER_WIDTH: f32 = 8.5;
 const PAGE_WIDTH: f32 = 420.0;
+const BAR_HEIGHT: f32 = 42.0;
+const STATUS_WIDTH: f32 = 740.0;
 
 pub struct Window {
     pub app: App,
     pub strings: Strings,
     pub zone: TimeZone,
+    pub settings_file: Option<String>,
 }
 
 #[must_use]
@@ -77,6 +82,9 @@ fn custom_theme(name: &'static str, mode: Mode) -> Theme {
 pub fn view(window: &Window) -> Element<'_, Message> {
     let palette = Palette::of(window.app.mode());
     let strings = &window.strings;
+    if window.app.page() == Some(Page::Settings) {
+        return settings_page(window, palette);
+    }
     match window.app.screen() {
         Screen::Stopped(problem) => stopped_screen(strings, problem, palette),
         Screen::Servers(servers) => match servers.question() {
@@ -244,10 +252,192 @@ fn servers_screen<'a>(
             .push(label(strings.text(Text::ConnectNameLabel), palette))
             .push(name)
             .push(feedback)
-            .push(row![space::horizontal(), action]),
+            .push(row![space::horizontal(), action])
+            .push(Space::new().height(12))
+            .push(row![settings_link(strings, [4, 0], palette)]),
     )
 }
 
+fn settings_link<'a>(
+    strings: &Strings,
+    padding: [u16; 2],
+    palette: Palette,
+) -> Element<'a, Message> {
+    let open = Message::Open(Page::Settings);
+    link(
+        strings.text(Text::NavSettingsButton),
+        Some(open),
+        padding,
+        palette,
+    )
+}
+
+fn bar(
+    heading: String,
+    status: Option<String>,
+    links: Row<'_, Message>,
+    palette: Palette,
+) -> Element<'_, Message> {
+    let mut bar = row![
+        text(heading).font(STRONG_FONT).size(15),
+        space::horizontal()
+    ]
+    .spacing(12)
+    .align_y(Alignment::Center)
+    .padding([8, 16]);
+    if let Some(status) = status {
+        bar = bar.push(text(status).size(13).color(color(palette.muted)));
+    }
+    column![bar.push(links), divider(palette)].into()
+}
+
+fn clock_style(window: &Window) -> ClockStyle {
+    ClockStyle::new(
+        window.app.settings(),
+        window.strings.text(Text::ClockMorning),
+        window.strings.text(Text::ClockAfternoon),
+    )
+}
+
+fn settings_page(window: &Window, palette: Palette) -> Element<'_, Message> {
+    let strings = &window.strings;
+    let current = window.app.settings();
+    let back = link_button(
+        strings.text(Text::NavBackButton),
+        Some(Message::Back),
+        palette,
+    );
+    let seconds = check(
+        strings.text(Text::SettingsSeconds),
+        current.seconds,
+        |seconds| Message::Settings(app::settings::Message::SecondsToggled(seconds)),
+        palette,
+    );
+    let console = check(
+        strings.text(Text::SettingsConsole),
+        current.console,
+        |console| Message::Settings(app::settings::Message::ConsoleToggled(console)),
+        palette,
+    );
+
+    let mut content = column![
+        label(strings.text(Text::SettingsLanguageLabel), palette),
+        language_choices(strings, *current, palette),
+        Space::new().height(8),
+        label(strings.text(Text::SettingsClockLabel), palette),
+        clock_choices(strings, *current, palette),
+        seconds,
+        Space::new().height(8),
+        label(strings.text(Text::SettingsTextSizeLabel), palette),
+        size_steps(strings, *current, palette),
+        Space::new().height(8),
+        label(strings.text(Text::SettingsDeveloperLabel), palette),
+        console,
+        Space::new().height(8),
+    ];
+    if let Some(problem) = window.app.settings_problem() {
+        let problem = settings_problem(strings, problem);
+        content = content.push(paragraph(problem, palette.danger));
+    }
+    if let Some(path) = &window.settings_file {
+        content = content.push(
+            text(strings.with(Text::SettingsFile, "path", path))
+                .size(SMALL_SIZE)
+                .line_height(LineHeight::Absolute(Pixels(LINE_HEIGHT)))
+                .wrapping(Wrapping::WordOrGlyph)
+                .color(color(palette.muted)),
+        );
+    }
+    column![
+        bar(strings.text(Text::SettingsTitle), None, row![back], palette),
+        panel_page(content),
+    ]
+    .into()
+}
+
+fn language_choices<'a>(
+    strings: &Strings,
+    current: Settings,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let languages = [
+        (None, Text::SettingsLanguageSystem),
+        (Some(Language::English), Text::SettingsLanguageEnglish),
+        (Some(Language::Spanish), Text::SettingsLanguageSpanish),
+    ]
+    .into_iter()
+    .map(|(language, name)| {
+        let select = app::settings::Message::LanguageSelected(language);
+        choice(
+            strings.text(name),
+            current.language == language,
+            Message::Settings(select),
+            palette,
+        )
+    });
+    row(languages).spacing(6).into()
+}
+
+fn clock_choices<'a>(
+    strings: &Strings,
+    current: Settings,
+    palette: Palette,
+) -> Element<'a, Message> {
+    let clocks = [
+        (Clock::Hours24, Text::SettingsClock24),
+        (Clock::Hours12, Text::SettingsClock12),
+    ]
+    .into_iter()
+    .map(|(clock, name)| {
+        let select = app::settings::Message::ClockSelected(clock);
+        choice(
+            strings.text(name),
+            current.clock == clock,
+            Message::Settings(select),
+            palette,
+        )
+    });
+    row(clocks).spacing(6).into()
+}
+
+fn size_steps<'a>(strings: &Strings, current: Settings, palette: Palette) -> Element<'a, Message> {
+    let step = |name: Text, possible: bool, message: app::settings::Message| {
+        let state = if possible {
+            Choice::Available(Message::Settings(message))
+        } else {
+            Choice::Unavailable
+        };
+        pill(strings.text(name), state, palette)
+    };
+    row![
+        step(
+            Text::SettingsSmallerButton,
+            current.text_size > Settings::MIN_TEXT_SIZE,
+            app::settings::Message::Smaller
+        ),
+        text(format!("{}%", current.text_size)).width(48).center(),
+        step(
+            Text::SettingsLargerButton,
+            current.text_size < Settings::MAX_TEXT_SIZE,
+            app::settings::Message::Larger
+        ),
+    ]
+    .spacing(6)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn settings_problem(strings: &Strings, problem: app::settings::Problem) -> String {
+    match problem {
+        app::settings::Problem::File(settings::Problem::Syntax) => {
+            strings.text(Text::SettingsProblemSyntax)
+        }
+        app::settings::Problem::File(settings::Problem::Value(key)) => {
+            strings.with(Text::SettingsProblemValue, "key", key)
+        }
+        app::settings::Problem::NotSaved => strings.text(Text::SettingsNotSaved),
+    }
+}
 fn server_row<'a>(
     strings: &Strings,
     index: usize,
@@ -284,13 +474,29 @@ fn server_row<'a>(
 
 fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Element<'a, Message> {
     let strings = &window.strings;
+    let header =
+        responsive(move |size| chat_bar(strings, chat, size.width >= STATUS_WIDTH, palette));
+    let body = match chat.panel() {
+        None => conversation(window, chat, palette),
+        Some(Open::Invitations(panel)) => invitations_panel(window, chat, panel, palette),
+        Some(Open::Account(account)) => account_panel(strings, chat, account, palette),
+    };
+    column![container(header).height(BAR_HEIGHT), body].into()
+}
+
+fn chat_bar<'a>(
+    strings: &Strings,
+    chat: &Chat,
+    with_status: bool,
+    palette: Palette,
+) -> Element<'a, Message> {
     let link = |text: Text, message: chat::Message| {
         link_button(strings.text(text), Some(Message::Chat(message)), palette)
     };
 
     let mut links = row![].spacing(4);
     if chat.panel().is_some() {
-        links = links.push(link(Text::ChatBackButton, chat::Message::Close));
+        links = links.push(link(Text::NavBackButton, chat::Message::Close));
     } else {
         if chat.is_owner() {
             let open = chat::Message::Open(Panel::Invitations);
@@ -301,27 +507,12 @@ fn chat_screen<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Elem
                 Text::ChatNameButton,
                 chat::Message::Open(Panel::Account),
             ))
+            .push(settings_link(strings, [4, 8], palette))
             .push(link(Text::ChatLeaveButton, chat::Message::Leave));
     }
     let name = chat.session().name().as_str();
-    let header = row![
-        text(format!("#{LOBBY}")).font(STRONG_FONT).size(15),
-        space::horizontal(),
-        text(strings.with(Text::ChatStatus, "name", name))
-            .size(13)
-            .color(color(palette.muted)),
-        links,
-    ]
-    .spacing(12)
-    .align_y(Alignment::Center)
-    .padding([8, 16]);
-
-    let body = match chat.panel() {
-        None => conversation(window, chat, palette),
-        Some(Open::Invitations(panel)) => invitations_panel(window, chat, panel, palette),
-        Some(Open::Account(account)) => account_panel(strings, chat, account, palette),
-    };
-    column![header, divider(palette), body].into()
+    let status = with_status.then(|| strings.with(Text::ChatStatus, "name", name));
+    bar(format!("#{LOBBY}"), status, links, palette)
 }
 
 fn conversation<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Element<'a, Message> {
@@ -333,10 +524,11 @@ fn conversation<'a>(window: &'a Window, chat: &'a Chat, palette: Palette) -> Ele
         reason = "a name has a maximum of 20 characters"
     )]
     let name_width = (name_column(entries) as f32 * NAME_CHARACTER_WIDTH).max(24.0);
-    let lines = entries
-        .iter()
-        .enumerate()
-        .map(|(index, entry)| line(window, entries, index, entry, name_width, palette));
+    let style = clock_style(window);
+    let lines = entries.iter().enumerate().map(|(index, entry)| {
+        let stamp = clock(entry_time(entry), &window.zone, &style);
+        line(strings, stamp, entries, index, entry, name_width, palette)
+    });
     let timeline = scrollable(column(lines).spacing(3).padding([12, 16]))
         .anchor_bottom()
         .width(Fill)
@@ -383,7 +575,7 @@ fn invitations_panel<'a>(
         choice(
             strings.text(lifetime.text()),
             lifetime == panel.lifetime,
-            chat::Message::LifetimeSelected(lifetime),
+            Message::Chat(chat::Message::LifetimeSelected(lifetime)),
             palette,
         )
     });
@@ -392,9 +584,10 @@ fn invitations_panel<'a>(
             || strings.text(Text::InvitationsUsesNoLimit),
             |count| count.to_string(),
         );
-        let selected = chat::Message::UsesSelected(uses);
-        choice(content, uses == panel.uses, selected, palette)
+        let select = Message::Chat(chat::Message::UsesSelected(uses));
+        choice(content, uses == panel.uses, select, palette)
     });
+    let style = clock_style(window);
     let notice: Element<'a, Message> = match chat.notice() {
         Some(notice) => text(strings.text(notice))
             .size(13)
@@ -433,8 +626,11 @@ fn invitations_panel<'a>(
         Some(list) => {
             for invitation in list {
                 let copied = panel.copied.as_ref() == Some(&invitation.code);
+                let end = invitation
+                    .end
+                    .map(|end| date_and_clock(end, &window.zone, &style));
                 content = content
-                    .push(invitation_row(window, invitation, copied, palette))
+                    .push(invitation_row(strings, invitation, end, copied, palette))
                     .push(divider(palette));
             }
         }
@@ -443,18 +639,15 @@ fn invitations_panel<'a>(
 }
 
 fn invitation_row<'a>(
-    window: &Window,
+    strings: &Strings,
     invitation: &'a Invitation,
+    end: Option<String>,
     copied: bool,
     palette: Palette,
 ) -> Element<'a, Message> {
-    let strings = &window.strings;
-    let end = invitation.end.map_or_else(
+    let end = end.map_or_else(
         || strings.text(Text::InvitationsLifetimeForever),
-        |end| {
-            let time = date_and_clock(end, &window.zone);
-            strings.with(Text::InvitationsEnd, "time", &time)
-        },
+        |time| strings.with(Text::InvitationsEnd, "time", &time),
     );
     let count = invitation.used.to_string();
     let count = match invitation.uses {
@@ -535,7 +728,7 @@ fn account_panel<'a>(
 }
 
 fn panel_page(content: Column<'_, Message>) -> Element<'_, Message> {
-    let content = content.spacing(8).max_width(PAGE_WIDTH);
+    let content = content.spacing(8).width(Fill).max_width(PAGE_WIDTH);
     scrollable(container(content).center_x(Fill).padding(24))
         .height(Fill)
         .into()
@@ -549,19 +742,40 @@ fn heading<'a>(content: String) -> Element<'a, Message> {
     .into()
 }
 
+enum Choice {
+    Selected,
+    Available(Message),
+    Unavailable,
+}
+
 fn choice<'a>(
     content: String,
     selected: bool,
-    message: chat::Message,
+    message: Message,
     palette: Palette,
 ) -> Element<'a, Message> {
+    let state = if selected {
+        Choice::Selected
+    } else {
+        Choice::Available(message)
+    };
+    pill(content, state, palette)
+}
+
+fn pill<'a>(content: String, state: Choice, palette: Palette) -> Element<'a, Message> {
+    let selected = matches!(state, Choice::Selected);
     let font = if selected { STRONG_FONT } else { TEXT_FONT };
+    let message = match state {
+        Choice::Available(message) => Some(message),
+        Choice::Selected | Choice::Unavailable => None,
+    };
     button(text(content).size(13).font(font))
         .padding([4, 10])
-        .on_press_maybe((!selected).then_some(Message::Chat(message)))
+        .on_press_maybe(message)
         .style(move |_, status| {
             let (text_color, border_color) = match status {
-                button::Status::Disabled => (palette.text, palette.text),
+                button::Status::Disabled if selected => (palette.text, palette.text),
+                button::Status::Disabled => (palette.muted, palette.rule),
                 button::Status::Hovered | button::Status::Pressed => (palette.text, palette.rule),
                 button::Status::Active => (palette.accent, palette.rule),
             };
@@ -579,8 +793,60 @@ fn choice<'a>(
         .into()
 }
 
+fn check<'a>(
+    content: String,
+    checked: bool,
+    on_toggle: fn(bool) -> Message,
+    palette: Palette,
+) -> Element<'a, Message> {
+    checkbox(checked)
+        .label(content)
+        .on_toggle(on_toggle)
+        .size(16)
+        .spacing(8)
+        .text_size(TEXT_SIZE)
+        .style(move |_, status| {
+            let (checked, hovered) = match status {
+                checkbox::Status::Active { is_checked }
+                | checkbox::Status::Disabled { is_checked } => (is_checked, false),
+                checkbox::Status::Hovered { is_checked } => (is_checked, true),
+            };
+            let fill = if checked {
+                palette.accent
+            } else {
+                palette.background
+            };
+            let edge = if checked || hovered {
+                palette.accent
+            } else {
+                palette.muted
+            };
+            checkbox::Style {
+                background: Background::Color(color(fill)),
+                icon_color: color(palette.on_accent),
+                border: Border {
+                    color: color(edge),
+                    width: 1.0,
+                    radius: 3.0.into(),
+                },
+                text_color: Some(color(palette.text)),
+            }
+        })
+        .into()
+}
+
+fn entry_time(entry: &Entry) -> Timestamp {
+    match entry {
+        Entry::Message { time, .. }
+        | Entry::Joined { time, .. }
+        | Entry::Left { time, .. }
+        | Entry::Renamed { time, .. } => *time,
+    }
+}
+
 fn line<'a>(
-    window: &Window,
+    strings: &Strings,
+    stamp: String,
     entries: &'a [Entry],
     index: usize,
     entry: &'a Entry,
@@ -588,36 +854,29 @@ fn line<'a>(
     palette: Palette,
 ) -> Element<'a, Message> {
     let line_height = LineHeight::Absolute(Pixels(LINE_HEIGHT));
-    let (time, name, body) = match entry {
+    let (name, body) = match entry {
         Entry::Message {
-            time,
-            from,
-            text: body,
+            from, text: body, ..
         } => (
-            *time,
             shows_name(entries, index).then_some(from),
             text(body.as_str()),
         ),
-        Entry::Joined { time, name } => (
-            *time,
+        Entry::Joined { name, .. } => (
             None,
-            text(window.strings.with(Text::ChatJoined, "name", name.as_str()))
-                .color(color(palette.muted)),
+            text(strings.with(Text::ChatJoined, "name", name.as_str())).color(color(palette.muted)),
         ),
-        Entry::Left { time, name } => (
-            *time,
+        Entry::Left { name, .. } => (
             None,
-            text(window.strings.with(Text::ChatLeft, "name", name.as_str()))
-                .color(color(palette.muted)),
+            text(strings.with(Text::ChatLeft, "name", name.as_str())).color(color(palette.muted)),
         ),
-        Entry::Renamed { time, old, new } => {
+        Entry::Renamed { old, new, .. } => {
             let values = [("old", old.as_str()), ("new", new.as_str())];
-            let renamed = window.strings.with_all(Text::ChatRenamed, &values);
-            (*time, None, text(renamed).color(color(palette.muted)))
+            let renamed = strings.with_all(Text::ChatRenamed, &values);
+            (None, text(renamed).color(color(palette.muted)))
         }
     };
 
-    let stamp = text(clock(time, &window.zone))
+    let stamp = text(stamp)
         .font(MONO_FONT)
         .size(SMALL_SIZE)
         .line_height(line_height)
@@ -687,8 +946,17 @@ fn link_button<'a>(
     message: Option<Message>,
     palette: Palette,
 ) -> Element<'a, Message> {
+    link(content, message, [4, 8], palette)
+}
+
+fn link<'a>(
+    content: String,
+    message: Option<Message>,
+    padding: [u16; 2],
+    palette: Palette,
+) -> Element<'a, Message> {
     button(text(content).size(13))
-        .padding([4, 8])
+        .padding(padding)
         .on_press_maybe(message)
         .style(move |_, status| {
             let text_color = match status {

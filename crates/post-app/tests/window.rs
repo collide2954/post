@@ -6,9 +6,10 @@ use iced::{Pixels, Settings, Size};
 use iced_test::{Simulator, selector};
 use jiff::tz::TimeZone;
 use post_app::app::start::StartProblem;
-use post_app::app::{App, Message, chat, servers};
+use post_app::app::{App, Message, Page, chat, servers, settings};
 use post_app::i18n::{Language, Strings};
 use post_app::palette::Mode;
+use post_app::settings::Clock;
 use post_app::view::{self, Window};
 use post_client::{Disconnect, Event, Fingerprint, KnownServer, Link};
 use post_proto::{
@@ -32,10 +33,15 @@ fn window(app: App, language: Language) -> Window {
         app,
         strings: Strings::new(language),
         zone: TimeZone::UTC,
+        settings_file: None,
     }
 }
 
 fn simulator(window: &Window) -> Simulator<'_, Message> {
+    simulator_of_size(window, Size::new(900.0, 600.0))
+}
+
+fn simulator_of_size(window: &Window, size: Size) -> Simulator<'_, Message> {
     let settings = Settings {
         default_font: view::TEXT_FONT,
         default_text_size: Pixels(14.0),
@@ -45,7 +51,7 @@ fn simulator(window: &Window) -> Simulator<'_, Message> {
             .collect(),
         ..Settings::default()
     };
-    Simulator::with_size(settings, Size::new(900.0, 600.0), view::view(window))
+    Simulator::with_size(settings, size, view::view(window))
 }
 
 fn new_app(mode: Mode) -> App {
@@ -190,6 +196,17 @@ fn account_app(mode: Mode) -> (App, Outbox) {
     let (mut app, outbox) = chat_app(mode);
     app.update(Message::Chat(chat::Message::Open(chat::Panel::Account)));
     (app, outbox)
+}
+
+fn settings_app(mode: Mode) -> App {
+    let mut app = new_app(mode);
+    app.update(Message::Open(Page::Settings));
+    app
+}
+
+fn settings_file(app: &mut App, text: &str) {
+    let changed = settings::Message::FileChanged(text.to_owned());
+    app.update(Message::Settings(changed));
 }
 
 fn clicked(window: &Window, text: &str) -> Vec<Message> {
@@ -507,6 +524,36 @@ fn the_header_of_the_chat_has_a_link_for_each_panel() {
 }
 
 #[test]
+fn the_smallest_window_shows_each_link_of_the_chat_and_not_the_status() {
+    let smallest = Size::new(520.0, 320.0);
+    let (app, _outbox) = chat_app_as(Mode::Light, Role::Owner);
+    let window = window(app, Language::Spanish);
+    let mut interface = simulator_of_size(&window, smallest);
+
+    assert!(interface.find("ana · conectado").is_err());
+    for text in [
+        "#lobby",
+        "Invitaciones",
+        "Cambiar nombre",
+        "Configuración",
+        "Salir",
+    ] {
+        let bounds = interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"))
+            .bounds();
+        assert!(
+            bounds.x >= 16.0 && bounds.x + bounds.width <= smallest.width - 16.0,
+            "{text}: {bounds:?}"
+        );
+    }
+
+    let mut wide = simulator_of_size(&window, Size::new(740.0, 320.0));
+    wide.find("ana · conectado")
+        .expect("a wide window shows the status");
+}
+
+#[test]
 fn the_invitations_panel_lists_the_open_invitations() {
     let (app, _outbox) = invitations_app(Mode::Light, Some(two_invitations()));
     let window = window(app, Language::English);
@@ -679,6 +726,178 @@ fn the_account_panel_shows_a_problem_with_the_new_name() {
 }
 
 #[test]
+fn the_servers_screen_and_the_chat_have_a_link_to_the_settings() {
+    let servers = window(new_app(Mode::Light), Language::English);
+    let (app, _outbox) = chat_app(Mode::Light);
+    let chat = window(app, Language::English);
+
+    for window in [&servers, &chat] {
+        let messages = clicked(window, "Settings");
+        assert!(
+            matches!(messages.as_slice(), [Message::Open(Page::Settings)]),
+            "{messages:?}"
+        );
+    }
+}
+
+#[test]
+fn the_settings_page_shows_each_setting() {
+    let mut window = window(settings_app(Mode::Light), Language::English);
+    window.settings_file = Some("/home/ana/.config/post/profiles/1/settings.toml".to_owned());
+    let mut interface = simulator(&window);
+
+    for text in [
+        "Settings",
+        "Language",
+        "System language",
+        "English",
+        "Español (Latinoamérica)",
+        "Clock",
+        "24 hours",
+        "12 hours",
+        "Show seconds",
+        "Text size",
+        "Smaller",
+        "100%",
+        "Larger",
+        "For developers",
+        "Protocol console (F12 key)",
+        "Post keeps these settings in this file: /home/ana/.config/post/profiles/1/settings.toml",
+        "Back",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    assert!(interface.find("Connect").is_err());
+}
+
+#[test]
+fn the_controls_of_the_settings_page_change_the_settings() {
+    let window = window(settings_app(Mode::Light), Language::English);
+    let changed = |text: &str| match clicked(&window, text).as_slice() {
+        [Message::Settings(message)] => message.clone(),
+        other => panic!("{text}: {other:?}"),
+    };
+
+    assert!(matches!(
+        changed("Español (Latinoamérica)"),
+        settings::Message::LanguageSelected(Some(Language::Spanish))
+    ));
+    assert!(matches!(
+        changed("English"),
+        settings::Message::LanguageSelected(Some(Language::English))
+    ));
+    assert!(matches!(
+        changed("12 hours"),
+        settings::Message::ClockSelected(Clock::Hours12)
+    ));
+    assert!(matches!(
+        changed("Show seconds"),
+        settings::Message::SecondsToggled(true)
+    ));
+    assert!(matches!(changed("Larger"), settings::Message::Larger));
+    assert!(matches!(changed("Smaller"), settings::Message::Smaller));
+    assert!(matches!(
+        changed("Protocol console (F12 key)"),
+        settings::Message::ConsoleToggled(true)
+    ));
+    assert!(clicked(&window, "System language").is_empty());
+    assert!(clicked(&window, "24 hours").is_empty());
+    let messages = clicked(&window, "Back");
+    assert!(
+        matches!(messages.as_slice(), [Message::Back]),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn the_settings_page_shows_the_values_of_the_file() {
+    let mut app = settings_app(Mode::Light);
+    settings_file(
+        &mut app,
+        "language = \"en\"\nclock = 12\nseconds = true\ntext-size = 200\nconsole = true\n",
+    );
+    let window = window(app, Language::English);
+
+    simulator(&window).find("200%").expect("the size shows");
+    assert!(clicked(&window, "English").is_empty());
+    assert!(clicked(&window, "12 hours").is_empty());
+    assert!(clicked(&window, "Larger").is_empty());
+    let messages = clicked(&window, "Show seconds");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Settings(settings::Message::SecondsToggled(false))]
+        ),
+        "{messages:?}"
+    );
+    let messages = clicked(&window, "Protocol console (F12 key)");
+    assert!(
+        matches!(
+            messages.as_slice(),
+            [Message::Settings(settings::Message::ConsoleToggled(false))]
+        ),
+        "{messages:?}"
+    );
+
+    let mut app = settings_app(Mode::Light);
+    settings_file(&mut app, "text-size = 80\n");
+    let window = self::window(app, Language::English);
+    assert!(clicked(&window, "Smaller").is_empty());
+}
+
+#[test]
+fn the_settings_page_shows_a_problem_of_the_file() {
+    let problems = [
+        (
+            "clock = = 12\n",
+            "The settings file is not valid TOML. Post ignores the file until you correct it.",
+        ),
+        (
+            "clock = 13\n",
+            "The value of \"clock\" in the settings file is not valid. Post uses the default value.",
+        ),
+    ];
+    for (file, problem) in problems {
+        let mut app = settings_app(Mode::Light);
+        settings_file(&mut app, file);
+        let window = window(app, Language::English);
+        simulator(&window)
+            .find(problem)
+            .unwrap_or_else(|error| panic!("{problem}: {error}"));
+    }
+
+    let mut app = settings_app(Mode::Light);
+    app.update(Message::Settings(settings::Message::NotSaved));
+    let window = window(app, Language::English);
+    simulator(&window)
+        .find("Post could not write the settings file.")
+        .expect("the problem shows");
+}
+
+#[test]
+fn the_times_obey_the_clock_settings() {
+    let (mut app, _outbox) = chat_app(Mode::Light);
+    settings_file(&mut app, "clock = 12\nseconds = true\n");
+    let english = window(app, Language::English);
+    let mut interface = simulator(&english);
+    for text in [" 2:02:00 PM", " 2:02:07 PM", " 2:05:00 PM"] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
+    assert!(interface.find("14:02").is_err());
+
+    let (mut app, _outbox) = invitations_app(Mode::Light, Some(two_invitations()));
+    settings_file(&mut app, "clock = 12\n");
+    let spanish = window(app, Language::Spanish);
+    simulator(&spanish)
+        .find("Termina 2026-11-28 2:02 p. m. · Usos: 2 de 5")
+        .expect("the end of the invitation shows in the 12-hour format");
+}
+
+#[test]
 fn the_chat_screen_shows_an_error_from_the_server() {
     let (mut app, _outbox) = chat_app(Mode::Light);
     let attempt = app.target().expect("a connection").attempt;
@@ -749,6 +968,22 @@ fn the_interface_has_spanish_text() {
             .find(text)
             .unwrap_or_else(|error| panic!("{text}: {error}"));
     }
+
+    let window = self::window(settings_app(Mode::Light), Language::Spanish);
+    let mut interface = simulator(&window);
+    for text in [
+        "Configuración",
+        "Idioma del sistema",
+        "24 horas",
+        "Mostrar segundos",
+        "Más pequeño",
+        "Consola del protocolo (tecla F12)",
+        "Volver",
+    ] {
+        interface
+            .find(text)
+            .unwrap_or_else(|error| panic!("{text}: {error}"));
+    }
 }
 
 #[test]
@@ -793,6 +1028,8 @@ fn each_screen_draws_in_light_and_dark_mode() {
                 Language::Spanish,
             ),
             ("account", account_app(mode).0, Language::English),
+            ("settings", settings_app(mode), Language::English),
+            ("settings-es", settings_app(mode), Language::Spanish),
         ];
         for (screen, app, language) in screens {
             let window = window(app, language);

@@ -384,6 +384,13 @@ Application:
 - The Invitations panel asks the server for the list each time it opens. The panel shows the end of an invitation as a local date and time, for example `2026-11-28 14:02`.
 - After a handle change, the application writes the new handle in the profile. The application sends no request if the user does not change the name in the field.
 - When the application changes a value in the settings file, it keeps the comments and the sequence of the file.
+- The settings file has the name `settings.toml`. The application makes the file with its documentation at the first start of a profile. The documentation in the file is in English.
+- The application examines the settings file one time each second, and it applies a change at that time (D-087).
+- If the settings file is not valid TOML, the application ignores the file and keeps the settings that are in use. If one value is not valid, the application uses the default for that value. The Settings page shows the problem.
+- The Settings page opens from the Servers screen and from the chat. The connection stays open while the page shows.
+- The text size changes in steps of 10%. The keys Control and plus, Control and minus, and Control and zero also change it. On macOS, the Command key replaces the Control key.
+- The 12-hour format keeps a constant width, for example ` 2:02 PM`. Spanish text shows `a. m.` and `p. m.`.
+- The smallest window is 520 by 320 points. A chat bar that is narrower than 740 points does not show the status text.
 - The F12 key shows and hides the protocol console when the developer setting is on.
 
 **Reason.** Each rule is the final rule, or it is clearly temporary. The rules keep the version as small as the decisions permit.

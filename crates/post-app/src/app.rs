@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod servers;
+pub mod settings;
 pub mod start;
 
 use post_client::{Event, KnownServer, Link};
@@ -10,16 +11,25 @@ use self::servers::{Problem, Servers, Target};
 use self::start::StartProblem;
 use crate::i18n::Text;
 use crate::palette::Mode;
+use crate::settings::Settings;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Servers(servers::Message),
     Chat(chat::Message),
+    Settings(settings::Message),
     Connection(u64, Event),
     ProfileNotSaved,
     ModeChanged(Mode),
     FocusNext,
     FocusPrevious,
+    Open(Page),
+    Back,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Page {
+    Settings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +43,7 @@ pub enum Effect {
     Remember(KnownServer),
     Forget(String),
     Copy(String),
+    SaveSettings(Settings),
 }
 
 #[derive(Debug)]
@@ -41,6 +52,8 @@ pub struct App {
     servers: Vec<KnownServer>,
     attempts: u64,
     screen: Screen,
+    page: Option<Page>,
+    settings: settings::Store,
 }
 
 #[derive(Debug)]
@@ -63,6 +76,8 @@ impl App {
             servers,
             attempts,
             screen: Screen::Servers(Box::new(screen)),
+            page: None,
+            settings: settings::Store::default(),
         }
     }
 
@@ -73,7 +88,24 @@ impl App {
             servers: Vec::new(),
             attempts: 0,
             screen: Screen::Stopped(problem),
+            page: None,
+            settings: settings::Store::default(),
         }
+    }
+
+    #[must_use]
+    pub fn page(&self) -> Option<Page> {
+        self.page
+    }
+
+    #[must_use]
+    pub fn settings(&self) -> &Settings {
+        self.settings.values()
+    }
+
+    #[must_use]
+    pub fn settings_problem(&self) -> Option<settings::Problem> {
+        self.settings.problem()
     }
 
     #[must_use]
@@ -109,6 +141,7 @@ impl App {
                 Screen::Stopped(_) | Screen::Chat(_) => Effect::None,
             },
             Message::Chat(message) => self.chat(message),
+            Message::Settings(message) => self.settings.update(message),
             Message::Connection(attempt, event) => self.connection(attempt, event),
             Message::ProfileNotSaved => {
                 match &mut self.screen {
@@ -124,6 +157,34 @@ impl App {
             }
             Message::FocusNext => Effect::FocusNext,
             Message::FocusPrevious => Effect::FocusPrevious,
+            Message::Open(page) => {
+                if !matches!(self.screen, Screen::Stopped(_)) {
+                    self.page = Some(page);
+                }
+                Effect::None
+            }
+            Message::Back => {
+                if self.page.take().is_some() {
+                    return self.focus();
+                }
+                self.chat(chat::Message::Close)
+            }
+        }
+    }
+
+    fn focus(&self) -> Effect {
+        match &self.screen {
+            Screen::Servers(servers)
+                if servers.connecting().is_none() && servers.question().is_none() =>
+            {
+                Effect::FocusForm
+            }
+            Screen::Chat(chat) => match chat.panel() {
+                None => Effect::FocusDraft,
+                Some(chat::Open::Account(_)) => Effect::FocusPanel,
+                Some(chat::Open::Invitations(_)) => Effect::None,
+            },
+            Screen::Servers(_) | Screen::Stopped(_) => Effect::None,
         }
     }
 
@@ -223,9 +284,10 @@ mod tests {
 
     use super::servers::Problem;
     use super::start::StartProblem;
-    use super::{App, Effect, Message, Screen, chat, error_text, servers};
+    use super::{App, Effect, Message, Page, Screen, chat, error_text, servers, settings};
     use crate::i18n::Text;
     use crate::palette::Mode;
+    use crate::settings::{Clock, Settings};
 
     type Outbox = Box<dyn FnMut() -> Option<ClientMessage>>;
 
@@ -666,6 +728,92 @@ mod tests {
     }
 
     #[test]
+    fn starts_with_the_default_settings_and_no_page() {
+        let app = app();
+
+        assert_eq!(app.settings(), &Settings::default());
+        assert_eq!(app.settings_problem(), None);
+        assert_eq!(app.page(), None);
+    }
+
+    #[test]
+    fn changes_a_setting_on_each_screen() {
+        let larger = || Message::Settings(settings::Message::Larger);
+        let expected = Settings {
+            text_size: 110,
+            ..Settings::default()
+        };
+
+        let mut app = app();
+        assert_eq!(app.update(larger()), Effect::SaveSettings(expected));
+        assert_eq!(app.settings(), &expected);
+
+        let (mut app, _outbox) = chatting("ana", 4);
+        assert_eq!(app.update(larger()), Effect::SaveSettings(expected));
+
+        let mut app = App::stopped(Mode::Light, StartProblem::InUse);
+        assert_eq!(app.update(larger()), Effect::SaveSettings(expected));
+        app.update(Message::Settings(settings::Message::NotSaved));
+        assert_eq!(app.settings_problem(), Some(settings::Problem::NotSaved));
+    }
+
+    #[test]
+    fn takes_the_settings_of_the_file() {
+        let mut app = app();
+
+        let text = "clock = 12\n".to_owned();
+        let effect = app.update(Message::Settings(settings::Message::FileChanged(text)));
+
+        assert_eq!(effect, Effect::None);
+        assert_eq!(app.settings().clock, Clock::Hours12);
+    }
+
+    #[test]
+    fn opens_the_settings_page_and_goes_back_to_the_screen() {
+        let mut app = app();
+        assert_eq!(app.update(Message::Open(Page::Settings)), Effect::None);
+        assert_eq!(app.page(), Some(Page::Settings));
+        assert_eq!(app.update(Message::Back), Effect::FocusForm);
+        assert_eq!(app.page(), None);
+        assert_eq!(app.update(Message::Back), Effect::None);
+
+        let mut app = connecting("ana");
+        app.update(Message::Open(Page::Settings));
+        assert_eq!(app.update(Message::Back), Effect::None);
+        assert!(app.target().is_some());
+
+        let (mut app, _outbox) = chatting("ana", 4);
+        app.update(Message::Open(Page::Settings));
+        assert!(app.target().is_some());
+        assert_eq!(app.update(Message::Back), Effect::FocusDraft);
+
+        let open = |panel| Message::Chat(chat::Message::Open(panel));
+        app.update(open(chat::Panel::Account));
+        app.update(Message::Open(Page::Settings));
+        assert_eq!(app.update(Message::Back), Effect::FocusPanel);
+        assert_eq!(app.update(Message::Back), Effect::FocusDraft);
+
+        let (mut app, _outbox) = chatting("ana", 4);
+        app.update(open(chat::Panel::Invitations));
+        app.update(Message::Open(Page::Settings));
+        assert_eq!(app.update(Message::Back), Effect::None);
+        assert_eq!(app.page(), None);
+        assert_eq!(app.update(Message::Back), Effect::FocusDraft);
+    }
+
+    #[test]
+    fn keeps_the_connection_while_a_page_is_open() {
+        let (mut app, _outbox) = chatting("ana", 4);
+        app.update(Message::Open(Page::Settings));
+
+        let message = connection(&app, Event::Received(joined("ben")));
+        app.update(message);
+
+        assert_eq!(app.page(), Some(Page::Settings));
+        assert_eq!(entries(&app).len(), 1);
+    }
+
+    #[test]
     fn stays_stopped_when_no_profile_is_open() {
         let mut app = App::stopped(Mode::Light, StartProblem::InUse);
         assert_eq!(app.servers(), []);
@@ -678,6 +826,9 @@ mod tests {
         let event = Event::Disconnected(Disconnect::Closed);
         assert_eq!(app.update(Message::Connection(0, event)), Effect::None);
         app.update(Message::ModeChanged(Mode::Dark));
+        assert_eq!(app.update(Message::Open(Page::Settings)), Effect::None);
+        assert_eq!(app.page(), None);
+        assert_eq!(app.update(Message::Back), Effect::None);
 
         assert!(matches!(app.screen(), Screen::Stopped(StartProblem::InUse)));
         assert_eq!(app.target(), None);
