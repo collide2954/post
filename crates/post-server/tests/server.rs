@@ -234,6 +234,7 @@ async fn join_with(port: u16, person: u8, who: &str, link: &str) -> Socket {
     assert!(
         matches!(answer, ServerMessage::Welcome { name: welcomed, .. } if welcomed == name(who))
     );
+    assert_eq!(read(&mut socket).await, ServerMessage::Ready {});
     assert!(
         matches!(read(&mut socket).await, ServerMessage::Join { name: joined, .. } if joined == name(who))
     );
@@ -408,6 +409,7 @@ async fn a_person_joins_with_an_invitation_of_the_owner() {
     let (mut ana, answer) =
         register_and_stay(server.port, &Seed::from_bytes([7; 32]), "ana", &owner_link).await;
     assert_eq!(answer, welcome("ana", Role::Owner));
+    assert_eq!(read(&mut ana).await, ServerMessage::Ready {});
     assert!(matches!(read(&mut ana).await, ServerMessage::Join { .. }));
 
     let invite = ClientMessage::Invite {

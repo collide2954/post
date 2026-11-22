@@ -23,6 +23,7 @@ S: {"type":"error","ref":5,"code":"account-exists","text":"This key already has 
 # The session starts.
 C: {"type":"identify","ref":6,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"w6E3-9F8fyYSMvYgN5irctX2VYSXN5wD6QT_WqEiZEUGsy5ODkcJ1z6Dlpl2xdZaD05A5fRkw2ULcvqPSQpDAg"}
 S: {"type":"welcome","ref":6,"name":"ana","role":"member"}
+S: {"type":"ready"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
 
 # A session has only one sign-in.

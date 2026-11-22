@@ -28,9 +28,10 @@ S: {"type":"error","ref":5,"code":"name-taken","text":"This name is not availabl
 # The session starts.
 C: {"type":"register","ref":6,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"v8d4t7VYMSVVZlv8aH7A5lG6DIQi-Tyj4iakgMaCshPhNLsn9EV98Wx2xeNTUz7VGOcfEy6Fnz-LOZPIGJApBw","name":"ana","invitation":"7Hq2kdX9mPq4"}
 S: {"type":"welcome","ref":6,"name":"ana","role":"member"}
+S: {"type":"ready"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:02:00.000Z"}
 
-# At this time, Post has only the channel "lobby".
+# The server has no channel with the name "garden".
 C: {"type":"send","ref":7,"channel":"garden","text":"Hello"}
 S: {"type":"error","ref":7,"code":"no-such-channel","text":"The channel does not exist."}
 

@@ -90,6 +90,68 @@
       ]
     },
     {
+      "description": "Gives the state of a channel to one of its members.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "created": {
+          "description": "The time when the owner made the channel.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "kind": {
+          "description": "The kind of the channel.",
+          "$ref": "#/$defs/ChannelKind"
+        },
+        "owner": {
+          "description": "The name of the owner of the channel.",
+          "$ref": "#/$defs/Name"
+        },
+        "ref": {
+          "description": "The number from the request. Only the connection that sent the request gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "topic": {
+          "description": "The topic of the channel. The topic can be empty.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "kind",
+        "topic",
+        "owner",
+        "created"
+      ]
+    },
+    {
+      "description": "Tells that the state after the sign-in is complete.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ready"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
       "description": "Tells that a user came into a channel.",
       "type": "object",
       "properties": {
@@ -294,6 +356,26 @@
     }
   ],
   "$defs": {
+    "ChannelKind": {
+      "description": "The kind of a channel.",
+      "oneOf": [
+        {
+          "description": "Each member of the server can join the channel.",
+          "type": "string",
+          "const": "public"
+        },
+        {
+          "description": "An invitation from the owner is necessary to join the channel.",
+          "type": "string",
+          "const": "private"
+        }
+      ]
+    },
+    "ChannelName": {
+      "description": "The name of a channel: 2 to 30 characters from a to z, 0 to 9, hyphen, and underscore.",
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{2,30}$"
+    },
     "Code": {
       "description": "The code of an invitation: 12 letters and digits.",
       "type": "string",
@@ -396,6 +478,16 @@
           "description": "The account changed its name a short time ago.",
           "type": "string",
           "const": "too-soon"
+        },
+        {
+          "description": "The name does not obey the rules for a channel name.",
+          "type": "string",
+          "const": "invalid-channel-name"
+        },
+        {
+          "description": "The account owns the maximum number of channels.",
+          "type": "string",
+          "const": "too-many-channels"
         },
         {
           "description": "The server has a problem and cannot do the task.",

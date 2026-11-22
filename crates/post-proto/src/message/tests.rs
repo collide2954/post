@@ -1,7 +1,11 @@
 use std::num::NonZeroU32;
 
-use super::{ClientMessage, ErrorCode, Invitation, PROTOCOL_VERSION, Role, ServerMessage};
-use crate::{Code, DecodeError, Key, MAX_LINE_BYTES, Name, Nonce, Part, Signature, Timestamp};
+use super::{
+    ChannelKind, ClientMessage, ErrorCode, Invitation, PROTOCOL_VERSION, Role, ServerMessage,
+};
+use crate::{
+    ChannelName, Code, DecodeError, Key, MAX_LINE_BYTES, Name, Nonce, Part, Signature, Timestamp,
+};
 
 fn name(text: &str) -> Name {
     Name::parse(text).expect(text)
@@ -16,12 +20,47 @@ fn writes_a_role_as_a_lower_case_word() {
     assert!(serde_json::from_str::<Role>("\"Owner\"").is_err());
 }
 
+#[test]
+fn writes_the_kind_of_a_channel_as_a_lower_case_word() {
+    for (kind, json) in [
+        (ChannelKind::Public, "\"public\""),
+        (ChannelKind::Private, "\"private\""),
+    ] {
+        assert_eq!(serde_json::to_string(&kind).expect("valid"), json);
+        assert_eq!(
+            serde_json::from_str::<ChannelKind>(json).expect("valid"),
+            kind
+        );
+    }
+    assert!(serde_json::from_str::<ChannelKind>("\"Public\"").is_err());
+}
+
 fn time(text: &str) -> Timestamp {
     Timestamp::parse(text).expect(text)
 }
 
+fn channel(text: &str) -> ChannelName {
+    ChannelName::parse(text).expect(text)
+}
+
 fn client_examples() -> Vec<(ClientMessage, &'static str)> {
     vec![
+        (
+            ClientMessage::ChannelCreate {
+                reference: Some(5),
+                channel: "general".to_owned(),
+                kind: ChannelKind::Public,
+            },
+            r#"{"type":"channel-create","ref":5,"channel":"general","kind":"public"}"#,
+        ),
+        (
+            ClientMessage::ChannelCreate {
+                reference: None,
+                channel: "Not A Name".to_owned(),
+                kind: ChannelKind::Private,
+            },
+            r#"{"type":"channel-create","channel":"Not A Name","kind":"private"}"#,
+        ),
         (
             ClientMessage::Send {
                 reference: Some(1),
@@ -84,6 +123,29 @@ fn client_examples() -> Vec<(ClientMessage, &'static str)> {
 
 fn server_examples() -> Vec<(ServerMessage, &'static str)> {
     vec![
+        (
+            ServerMessage::Channel {
+                reference: Some(5),
+                channel: channel("general"),
+                kind: ChannelKind::Public,
+                topic: String::new(),
+                owner: name("ana"),
+                created: time("2026-11-21T14:02:05.000Z"),
+            },
+            r#"{"type":"channel","ref":5,"channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T14:02:05.000Z"}"#,
+        ),
+        (
+            ServerMessage::Channel {
+                reference: None,
+                channel: channel("dev-2"),
+                kind: ChannelKind::Private,
+                topic: "Plans for the week".to_owned(),
+                owner: name("ben"),
+                created: time("2026-11-21T14:02:05.000Z"),
+            },
+            r#"{"type":"channel","channel":"dev-2","kind":"private","topic":"Plans for the week","owner":"ben","created":"2026-11-21T14:02:05.000Z"}"#,
+        ),
+        (ServerMessage::Ready {}, r#"{"type":"ready"}"#),
         (
             ServerMessage::Welcome {
                 reference: None,
@@ -539,6 +601,16 @@ fn each_error_code_has_a_word_form_and_a_text() {
             "too-soon",
             "You changed your name a short time ago. Try again later.",
         ),
+        (
+            ErrorCode::InvalidChannelName,
+            "invalid-channel-name",
+            "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore.",
+        ),
+        (
+            ErrorCode::TooManyChannels,
+            "too-many-channels",
+            "The account owns the maximum number of channels.",
+        ),
     ];
     examine_error_codes(&codes);
 }
@@ -589,6 +661,14 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"rename"}"#,
         r#"{"type":"rename","name":7}"#,
         r#"{"type":"rename","old":"ana","new":"anna","time":"2026-11-21T14:04:00.000Z"}"#,
+        r#"{"type":"channel-create","channel":"general"}"#,
+        r#"{"type":"channel-create","kind":"public"}"#,
+        r#"{"type":"channel-create","channel":"general","kind":"secret"}"#,
+        r#"{"type":"channel-create","channel":7,"kind":"public"}"#,
+        r#"{"type":"channel-create","channel":"general","kind":"public","topic":"x"}"#,
+        r#"{"type":"channelcreate","channel":"general","kind":"public"}"#,
+        r#"{"type":"channel_create","channel":"general","kind":"public"}"#,
+        r#"{"type":"ready"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -615,6 +695,13 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"invitations","list":[{"code":"short","link":"x","created":"2026-11-21T14:02:05.000Z","used":0}]}"#,
         r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":0,"owner":true}]}"#,
         r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":-1}]}"#,
+        r#"{"type":"channel","channel":"General","kind":"public","topic":"","owner":"ana","created":"2026-11-21T14:02:05.000Z"}"#,
+        r#"{"type":"channel","channel":"general","kind":"open","topic":"","owner":"ana","created":"2026-11-21T14:02:05.000Z"}"#,
+        r#"{"type":"channel","channel":"general","kind":"public","owner":"ana","created":"2026-11-21T14:02:05.000Z"}"#,
+        r#"{"type":"channel","channel":"general","kind":"public","topic":"","owner":"Ana","created":"2026-11-21T14:02:05.000Z"}"#,
+        r#"{"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T14:02:05.000Z","members":1}"#,
+        r#"{"type":"ready","ref":1}"#,
+        r#"{"type":"channel-create","channel":"general","kind":"public"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

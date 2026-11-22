@@ -11,6 +11,12 @@ use post_rules::{Change, Storage as _};
 use super::{ConnectionId, Hub, Outgoing, Random, Settings};
 use crate::store::{Store, StoreError};
 
+mod channels;
+
+fn ready() -> ServerMessage {
+    ServerMessage::Ready {}
+}
+
 fn now() -> Timestamp {
     Timestamp::parse("2026-11-21T14:02:07.120Z").expect("valid")
 }
@@ -99,7 +105,7 @@ fn sends_nothing_to_a_connection_before_its_sign_in() {
     let sent = hub.receive(ids[0], &send(None, "lobby", "Hello"), now());
     let left = hub.disconnect(ben, later());
 
-    assert_eq!((joined.len(), sent.len(), left.len()), (3, 2, 1));
+    assert_eq!((joined.len(), sent.len(), left.len()), (4, 2, 1));
     for outgoing in joined.iter().chain(&sent).chain(&left) {
         assert_ne!(outgoing.to, silent);
         assert_ne!(outgoing.to, waiting);
@@ -564,7 +570,11 @@ fn makes_the_user_of_the_owner_link_the_server_owner() {
 
     assert_eq!(
         outgoing,
-        [to(id, welcome("ana", Role::Owner)), to(id, join("ana"))]
+        [
+            to(id, welcome("ana", Role::Owner)),
+            to(id, ready()),
+            to(id, join("ana"))
+        ]
     );
     assert_eq!(hub.owner_link(now()).expect("stored"), None);
 }
@@ -583,6 +593,7 @@ fn makes_an_invited_user_a_member_and_tells_the_lobby() {
         outgoing,
         [
             to(ben, welcome("ben", Role::Member)),
+            to(ben, ready()),
             to(ana, join("ben")),
             to(ben, join("ben")),
         ]
@@ -601,7 +612,11 @@ fn signs_in_a_user_who_has_an_account() {
 
     assert_eq!(
         outgoing,
-        [to(id, welcome("ana", Role::Owner)), to(id, join("ana"))]
+        [
+            to(id, welcome("ana", Role::Owner)),
+            to(id, ready()),
+            to(id, join("ana"))
+        ]
     );
 }
 
@@ -764,6 +779,7 @@ fn ignores_an_invitation_at_the_sign_in_of_a_member() {
         outgoing,
         [
             to(id, welcome("ben", Role::Member)),
+            to(id, ready()),
             to(ana, join("ben")),
             to(id, join("ben")),
         ]
@@ -828,7 +844,7 @@ fn tells_the_lobby_one_time_about_a_user_with_two_connections() {
     let line = identify(&hub, 1, &server, None);
     assert_eq!(
         hub.receive(second, &line, now()),
-        [to(second, welcome("ana", Role::Owner))]
+        [to(second, welcome("ana", Role::Owner)), to(second, ready())]
     );
 
     let delivered = hub.receive(second, &send(Some(4), LOBBY, "Hello"), now());

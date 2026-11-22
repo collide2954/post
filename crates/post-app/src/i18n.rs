@@ -70,6 +70,8 @@ texts! {
     ErrorServer => "error-server",
     ErrorNotPermitted => "error-not-permitted",
     ErrorTooSoon => "error-too-soon",
+    ErrorInvalidChannelName => "error-invalid-channel-name",
+    ErrorTooManyChannels => "error-too-many-channels",
     ErrorInvalidName => "error-invalid-name",
     ErrorNameTaken => "error-name-taken",
     ErrorNoSuchChannel => "error-no-such-channel",

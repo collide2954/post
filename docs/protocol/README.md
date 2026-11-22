@@ -14,7 +14,7 @@ The automatic checks fail if the code, the schemas, and the examples do not agre
 
 This document describes protocol version 0. Version 0 is not stable. It can change in each release of Post, and it makes no promise to other clients. Protocol version 1 starts with version 1.0 of the application.
 
-Protocol version 0 changes while the project builds Post 0.2.
+Protocol version 0 changes while the project builds Post 0.3.
 
 ## Transport
 
@@ -47,7 +47,16 @@ A name identifies a user. A name obeys these rules:
 - It has 2 to 20 characters.
 - It contains only the letters `a` to `z`, the digits `0` to `9`, the hyphen, and the underscore.
 
-A channel name in a message does not have the `#` sign. At this time, Post has one channel, `lobby`.
+### Channel names
+
+A channel name identifies a channel on a server. A channel name obeys these rules:
+
+- It has 2 to 30 characters.
+- It contains only the letters `a` to `z`, the digits `0` to `9`, the hyphen, and the underscore.
+
+A channel name in a message does not have the `#` sign.
+
+The channel `lobby` is temporary. Each user is in this channel while the user has a connection. A user cannot make a channel with this name. The channel goes away before version 0.3 of Post.
 
 ### Text
 
@@ -167,6 +176,17 @@ In protocol version 0, only the server owner makes, lists, and cancels invitatio
 
 An owner link is a special invitation. The server program makes it, and a client cannot list it or cancel it.
 
+## Channels
+
+A member of the server can make a channel. That member is the owner of the channel and its first member.
+
+- A channel is public or private. The owner selects the kind when the owner makes the channel. The kind does not change.
+- A channel always has one owner, and the owner is a member of the channel.
+- An account can be the owner of a maximum of 10 channels.
+- The server keeps the channels and their members. A user stays a member when the connection closes.
+
+After the `welcome` message, the server sends one `channel` message for each channel that the user is a member of. Then it sends a `ready` message.
+
 ## Messages from the client
 
 ### `hello`
@@ -280,6 +300,23 @@ The server answers with a `rename` message or with an `error` message.
 
 The two times are fixed in protocol version 0.
 
+### `channel-create`
+
+The `channel-create` message makes a channel. The sender becomes the owner of the channel and its first member.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-create"` |
+| `ref` | Optional. |
+| `channel` | The name of the new channel. |
+| `kind` | The kind of the channel: `"public"` or `"private"`. |
+
+The server answers with a `channel` message or with an `error` message. Each connection of the account gets the `channel` message.
+
+- If the name does not obey the rules for a channel name, the error is `invalid-channel-name`.
+- If a channel has the name, or if the name is reserved, the error is `name-taken`.
+- If the account already owns 10 channels, the error is `too-many-channels`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -307,9 +344,38 @@ The `welcome` message starts the session of a user. The session now has a name.
 | `name` | The name of the user in this session. |
 | `role` | The role of the user on this server: `"owner"` or `"member"`. |
 
-After the `welcome` message, the server puts the user into the channel `lobby`. The server sends a `join` message to each user in the channel, also to the new user.
+After the `welcome` message, the server sends the `channel` messages and the `ready` message. See "Channels".
+
+The server then puts the user into the temporary channel `lobby`. It sends a `join` message to each user in that channel, also to the new user.
 
 One account can have more than one connection at the same time. The server sends the `join` message only for the first connection of an account, and the `leave` message only for the last one.
+
+### `channel`
+
+The `channel` message gives the state of a channel to one of its members. The server sends it in these conditions:
+
+- After the `welcome` message, one time for each channel that the user is a member of.
+- When the user makes a channel.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel"` |
+| `ref` | The value from the request, if it had one. Only the connection that sent the request gets this field. |
+| `channel` | The name of the channel. |
+| `kind` | The kind of the channel: `"public"` or `"private"`. |
+| `topic` | The topic of the channel. The topic can be empty. |
+| `owner` | The name of the owner of the channel. |
+| `created` | The time when the owner made the channel. |
+
+### `ready`
+
+The `ready` message tells that the state after the sign-in is complete. The server sends it after the `welcome` message and the `channel` messages that follow it.
+
+| Field | Value |
+|---|---|
+| `type` | `"ready"` |
+
+A client that connects again uses this message. If a channel that the client knew got no `channel` message before the `ready` message, the user is not a member of that channel now.
 
 ### `join`
 
@@ -413,6 +479,8 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `text-too-long` | The text has more than 4,000 characters. |
 | `not-permitted` | The account does not have the permission for the request. |
 | `too-soon` | The account changed its name a short time ago. |
+| `invalid-channel-name` | The name does not obey the rules for a channel name. |
+| `too-many-channels` | The account owns the maximum number of channels. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations
@@ -432,4 +500,5 @@ Each file in the [examples](examples) directory shows one connection.
 | [rename.txt](examples/rename.txt) | A user changes the name of the account. |
 | [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
 | [two-users.txt](examples/two-users.txt) | Two users exchange text. |
+| [channels.txt](examples/channels.txt) | A user makes channels. |
 | [errors.txt](examples/errors.txt) | The server refuses other messages. |

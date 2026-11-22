@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::codec::{self, DecodeError};
-use crate::{Code, Key, Name, Nonce, Part, Signature, Timestamp};
+use crate::{ChannelName, Code, Key, Name, Nonce, Part, Signature, Timestamp};
 
 pub const PROTOCOL_VERSION: u32 = 0;
 pub const DEFAULT_PORT: u16 = 7678;
@@ -12,7 +12,7 @@ pub const LOBBY: &str = "lobby";
 
 /// A message from a client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ClientMessage {
     /// Starts the sign-in. The server answers with a `challenge` message.
     Hello {
@@ -100,11 +100,21 @@ pub enum ClientMessage {
         /// The new name.
         name: String,
     },
+    /// Makes a channel. The sender becomes its owner and its first member.
+    ChannelCreate {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the new channel, without the `#` sign.
+        channel: String,
+        /// The kind of the channel.
+        kind: ChannelKind,
+    },
 }
 
 /// A message from the server to a client.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ServerMessage {
     /// Answers a `hello` message. It proves that the server has its key.
     Challenge {
@@ -132,6 +142,24 @@ pub enum ServerMessage {
         /// The role of the user on this server.
         role: Role,
     },
+    /// Gives the state of a channel to one of its members.
+    Channel {
+        /// The number from the request. Only the connection that sent the request gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The kind of the channel.
+        kind: ChannelKind,
+        /// The topic of the channel. The topic can be empty.
+        topic: String,
+        /// The name of the owner of the channel.
+        owner: Name,
+        /// The time when the owner made the channel.
+        created: Timestamp,
+    },
+    /// Tells that the state after the sign-in is complete.
+    Ready {},
     /// Tells that a user came into a channel.
     Join {
         /// The name of the channel, without the `#` sign.
@@ -258,8 +286,22 @@ pub enum ErrorCode {
     NotPermitted,
     /// The account changed its name a short time ago.
     TooSoon,
+    /// The name does not obey the rules for a channel name.
+    InvalidChannelName,
+    /// The account owns the maximum number of channels.
+    TooManyChannels,
     /// The server has a problem and cannot do the task.
     ServerError,
+}
+
+/// The kind of a channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ChannelKind {
+    /// Each member of the server can join the channel.
+    Public,
+    /// An invitation from the owner is necessary to join the channel.
+    Private,
 }
 
 /// The role of an account on a server.
@@ -283,7 +325,8 @@ impl ClientMessage {
             | Self::Invite { reference, .. }
             | Self::Invitations { reference }
             | Self::Revoke { reference, .. }
-            | Self::Rename { reference, .. } => *reference,
+            | Self::Rename { reference, .. }
+            | Self::ChannelCreate { reference, .. } => *reference,
         }
     }
 
@@ -344,6 +387,10 @@ impl ErrorCode {
             Self::TextTooLong => "A message can have a maximum of 4000 characters.",
             Self::NotPermitted => "Your account does not have the permission for this request.",
             Self::TooSoon => "You changed your name a short time ago. Try again later.",
+            Self::InvalidChannelName => {
+                "A channel name has 2 to 30 characters: a to z, 0 to 9, hyphen, and underscore."
+            }
+            Self::TooManyChannels => "The account owns the maximum number of channels.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }

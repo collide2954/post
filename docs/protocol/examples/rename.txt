@@ -6,6 +6,7 @@ C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce"
 S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"BgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgY","proof":"5hwWzOgUQ4MIn6-78yDakfoaiylUQV0kZw-bWt6_1MMJEbFk3epX3JzGB6NMnPIQIjHmpBOYcKe_9BM7U73hBA","requires":[]}
 C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"WCBKEQPTD835Vfhh5vrxE7KiE3TqejWYeq4_hu11zSm2jnN-RBwMom6SpX7zEaatzzVrAGqHJsTMa6zIgAiDCw"}
 S: {"type":"welcome","ref":2,"name":"ana","role":"member"}
+S: {"type":"ready"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
 
 # A different account has the name "ben".

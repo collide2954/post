@@ -521,6 +521,15 @@ Channels:
 - Only the owner invites a member to a private channel. The member can refuse the invitation, and the owner can cancel it.
 - A server has no channel at its first start (D-136). The temporary channel `lobby` of version 0.1 and version 0.2 goes away.
 - A line in the timeline tells that a person joined or left the channel (D-124). It does not tell that a connection started or stopped. The presence dot shows that.
+- The limit of 10 channels applies when a member makes a channel and when a member gets a channel from its owner.
+- The name of a deleted channel is free immediately. An earlier name of that channel stays reserved until its reserved time ends.
+- A channel has a number in the data of the server. A new channel never gets the number of an earlier channel.
+
+Protocol:
+
+- A message identifies a channel by its name. The protocol does not show the number of a channel.
+- The type of a message that manages a channel starts with `channel-`, for example `channel-create`.
+- After the sign-in, the server sends the state of each channel of the user. A `ready` message then tells that the state is complete.
 
 Presence and the typing indicator:
 

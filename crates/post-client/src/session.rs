@@ -167,6 +167,8 @@ impl Session {
             | ServerMessage::Join { .. }
             | ServerMessage::Leave { .. }
             | ServerMessage::Welcome { .. }
+            | ServerMessage::Channel { .. }
+            | ServerMessage::Ready {}
             | ServerMessage::Challenge { .. } => {}
         }
     }

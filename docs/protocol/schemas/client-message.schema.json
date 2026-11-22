@@ -290,9 +290,57 @@
         "type",
         "name"
       ]
+    },
+    {
+      "description": "Makes a channel. The sender becomes its owner and its first member.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the new channel, without the `#` sign.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "The kind of the channel.",
+          "$ref": "#/$defs/ChannelKind"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-create"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "kind"
+      ]
     }
   ],
   "$defs": {
+    "ChannelKind": {
+      "description": "The kind of a channel.",
+      "oneOf": [
+        {
+          "description": "Each member of the server can join the channel.",
+          "type": "string",
+          "const": "public"
+        },
+        {
+          "description": "An invitation from the owner is necessary to join the channel.",
+          "type": "string",
+          "const": "private"
+        }
+      ]
+    },
     "Code": {
       "description": "The code of an invitation: 12 letters and digits.",
       "type": "string",

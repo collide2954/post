@@ -232,6 +232,7 @@ mod tests {
                     name: name("ana"),
                     role: Role::Owner,
                 },
+                ServerMessage::Ready {},
                 join("ana"),
                 join("ben"),
                 message("ana", "Hello"),
@@ -245,6 +246,7 @@ mod tests {
                     name: name("ben"),
                     role: Role::Member,
                 },
+                ServerMessage::Ready {},
                 join("ben"),
                 message("ana", "Hello"),
             ]
@@ -303,10 +305,10 @@ mod tests {
 
         let ben_messages = drain(&mut ben_lines);
         assert_eq!(ben_messages.len(), 4);
-        assert_eq!(ben_messages[3], message("ana", "two"));
+        assert_eq!(ben_messages[3], message("ana", "one"));
         assert_eq!(ben_lines.try_recv(), Err(TryRecvError::Disconnected));
 
-        assert_eq!(drain(&mut ana_lines).len(), 7);
+        assert_eq!(drain(&mut ana_lines).len(), 8);
         assert_eq!(ana_lines.try_recv(), Err(TryRecvError::Empty));
     }
 

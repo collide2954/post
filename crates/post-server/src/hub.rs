@@ -8,10 +8,15 @@ use post_proto::{
 };
 
 use post_rules::{
-    Account, AccountId, InviteError, Limits, RegisterError, RenameError, RevokeError, Rules, later,
+    Account, AccountId, Channels, InviteError, Limits, RegisterError, RenameError, RevokeError,
+    Rules, later,
 };
 
 use crate::store::{Store, StoreError, Stored};
+
+mod channels;
+
+pub use channels::CHANNEL_LIMITS;
 
 const DAY: u64 = 24 * 60 * 60 * 1000;
 pub const LIMITS: Limits = Limits {
@@ -43,6 +48,7 @@ pub struct Random {
 pub struct Hub {
     store: Store,
     rules: Rules,
+    channels: Channels,
     key: ServerKey,
     settings: Settings,
     random: Random,
@@ -100,9 +106,11 @@ impl Hub {
     pub fn new(mut store: Store, settings: Settings, random: Random) -> Stored<Self> {
         let key = store.server_key()?;
         let rules = store.rules(LIMITS)?;
+        let channels = store.channels(CHANNEL_LIMITS)?;
         Ok(Self {
             store,
             rules,
+            channels,
             key,
             settings,
             random,
@@ -207,6 +215,9 @@ impl Hub {
             ClientMessage::Invitations { .. } => self.list_invitations(request),
             ClientMessage::Revoke { code, .. } => self.revoke(request, &code),
             ClientMessage::Rename { name, .. } => self.rename(request, &name),
+            ClientMessage::ChannelCreate { channel, kind, .. } => {
+                self.create_channel(request, &channel, kind)
+            }
         }
     }
 
@@ -349,8 +360,14 @@ impl Hub {
             },
         }];
         let name = member.name.clone();
+        let account = member.account;
         self.connections
             .insert(request.from, State::Present(member));
+        outgoing.extend(self.channel_states(request.from, account));
+        outgoing.push(Outgoing {
+            to: request.from,
+            message: ServerMessage::Ready {},
+        });
         if is_first_connection {
             outgoing.extend(self.to_each_member(|_| ServerMessage::Join {
                 channel: LOBBY.to_owned(),

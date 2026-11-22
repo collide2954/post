@@ -6,6 +6,7 @@ C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce"
 S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ","proof":"J-_uXcNxGu88y0Qjq2YbJJDK-2vGzwlT0Hdv-Ta0AiX9MfvlimJ9hapnDNb-22WCKniwEfvDAvw_wFz6S9ftCw","requires":[]}
 C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"w6E3-9F8fyYSMvYgN5irctX2VYSXN5wD6QT_WqEiZEUGsy5ODkcJ1z6Dlpl2xdZaD05A5fRkw2ULcvqPSQpDAg"}
 S: {"type":"welcome","ref":2,"name":"ana","role":"owner"}
+S: {"type":"ready"}
 S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
 
 # Ana makes an invitation for one person. It ends after 7 days.

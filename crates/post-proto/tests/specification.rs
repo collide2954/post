@@ -124,6 +124,7 @@ fn the_schemas_list_each_message_type() {
     assert_eq!(
         client,
         [
+            "channel-create",
             "hello",
             "identify",
             "invitations",
@@ -142,11 +143,13 @@ fn the_schemas_list_each_message_type() {
         server,
         [
             "challenge",
+            "channel",
             "error",
             "invitations",
             "join",
             "leave",
             "message",
+            "ready",
             "rename",
             "welcome"
         ]
