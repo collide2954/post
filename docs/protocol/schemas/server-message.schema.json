@@ -447,6 +447,39 @@
       ]
     },
     {
+      "description": "Tells that the owner deleted a channel.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "$ref": "#/$defs/ChannelName"
+        },
+        "ref": {
+          "description": "The number from the `channel-delete` message. Only the connection that sent it gets this field.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "time": {
+          "description": "The time when the owner deleted the channel.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-delete"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel",
+        "time"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {

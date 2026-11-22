@@ -2,13 +2,14 @@
 # The lines show the connection of the user "ana". She has an account on the server.
 # "C:" is a line from the client. "S:" is a line from the server.
 
-# Ana signs in. She is the owner of the channel "general" and a member of the channel "dev".
+# Ana signs in. She is the owner of the channels "general" and "plans", and a member of the channel "dev".
 C: {"type":"hello","protocol":0,"address":"chat.example.org:443","nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","supports":[]}
 S: {"type":"challenge","protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI","proof":"ZeA2ResstAfHtxRGEs6knEtI14hfp-IrwWCnVdDajcWimrtB6_yXo33nRHzuebREmPcb2GQo1XPcZONrCBKXCw","requires":[]}
 C: {"type":"identify","key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"sVgfffSRtTnYRwuJRwToDkUtOXpvtCnxSTgC1yVL5P6qkAwhqR59oRkC_4zxXJJlWhsSKPL6s-v8IHeTatA2Dw"}
 S: {"type":"welcome","name":"ana","role":"member"}
 S: {"type":"channel","channel":"dev","kind":"public","topic":"","owner":"ben","created":"2026-11-21T13:00:00.000Z"}
 S: {"type":"channel","channel":"general","kind":"public","topic":"","owner":"ana","created":"2026-11-21T13:30:00.000Z"}
+S: {"type":"channel","channel":"plans","kind":"private","topic":"","owner":"ana","created":"2026-11-21T13:40:00.000Z"}
 S: {"type":"ready"}
 
 # Ana gives a topic to her channel. Each member of the channel gets the message.
@@ -34,3 +35,7 @@ S: {"type":"channel-rename","ref":5,"channel":"general","name":"lounge","time":"
 # A channel can change its name one time in 30 days.
 C: {"type":"channel-rename","ref":6,"channel":"lounge","name":"garden"}
 S: {"type":"error","ref":6,"code":"too-soon","text":"The name changed a short time ago. Try again later."}
+
+# Ana deletes her channel "plans". Each member of the channel gets the message.
+C: {"type":"channel-delete","ref":7,"channel":"plans"}
+S: {"type":"channel-delete","ref":7,"channel":"plans","time":"2026-11-21T14:09:00.000Z"}

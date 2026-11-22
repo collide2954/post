@@ -85,6 +85,20 @@ fn owner_requests() -> Vec<(ClientMessage, &'static str)> {
             },
             r#"{"type":"channel-rename","channel":"general","name":"Not A Name"}"#,
         ),
+        (
+            ClientMessage::ChannelDelete {
+                reference: Some(11),
+                channel: "general".to_owned(),
+            },
+            r#"{"type":"channel-delete","ref":11,"channel":"general"}"#,
+        ),
+        (
+            ClientMessage::ChannelDelete {
+                reference: None,
+                channel: "general".to_owned(),
+            },
+            r#"{"type":"channel-delete","channel":"general"}"#,
+        ),
     ]
 }
 
@@ -351,6 +365,22 @@ fn owner_events() -> Vec<(ServerMessage, &'static str)> {
                 time: time("2026-11-21T14:08:00.000Z"),
             },
             r#"{"type":"channel-rename","channel":"general","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelDelete {
+                reference: Some(11),
+                channel: channel("general"),
+                time: time("2026-11-21T14:09:00.000Z"),
+            },
+            r#"{"type":"channel-delete","ref":11,"channel":"general","time":"2026-11-21T14:09:00.000Z"}"#,
+        ),
+        (
+            ServerMessage::ChannelDelete {
+                reference: None,
+                channel: channel("general"),
+                time: time("2026-11-21T14:09:00.000Z"),
+            },
+            r#"{"type":"channel-delete","channel":"general","time":"2026-11-21T14:09:00.000Z"}"#,
         ),
     ]
 }
@@ -874,6 +904,9 @@ fn refuses_a_line_that_is_not_a_known_message() {
         r#"{"type":"channel-rename","channel":"general"}"#,
         r#"{"type":"channel-rename","name":"lounge"}"#,
         r#"{"type":"channel-rename","channel":"general","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
+        r#"{"type":"channel-delete"}"#,
+        r#"{"type":"channel-delete","channel":7}"#,
+        r#"{"type":"channel-delete","channel":"general","time":"2026-11-21T14:09:00.000Z"}"#,
     ] {
         assert!(
             matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -926,6 +959,8 @@ fn refuses_a_server_message_with_a_value_that_breaks_a_rule() {
         r#"{"type":"channel-rename","channel":"general","name":"lounge"}"#,
         r#"{"type":"channel-rename","channel":"general","name":"Lounge","time":"2026-11-21T14:08:00.000Z"}"#,
         r#"{"type":"channel-rename","channel":"General","name":"lounge","time":"2026-11-21T14:08:00.000Z"}"#,
+        r#"{"type":"channel-delete","channel":"general"}"#,
+        r#"{"type":"channel-delete","channel":"General","time":"2026-11-21T14:09:00.000Z"}"#,
     ] {
         assert!(
             matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

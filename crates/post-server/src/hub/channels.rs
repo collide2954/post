@@ -185,7 +185,7 @@ impl Hub {
             .collect()
     }
 
-    fn connections_in(&self, channel: &Channel) -> impl Iterator<Item = ConnectionId> {
+    pub(super) fn connections_in(&self, channel: &Channel) -> impl Iterator<Item = ConnectionId> {
         channel
             .members
             .iter()

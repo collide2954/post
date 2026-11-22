@@ -151,6 +151,14 @@ pub enum ClientMessage {
         /// The new name of the channel.
         name: String,
     },
+    /// Deletes a channel. Only the owner of the channel can delete it.
+    ChannelDelete {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: String,
+    },
 }
 
 /// A message from the server to a client.
@@ -291,6 +299,16 @@ pub enum ServerMessage {
         /// The new name of the channel.
         name: ChannelName,
         /// The time of the change.
+        time: Timestamp,
+    },
+    /// Tells that the owner deleted a channel.
+    ChannelDelete {
+        /// The number from the `channel-delete` message. Only the connection that sent it gets this field.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The name of the channel, without the `#` sign.
+        channel: ChannelName,
+        /// The time when the owner deleted the channel.
         time: Timestamp,
     },
     /// Refuses a message from the client.
@@ -434,7 +452,8 @@ impl ClientMessage {
             | Self::Leave { reference, .. }
             | Self::Channels { reference }
             | Self::ChannelTopic { reference, .. }
-            | Self::ChannelRename { reference, .. } => *reference,
+            | Self::ChannelRename { reference, .. }
+            | Self::ChannelDelete { reference, .. } => *reference,
         }
     }
 

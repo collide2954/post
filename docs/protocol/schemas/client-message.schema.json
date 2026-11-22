@@ -468,6 +468,34 @@
         "channel",
         "name"
       ]
+    },
+    {
+      "description": "Deletes a channel. Only the owner of the channel can delete it.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The name of the channel, without the `#` sign.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "channel-delete"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "channel"
+      ]
     }
   ],
   "$defs": {

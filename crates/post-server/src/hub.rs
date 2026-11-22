@@ -228,6 +228,7 @@ impl Hub {
             ClientMessage::ChannelRename { channel, name, .. } => {
                 self.rename_channel(request, &channel, &name)
             }
+            ClientMessage::ChannelDelete { channel, .. } => self.delete_channel(request, &channel),
         }
     }
 

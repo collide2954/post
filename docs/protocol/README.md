@@ -185,6 +185,7 @@ A member of the server can make a channel. That member is the owner of the chann
 - An account can be the owner of a maximum of 10 channels.
 - A channel has a topic. The topic is one line of text with a maximum of 300 characters. It can be empty. Only the owner changes the topic.
 - Only the owner changes the name of a channel. The earlier name stays reserved for the channel for 30 days. In this time, no other channel can take it.
+- Only the owner deletes a channel. The name of a deleted channel is free immediately.
 - The server keeps the channels and their members. A user stays a member when the connection closes.
 
 After the `welcome` message, the server sends one `channel` message for each channel that the user is a member of. Then it sends a `ready` message.
@@ -398,6 +399,20 @@ The server answers with a `channel-rename` message or with an `error` message. E
 
 The two times are fixed in protocol version 0.
 
+### `channel-delete`
+
+The `channel-delete` message deletes a channel. The server cannot get the channel back.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-delete"` |
+| `ref` | Optional. |
+| `channel` | The name of the channel. |
+
+The server answers with a `channel-delete` message or with an `error` message. Each member of the channel gets the `channel-delete` message.
+
+- If the user is not the owner of the channel, the error is `not-permitted`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -571,6 +586,17 @@ The `channel-rename` message tells that a channel has a new name. The server sen
 | `channel` | The earlier name of the channel. |
 | `name` | The new name of the channel. |
 | `time` | The time of the change. |
+
+### `channel-delete`
+
+The `channel-delete` message tells that the owner deleted a channel. The server sends it to each member of the channel. After this message, the channel has no members.
+
+| Field | Value |
+|---|---|
+| `type` | `"channel-delete"` |
+| `ref` | The value from the `channel-delete` message of the client, if it had one. Only the connection that sent that message gets this field. |
+| `channel` | The name of the channel. |
+| `time` | The time when the owner deleted the channel. |
 
 ### `error`
 

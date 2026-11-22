@@ -127,7 +127,11 @@ fn refuses_a_topic_that_breaks_a_rule() {
 fn refuses_a_change_of_a_channel_before_the_sign_in() {
     let (mut hub, _ids) = with_general();
     let id = hub.connect();
-    let lines = [topic(1, "general", "Plans"), rename(1, "general", "lounge")];
+    let lines = [
+        topic(1, "general", "Plans"),
+        rename(1, "general", "lounge"),
+        delete(1, "general"),
+    ];
 
     for line in &lines {
         assert_eq!(
@@ -156,6 +160,10 @@ fn answers_with_a_server_error_when_it_cannot_store_a_change_of_a_channel() {
     assert_eq!(
         hub.receive(ids[0], &rename(3, "general", "lounge"), now()),
         [to(ids[0], error(Some(3), ErrorCode::ServerError))]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &delete(4, "general"), now()),
+        [to(ids[0], error(Some(4), ErrorCode::ServerError))]
     );
 }
 
@@ -263,4 +271,87 @@ fn refuses_a_new_name_of_a_channel_that_breaks_a_rule() {
             "{title}"
         );
     }
+}
+
+fn delete(reference: u32, channel: &str) -> String {
+    ClientMessage::ChannelDelete {
+        reference: Some(reference),
+        channel: channel.to_owned(),
+    }
+    .encode()
+}
+
+fn deleted(reference: Option<u32>, title: &str) -> ServerMessage {
+    ServerMessage::ChannelDelete {
+        reference,
+        channel: channel(title),
+        time: later(),
+    }
+}
+
+#[test]
+fn the_owner_deletes_a_channel_and_each_member_gets_the_news() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+
+    let outgoing = hub.receive(ids[0], &delete(5, "general"), later());
+
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], deleted(Some(5), "general")),
+            to(ids[1], deleted(None, "general")),
+        ]
+    );
+    assert_eq!(
+        hub.receive(ids[1], &send(Some(6), "general", "Hello"), later()),
+        [to(ids[1], error(Some(6), ErrorCode::NoSuchChannel))]
+    );
+    let again = hub.receive(ids[1], &create(7, "general", ChannelKind::Public), later());
+    assert_eq!(again.len(), 1);
+}
+
+#[test]
+fn does_not_give_a_deleted_channel_after_the_sign_in_or_in_the_list() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &delete(2, "general"), now());
+
+    let id = hub.connect();
+    let server = challenged(&mut hub, id, &[]);
+    let line = identify(&hub, 1, &server, None);
+    assert_eq!(hub.receive(id, &line, later()).len(), 2);
+    assert_eq!(
+        hub.receive(ids[2], &list(3), later()),
+        [to(
+            ids[2],
+            ServerMessage::Channels {
+                reference: Some(3),
+                list: Vec::new(),
+                more: false,
+            }
+        )]
+    );
+}
+
+#[test]
+fn refuses_to_delete_a_channel_for_a_user_who_is_not_its_owner() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &create(2, "secret", ChannelKind::Private), now());
+    hub.receive(ids[1], &join(3, "general"), now());
+
+    for not_the_owner in [ids[1], ids[2]] {
+        assert_eq!(
+            hub.receive(not_the_owner, &delete(4, "general"), now()),
+            [to(not_the_owner, error(Some(4), ErrorCode::NotPermitted))]
+        );
+    }
+    for title in ["garden", "secret", "General"] {
+        assert_eq!(
+            hub.receive(ids[1], &delete(5, title), now()),
+            [to(ids[1], error(Some(5), ErrorCode::NoSuchChannel))],
+            "{title}"
+        );
+    }
+    let sent = hub.receive(ids[1], &send(Some(6), "general", "Hello"), now());
+    assert_eq!(sent.len(), 2);
 }

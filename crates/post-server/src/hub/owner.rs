@@ -1,7 +1,7 @@
 use post_proto::{ChannelName, ErrorCode, ServerMessage, check_topic};
 use post_rules::{ChannelRenameError, OwnerError};
 
-use super::{Answer, Hub, Request, present};
+use super::{Answer, ConnectionId, Hub, Outgoing, Request, present};
 
 impl Hub {
     pub(super) fn set_topic(
@@ -16,10 +16,7 @@ impl Hub {
         self.channels
             .set_topic(&mut self.store, member.account, id, topic)
             .map_err(|_| ErrorCode::ServerError)?
-            .map_err(|error| match error {
-                OwnerError::NoSuchChannel => ErrorCode::NoSuchChannel,
-                OwnerError::NotPermitted => ErrorCode::NotPermitted,
-            })?;
+            .map_err(owner_error)?;
         let channel = self.channels.by_id(id).ok_or(ErrorCode::ServerError)?;
         Ok(
             self.to_each_member_of(channel, |to| ServerMessage::ChannelTopic {
@@ -62,5 +59,36 @@ impl Hub {
                 time: request.now,
             }),
         )
+    }
+}
+
+impl Hub {
+    pub(super) fn delete_channel(&mut self, request: &Request<'_>, channel: &str) -> Answer {
+        let member = present(request.state)?;
+        let found = self.visible(member.account, channel)?;
+        let (id, name) = (found.id, found.name.clone());
+        let receivers: Vec<ConnectionId> = self.connections_in(found).collect();
+        self.channels
+            .delete(&mut self.store, member.account, id)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(owner_error)?;
+        Ok(receivers
+            .into_iter()
+            .map(|to| Outgoing {
+                to,
+                message: ServerMessage::ChannelDelete {
+                    reference: request.reference.filter(|_| to == request.from),
+                    channel: name.clone(),
+                    time: request.now,
+                },
+            })
+            .collect())
+    }
+}
+
+fn owner_error(error: OwnerError) -> ErrorCode {
+    match error {
+        OwnerError::NoSuchChannel => ErrorCode::NoSuchChannel,
+        OwnerError::NotPermitted => ErrorCode::NotPermitted,
     }
 }

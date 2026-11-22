@@ -288,7 +288,8 @@ impl Session {
             ServerMessage::Welcome { .. }
             | ServerMessage::Challenge { .. }
             | ServerMessage::ChannelTopic { .. }
-            | ServerMessage::ChannelRename { .. } => {}
+            | ServerMessage::ChannelRename { .. }
+            | ServerMessage::ChannelDelete { .. } => {}
         }
     }
 
