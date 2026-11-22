@@ -248,6 +248,8 @@ The `send` message sends a text to a channel.
 
 The server answers with a `message` message or with an `error` message.
 
+Only a member of a channel can send a text to it. If the user is not a member of the channel, the error is `not-member`.
+
 ### `invite`
 
 The `invite` message makes an invitation.
@@ -433,7 +435,7 @@ The `leave` message tells that a user went out of a channel. In the channel `lob
 
 ### `message`
 
-The `message` message carries a text that a user sent to a channel. The server sends it to each user in the channel, also to the sender.
+The `message` message carries a text that a user sent to a channel. The server sends it to each member of the channel, also to the sender. For the channel `lobby`, the server sends it to each user who has a connection.
 
 | Field | Value |
 |---|---|

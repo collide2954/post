@@ -44,3 +44,11 @@ S: {"type":"leave","ref":7,"channel":"dev","name":"ana","time":"2026-11-21T14:04
 
 C: {"type":"leave","ref":8,"channel":"dev"}
 S: {"type":"error","ref":8,"code":"not-member","text":"You are not a member of this channel."}
+
+# Ana sends a text to her channel. Each member of the channel gets the message.
+C: {"type":"send","ref":9,"channel":"general","text":"Hello"}
+S: {"type":"message","ref":9,"channel":"general","from":"ana","time":"2026-11-21T14:05:00.000Z","text":"Hello"}
+
+# Ana is not a member of the channel "dev", thus she cannot send a text to it.
+C: {"type":"send","ref":10,"channel":"dev","text":"Hello"}
+S: {"type":"error","ref":10,"code":"not-member","text":"You are not a member of this channel."}

@@ -395,12 +395,9 @@ impl Hub {
     fn send(&self, request: &Request<'_>, channel: &str, text: &str) -> Answer {
         let member = present(request.state)?;
         if channel != LOBBY {
-            return Err(ErrorCode::NoSuchChannel);
+            return self.send_to_channel(request, member, channel, text);
         }
-        check_text(text).map_err(|error| match error {
-            TextError::Empty => ErrorCode::EmptyText,
-            TextError::TooLong => ErrorCode::TextTooLong,
-        })?;
+        examine_text(text)?;
         Ok(self.to_each_member(|to| ServerMessage::Message {
             reference: request.reference.filter(|_| to == request.from),
             channel: LOBBY.to_owned(),
@@ -563,6 +560,13 @@ fn present(state: &State) -> Result<&Member, Refused> {
 
 fn account_of(state: &State) -> Result<AccountId, Refused> {
     Ok(present(state)?.account)
+}
+
+fn examine_text(text: &str) -> Result<(), Refused> {
+    check_text(text).map_err(|error| match error {
+        TextError::Empty => ErrorCode::EmptyText,
+        TextError::TooLong => ErrorCode::TextTooLong,
+    })
 }
 
 fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Outgoing> {

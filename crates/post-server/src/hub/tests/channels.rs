@@ -4,7 +4,7 @@ use post_testing::Directory;
 
 use super::{
     challenged, error, hub_with, identify, later, name, new_hub, now, owner_code, random, ready,
-    registered, settings, to, welcome, with_owner,
+    registered, send, settings, to, welcome, with_owner,
 };
 use crate::hub::{ConnectionId, Hub};
 use crate::store::{Store, StoreError};
@@ -442,4 +442,79 @@ fn answers_with_a_server_error_when_it_cannot_store_a_join_or_a_leave() {
         hub.receive(ids[1], &leave(4, "general"), now()),
         [to(ids[1], error(Some(4), ErrorCode::ServerError))]
     );
+}
+
+#[test]
+fn sends_a_text_to_each_connection_of_each_member_of_the_channel() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[1], &join(2, "general"), now());
+    let second = signed_in_again(&mut hub, 2);
+
+    let outgoing = hub.receive(ids[1], &send(Some(9), "general", "Hello"), later());
+
+    let message = |reference| ServerMessage::Message {
+        reference,
+        channel: "general".to_owned(),
+        from: name("ben"),
+        time: later(),
+        text: "Hello".to_owned(),
+    };
+    assert_eq!(
+        outgoing,
+        [
+            to(ids[0], message(None)),
+            to(ids[1], message(Some(9))),
+            to(second, message(None)),
+        ]
+    );
+}
+
+#[test]
+fn refuses_a_text_from_a_user_who_is_not_a_member_of_the_channel() {
+    let (mut hub, ids) = with_general();
+    hub.receive(ids[0], &create(2, "secret", ChannelKind::Private), now());
+
+    for text in ["Hello", "", " \n "] {
+        assert_eq!(
+            hub.receive(ids[1], &send(Some(1), "general", text), now()),
+            [to(ids[1], error(Some(1), ErrorCode::NotMember))]
+        );
+    }
+    for channel in ["secret", "garden", "#general"] {
+        assert_eq!(
+            hub.receive(ids[1], &send(Some(2), channel, "Hello"), now()),
+            [to(ids[1], error(Some(2), ErrorCode::NoSuchChannel))],
+            "{channel}"
+        );
+    }
+}
+
+#[test]
+fn examines_the_text_of_a_message_to_a_channel() {
+    let (mut hub, ids) = with_general();
+
+    assert_eq!(
+        hub.receive(ids[0], &send(Some(1), "general", " \n "), now()),
+        [to(ids[0], error(Some(1), ErrorCode::EmptyText))]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &send(None, "general", &"x".repeat(4001)), now()),
+        [to(ids[0], error(None, ErrorCode::TextTooLong))]
+    );
+    assert_eq!(
+        hub.receive(ids[0], &send(None, "general", &"x".repeat(4000)), now())
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn keeps_the_temporary_lobby_and_the_channels_apart() {
+    let (mut hub, ids) = with_general();
+
+    let to_the_lobby = hub.receive(ids[1], &send(None, LOBBY, "Hi"), now());
+    let to_the_channel = hub.receive(ids[0], &send(None, "general", "Hi"), now());
+
+    assert_eq!(to_the_lobby.len(), 3);
+    assert_eq!(to_the_channel.len(), 1);
 }

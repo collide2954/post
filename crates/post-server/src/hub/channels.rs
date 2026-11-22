@@ -1,7 +1,10 @@
 use post_proto::{ChannelKind, ChannelName, ErrorCode, LOBBY, ServerMessage};
 use post_rules::{AccountId, Channel, ChannelLimits, CreateError, JoinError, Kind, LeaveError};
 
-use super::{Answer, ConnectionId, DAY, Hub, Outgoing, Refused, Request, account_of, present};
+use super::{
+    Answer, ConnectionId, DAY, Hub, Member, Outgoing, Refused, Request, account_of, examine_text,
+    present,
+};
 
 pub const CHANNEL_LIMITS: ChannelLimits = ChannelLimits {
     owned: 10,
@@ -84,6 +87,29 @@ impl Hub {
                 },
             })
             .collect())
+    }
+
+    pub(super) fn send_to_channel(
+        &self,
+        request: &Request<'_>,
+        member: &Member,
+        channel: &str,
+        text: &str,
+    ) -> Answer {
+        let channel = self.visible(member.account, channel)?;
+        if !channel.is_member(member.account) {
+            return Err(ErrorCode::NotMember);
+        }
+        examine_text(text)?;
+        Ok(
+            self.to_each_member_of(channel, |to| ServerMessage::Message {
+                reference: request.reference.filter(|_| to == request.from),
+                channel: channel.name.as_str().to_owned(),
+                from: member.name.clone(),
+                time: request.now,
+                text: text.to_owned(),
+            }),
+        )
     }
 
     fn visible(&self, account: AccountId, channel: &str) -> Result<&Channel, Refused> {
