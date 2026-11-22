@@ -252,6 +252,18 @@ impl Profile {
         &self.settings
     }
 
+    pub fn read_settings(&self) -> Result<Option<String>, ProfileError> {
+        match fs::read_to_string(&self.settings) {
+            Ok(text) => Ok(Some(text)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn write_settings(&self, text: &str) -> Result<(), ProfileError> {
+        write(&self.settings, text, false)
+    }
+
     pub fn remember(&mut self, server: KnownServer) -> Result<(), ProfileError> {
         server.remember_in(&mut self.servers);
         self.save()
@@ -611,6 +623,51 @@ mod tests {
         assert!(matches!(profiles.delete(work), Err(ProfileError::NotFound)));
         assert_eq!(profiles.create("garden").expect("a profile"), ProfileId(3));
         assert_eq!(profiles.open(personal).expect("open").name(), "personal");
+    }
+
+    #[test]
+    fn reads_and_writes_the_text_of_the_settings_file() {
+        let directory = Directory::new();
+        let home = Home {
+            settings: directory.join("settings"),
+            data: directory.join("data"),
+        };
+        let profile = Profiles::new(home).start("main").expect("a profile");
+        assert_eq!(profile.read_settings().expect("no file"), None);
+
+        profile.write_settings("clock = 12\n").expect("written");
+
+        assert_eq!(
+            profile.read_settings().expect("a file").as_deref(),
+            Some("clock = 12\n")
+        );
+        let file = directory
+            .join("settings")
+            .join("profiles")
+            .join("1")
+            .join("settings.toml");
+        assert_eq!(profile.settings_file(), file);
+        assert_eq!(fs::read_to_string(&file).expect("a file"), "clock = 12\n");
+
+        profile.write_settings("clock = 24\n").expect("written");
+        assert_eq!(fs::read_to_string(&file).expect("a file"), "clock = 24\n");
+        assert!(!file.with_extension("new").exists());
+    }
+
+    #[test]
+    fn reports_a_settings_file_that_it_cannot_use() {
+        let directory = Directory::new();
+        let profile = profiles(&directory).start("main").expect("a profile");
+        fs::create_dir_all(profile.settings_file()).expect("a directory in the place of the file");
+
+        assert!(matches!(
+            profile.read_settings(),
+            Err(ProfileError::File(_))
+        ));
+        assert!(matches!(
+            profile.write_settings("clock = 12\n"),
+            Err(ProfileError::File(_))
+        ));
     }
 
     #[test]
