@@ -34,6 +34,7 @@ error-wrong-address = El servidor no usa esta dirección.
 error-account-exists = Ya tienes una cuenta en este servidor.
 error-invalid-invitation = La invitación no es válida. Pide un enlace de invitación nuevo.
 error-server = El servidor tiene un problema. Inténtalo de nuevo más tarde.
+error-not-permitted = Tu cuenta no tiene permiso para esta tarea.
 error-invalid-name = El servidor rechazó el nombre.
 error-name-taken = Otra persona ya usa este nombre.
 error-no-such-channel = El canal no existe.

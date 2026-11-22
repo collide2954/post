@@ -1,4 +1,5 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::num::NonZeroU32;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
@@ -210,6 +211,15 @@ async fn the_owner_makes_an_account_and_signs_in_again() {
 }
 
 async fn register(port: u16, seed: &Seed, who: &str, link: &str) -> ServerMessage {
+    register_and_stay(port, seed, who, link).await.1
+}
+
+async fn register_and_stay(
+    port: u16,
+    seed: &Seed,
+    who: &str,
+    link: &str,
+) -> (Socket, ServerMessage) {
     let (_, code) = link.rsplit_once('/').expect("a link has a code");
     let mut socket = connect_v4(port).await;
     let (key, proof) = prove(&mut socket, &format!("localhost:{port}"), seed).await;
@@ -221,7 +231,8 @@ async fn register(port: u16, seed: &Seed, who: &str, link: &str) -> ServerMessag
         invitation: Code::parse(code).expect("a valid code"),
     };
     write(&mut socket, &register).await;
-    read(&mut socket).await
+    let answer = read(&mut socket).await;
+    (socket, answer)
 }
 
 async fn identify(port: u16, seed: &Seed) -> ServerMessage {
@@ -270,6 +281,55 @@ async fn keeps_the_accounts_when_it_starts_again() {
     assert_eq!(
         identify(server.port, &Seed::from_bytes([8; 32])).await,
         ServerMessage::error(None, ErrorCode::UnknownAccount)
+    );
+}
+
+#[tokio::test]
+async fn a_person_joins_with_an_invitation_of_the_owner() {
+    let server = start().await;
+    let owner_link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let (mut ana, answer) =
+        register_and_stay(server.port, &Seed::from_bytes([7; 32]), "ana", &owner_link).await;
+    assert_eq!(answer, welcome("ana", Role::Owner));
+    assert!(matches!(read(&mut ana).await, ServerMessage::Join { .. }));
+
+    let invite = ClientMessage::Invite {
+        reference: Some(1),
+        lifetime: NonZeroU32::new(3600),
+        uses: NonZeroU32::new(1),
+    };
+    write(&mut ana, &invite).await;
+    let ServerMessage::Invitations {
+        reference: Some(1),
+        list,
+    } = read(&mut ana).await
+    else {
+        panic!("the owner gets the open invitations");
+    };
+    let [invitation] = &list[..] else {
+        panic!("the server has one open invitation, not {list:?}");
+    };
+    assert_eq!(
+        invitation.link,
+        format!("http://localhost:{}/i/{}", server.port, invitation.code)
+    );
+    assert_eq!((invitation.uses, invitation.used), (Some(1), 0));
+
+    let ben = Seed::from_bytes([8; 32]);
+    assert_eq!(
+        register(server.port, &ben, "ben", &invitation.link).await,
+        welcome("ben", Role::Member)
+    );
+    assert!(
+        matches!(read(&mut ana).await, ServerMessage::Join { name: joined, .. } if joined == name("ben"))
+    );
+    let cy = Seed::from_bytes([9; 32]);
+    assert_eq!(
+        register(server.port, &cy, "cy", &invitation.link).await,
+        ServerMessage::error(None, ErrorCode::InvalidInvitation)
     );
 }
 

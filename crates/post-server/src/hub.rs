@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroU32;
 
 use post_crypto::{Exchange, ServerKey};
 use post_proto::{
-    ClientMessage, Code, ErrorCode, Key, LOBBY, Name, Nonce, PROTOCOL_VERSION, Part, Role,
-    ServerMessage, Signature, TextError, Timestamp, check_text,
+    ClientMessage, Code, ErrorCode, Invitation, Key, LOBBY, Name, Nonce, PROTOCOL_VERSION, Part,
+    Role, ServerMessage, Signature, TextError, Timestamp, check_text,
 };
 
-use post_rules::{Account, AccountId, Limits, RegisterError, Rules};
+use post_rules::{
+    Account, AccountId, InviteError, Limits, RegisterError, RevokeError, Rules, later,
+};
 
 use crate::store::{Store, StoreError, Stored};
 
@@ -106,7 +109,7 @@ impl Hub {
             .rules
             .owner_code(&mut self.store, &fresh, now)?
             .map_err(|_| StoreError::CodeInUse)?;
-        Ok(code.map(|code| format!("{}/i/{code}", self.settings.link)))
+        Ok(code.map(|code| self.link(&code)))
     }
 
     pub fn connect(&mut self) -> ConnectionId {
@@ -178,6 +181,21 @@ impl Hub {
                 examine_text(&state, &channel, &text)
                     .map(|member| self.deliver(from, reference, &member.name, &text, now)),
             ),
+            ClientMessage::Invite {
+                reference,
+                lifetime,
+                uses,
+            } => (
+                reference,
+                self.invite(from, reference, &state, lifetime, uses, now),
+            ),
+            ClientMessage::Invitations { reference } => (
+                reference,
+                self.list_invitations(from, reference, &state, now),
+            ),
+            ClientMessage::Revoke { reference, code } => {
+                (reference, self.revoke(from, reference, &state, &code, now))
+            }
         };
         result.unwrap_or_else(|code| refusal(from, reference, code))
     }
@@ -397,6 +415,95 @@ impl Hub {
         })
     }
 
+    fn invite(
+        &mut self,
+        from: ConnectionId,
+        reference: Option<u32>,
+        state: &State,
+        lifetime: Option<NonZeroU32>,
+        uses: Option<NonZeroU32>,
+        now: Timestamp,
+    ) -> Result<Vec<Outgoing>, Refused> {
+        let account = account_of(state)?;
+        let end = lifetime.map(|seconds| later(now, u64::from(seconds.get()) * 1000));
+        let code = (self.random.code)();
+        self.rules
+            .invite(
+                &mut self.store,
+                account,
+                &code,
+                end,
+                uses.map(NonZeroU32::get),
+                now,
+            )
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(|error| match error {
+                InviteError::NotPermitted => ErrorCode::NotPermitted,
+                InviteError::CodeTaken => ErrorCode::ServerError,
+            })?;
+        Ok(self.invitations(from, reference, now))
+    }
+
+    fn list_invitations(
+        &self,
+        from: ConnectionId,
+        reference: Option<u32>,
+        state: &State,
+        now: Timestamp,
+    ) -> Result<Vec<Outgoing>, Refused> {
+        if !self.rules.is_owner(account_of(state)?) {
+            return Err(ErrorCode::NotPermitted);
+        }
+        Ok(self.invitations(from, reference, now))
+    }
+
+    fn revoke(
+        &mut self,
+        from: ConnectionId,
+        reference: Option<u32>,
+        state: &State,
+        code: &Code,
+        now: Timestamp,
+    ) -> Result<Vec<Outgoing>, Refused> {
+        let account = account_of(state)?;
+        self.rules
+            .revoke(&mut self.store, account, code, now)
+            .map_err(|_| ErrorCode::ServerError)?
+            .map_err(|error| match error {
+                RevokeError::NotPermitted => ErrorCode::NotPermitted,
+                RevokeError::NotOpen => ErrorCode::InvalidInvitation,
+            })?;
+        Ok(self.invitations(from, reference, now))
+    }
+
+    fn invitations(
+        &self,
+        to: ConnectionId,
+        reference: Option<u32>,
+        now: Timestamp,
+    ) -> Vec<Outgoing> {
+        let list = self
+            .rules
+            .open_invitations(now)
+            .into_iter()
+            .rev()
+            .map(|open| Invitation {
+                link: self.link(&open.code),
+                code: open.code,
+                created: open.created,
+                end: open.end,
+                uses: open.uses,
+                used: open.used,
+            })
+            .collect();
+        let message = ServerMessage::Invitations { reference, list };
+        vec![Outgoing { to, message }]
+    }
+
+    fn link(&self, code: &Code) -> String {
+        format!("{}/i/{code}", self.settings.link)
+    }
+
     fn has_a_connection(&self, member: &Member) -> bool {
         member.account.is_some()
             && self
@@ -447,12 +554,20 @@ impl Member {
     }
 }
 
+fn present(state: &State) -> Result<&Member, Refused> {
+    match state {
+        State::New => Err(ErrorCode::HelloRequired),
+        State::Challenged(_) => Err(ErrorCode::IdentifyRequired),
+        State::Present(member) => Ok(member),
+    }
+}
+
+fn account_of(state: &State) -> Result<AccountId, Refused> {
+    present(state)?.account.ok_or(ErrorCode::NotPermitted)
+}
+
 fn examine_text<'a>(state: &'a State, channel: &str, text: &str) -> Result<&'a Member, Refused> {
-    let member = match state {
-        State::New => return Err(ErrorCode::HelloRequired),
-        State::Challenged(_) => return Err(ErrorCode::IdentifyRequired),
-        State::Present(member) => member,
-    };
+    let member = present(state)?;
     if channel != LOBBY {
         return Err(ErrorCode::NoSuchChannel);
     }
@@ -472,13 +587,15 @@ fn refusal(to: ConnectionId, reference: Option<u32>, code: ErrorCode) -> Vec<Out
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
+
     use post_crypto::{Exchange, Seed};
     use post_proto::{
-        ClientMessage, Code, ErrorCode, Key, LOBBY, Name, Nonce, Part, Role, ServerMessage,
-        Signature, Timestamp,
+        ClientMessage, Code, ErrorCode, Invitation, Key, LOBBY, Name, Nonce, Part, Role,
+        ServerMessage, Signature, Timestamp,
     };
 
-    use post_rules::{Change, Invitation, Storage as _};
+    use post_rules::{Change, Storage as _};
 
     use super::{ConnectionId, Hub, Outgoing, Random, Settings};
     use crate::store::{Store, StoreError};
@@ -1484,8 +1601,238 @@ mod tests {
         assert!(matches!(result, Err(StoreError::BrokenRules)));
     }
 
-    fn stored_invitation(number: u32, limit: Option<u32>, used: u32) -> Invitation {
+    fn invite(reference: u32, lifetime: Option<u32>, uses: Option<u32>) -> String {
+        ClientMessage::Invite {
+            reference: Some(reference),
+            lifetime: lifetime.and_then(NonZeroU32::new),
+            uses: uses.and_then(NonZeroU32::new),
+        }
+        .encode()
+    }
+
+    fn list(reference: u32) -> String {
+        ClientMessage::Invitations {
+            reference: Some(reference),
+        }
+        .encode()
+    }
+
+    fn revoke(reference: u32, code: &Code) -> String {
+        ClientMessage::Revoke {
+            reference: Some(reference),
+            code: code.clone(),
+        }
+        .encode()
+    }
+
+    fn shown(number: u32, created: Timestamp) -> Invitation {
         Invitation {
+            code: code(number),
+            link: format!("https://chat.example.org/i/{}", code(number)),
+            created,
+            end: None,
+            uses: None,
+            used: 0,
+        }
+    }
+
+    fn invitations(reference: u32, list: Vec<Invitation>) -> ServerMessage {
+        ServerMessage::Invitations {
+            reference: Some(reference),
+            list,
+        }
+    }
+
+    #[test]
+    fn makes_an_invitation_for_the_owner_and_gives_the_newest_one_first() {
+        let (mut hub, ana) = with_owner();
+
+        let first = hub.receive(ana, &invite(3, Some(604_800), Some(2)), now());
+        let second = hub.receive(ana, &invite(4, None, None), later());
+
+        let limited = Invitation {
+            end: Some(Timestamp::parse("2026-11-28T14:02:07.120Z").expect("valid")),
+            uses: Some(2),
+            ..shown(2, now())
+        };
+        assert_eq!(first, [to(ana, invitations(3, vec![limited.clone()]))]);
+        assert_eq!(
+            second,
+            [to(ana, invitations(4, vec![shown(3, later()), limited]))]
+        );
+    }
+
+    #[test]
+    fn lets_a_person_make_an_account_with_an_invitation_of_the_owner() {
+        let (mut hub, ana) = with_owner();
+        hub.receive(ana, &invite(3, None, Some(1)), now());
+        hub.receive(ana, &invite(4, None, None), now());
+
+        registered(&mut hub, 2, "ben", &code(2));
+        registered(&mut hub, 3, "cy", &code(3));
+
+        let still_open = Invitation {
+            used: 1,
+            ..shown(3, now())
+        };
+        assert_eq!(
+            hub.receive(ana, &list(5), now()),
+            [to(ana, invitations(5, vec![still_open]))]
+        );
+        let id = hub.connect();
+        let server = challenged(&mut hub, id, &[]);
+        let line = register(&hub, 4, &server, "dee", &code(2));
+        assert_eq!(
+            hub.receive(id, &line, now()),
+            [to(id, error(Some(2), ErrorCode::InvalidInvitation))]
+        );
+    }
+
+    #[test]
+    fn does_not_show_an_invitation_after_its_end() {
+        let (mut hub, ana) = with_owner();
+        hub.receive(ana, &invite(3, Some(60), None), now());
+        let end = Timestamp::parse("2026-11-21T14:03:07.120Z").expect("valid");
+        let open = Invitation {
+            end: Some(end),
+            ..shown(2, now())
+        };
+
+        assert_eq!(
+            hub.receive(ana, &list(4), later()),
+            [to(ana, invitations(4, vec![open]))]
+        );
+        assert_eq!(
+            hub.receive(ana, &list(5), end),
+            [to(ana, invitations(5, Vec::new()))]
+        );
+    }
+
+    #[test]
+    fn cancels_an_invitation_for_the_owner() {
+        let (mut hub, ana) = with_owner();
+        hub.receive(ana, &invite(3, None, None), now());
+        hub.receive(ana, &invite(4, None, None), now());
+        let link = new_owner_code(&mut hub, 60);
+
+        assert_eq!(
+            hub.receive(ana, &revoke(5, &code(2)), later()),
+            [to(ana, invitations(5, vec![shown(3, now())]))]
+        );
+        for not_open in [code(2), code(99), link.clone()] {
+            assert_eq!(
+                hub.receive(ana, &revoke(6, &not_open), later()),
+                [to(ana, error(Some(6), ErrorCode::InvalidInvitation))],
+                "{not_open}"
+            );
+        }
+        assert!(hub.rules.code_is_open(&link, later()));
+    }
+
+    #[test]
+    fn lets_only_the_owner_use_the_invitation_messages() {
+        let (mut hub, _ana) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let ben = registered(&mut hub, 2, "ben", &open);
+        let guest_id = hub.connect();
+        hub.receive(guest_id, &guest(0, "cy"), now());
+
+        for user in [ben, guest_id] {
+            for line in [invite(1, None, None), list(1), revoke(1, &open)] {
+                assert_eq!(
+                    hub.receive(user, &line, now()),
+                    [to(user, error(Some(1), ErrorCode::NotPermitted))],
+                    "{line}"
+                );
+            }
+        }
+        assert_eq!(hub.rules.open_invitations(now()).len(), 1);
+    }
+
+    #[test]
+    fn obeys_the_present_owner_and_not_the_role_at_the_sign_in() {
+        let (mut hub, ana) = with_owner();
+        let open = invitation(&mut hub, 50);
+        let ben = registered(&mut hub, 2, "ben", &open);
+        hub.disconnect(ben, now());
+        new_owner_code(&mut hub, 60);
+        let ben = hub.connect();
+        let server = challenged(&mut hub, ben, &[]);
+        let line = identify(&hub, 2, &server, Some(&code(60)));
+        hub.receive(ben, &line, now());
+
+        assert_eq!(
+            hub.receive(ana, &list(1), now()),
+            [to(ana, error(Some(1), ErrorCode::NotPermitted))]
+        );
+        let used = Invitation {
+            used: 1,
+            ..shown(50, now())
+        };
+        assert_eq!(
+            hub.receive(ben, &list(1), now()),
+            [to(ben, invitations(1, vec![used]))]
+        );
+    }
+
+    #[test]
+    fn refuses_an_invitation_message_before_the_sign_in() {
+        let mut hub = new_hub();
+        let id = hub.connect();
+        let lines = [invite(1, None, None), list(1), revoke(1, &code(5))];
+
+        for line in &lines {
+            assert_eq!(
+                hub.receive(id, line, now()),
+                [to(id, error(Some(1), ErrorCode::HelloRequired))]
+            );
+        }
+        challenged(&mut hub, id, &[]);
+        for line in &lines {
+            assert_eq!(
+                hub.receive(id, line, now()),
+                [to(id, error(Some(1), ErrorCode::IdentifyRequired))]
+            );
+        }
+    }
+
+    #[test]
+    fn answers_with_a_server_error_when_it_cannot_store_an_invitation() {
+        let (mut hub, ana) = with_owner();
+        hub.receive(ana, &invite(3, None, None), now());
+        hub.store.lose_its_tables();
+
+        for line in [invite(4, None, None), revoke(4, &code(2))] {
+            assert_eq!(
+                hub.receive(ana, &line, now()),
+                [to(ana, error(Some(4), ErrorCode::ServerError))]
+            );
+        }
+        assert_eq!(
+            hub.receive(ana, &list(5), now()),
+            [to(ana, invitations(5, vec![shown(2, now())]))]
+        );
+    }
+
+    #[test]
+    fn answers_with_a_server_error_when_a_new_code_is_not_free() {
+        let store = Store::in_memory().expect("a database in memory");
+        let random = Random {
+            code: Box::new(|| code(7)),
+            ..random()
+        };
+        let mut hub = Hub::new(store, settings(), random).expect("a hub");
+        let link = owner_code(&mut hub);
+        let ana = registered(&mut hub, 1, "ana", &link);
+
+        assert_eq!(
+            hub.receive(ana, &invite(3, None, None), now()),
+            [to(ana, error(Some(3), ErrorCode::ServerError))]
+        );
+    }
+
+    fn stored_invitation(number: u32, limit: Option<u32>, used: u32) -> post_rules::Invitation {
+        post_rules::Invitation {
             code: code(number),
             owner: false,
             maker: None,

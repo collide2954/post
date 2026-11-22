@@ -152,6 +152,18 @@ A receiver must refuse a signature that is not in its standard form. A receiver 
 
 A server signs only its own addresses. Thus a false server cannot show the key of a different server. The client then calculates a key that has no value for a different server.
 
+## Invitations
+
+A person makes an account with the code of an invitation (see the `register` message). An invitation is open until one of these conditions is true:
+
+- Its end time is in the past.
+- It made as many accounts as its limit permits.
+- The server owner canceled it.
+
+In protocol version 0, only the server owner makes, lists, and cancels invitations. The server answers a different account with the error `not-permitted`.
+
+An owner link is a special invitation. The server program makes it, and a client cannot list it or cancel it.
+
 ## Messages from the client
 
 ### `hello`
@@ -226,6 +238,42 @@ The `send` message sends a text to a channel.
 
 The server answers with a `message` message or with an `error` message.
 
+### `invite`
+
+The `invite` message makes an invitation.
+
+| Field | Value |
+|---|---|
+| `type` | `"invite"` |
+| `ref` | Optional. |
+| `lifetime` | Optional. The number of seconds until the invitation ends, from 1 to 4,294,967,295. Without this field, the invitation has no end. |
+| `uses` | Optional. The number of accounts that the invitation can make, from 1 to 4,294,967,295. Without this field, the invitation has no limit. |
+
+The server answers with an `invitations` message or with an `error` message. The new invitation is the first entry of the list.
+
+### `invitations`
+
+The `invitations` message asks for the open invitations of the server.
+
+| Field | Value |
+|---|---|
+| `type` | `"invitations"` |
+| `ref` | Optional. |
+
+The server answers with an `invitations` message or with an `error` message.
+
+### `revoke`
+
+The `revoke` message cancels an invitation. A person cannot make an account with the invitation after that.
+
+| Field | Value |
+|---|---|
+| `type` | `"revoke"` |
+| `ref` | Optional. |
+| `code` | The code of the invitation. |
+
+The server answers with an `invitations` message or with an `error` message. If the invitation does not exist, or if it is not open, the error is `invalid-invitation`.
+
 ## Messages from the server
 
 ### `challenge`
@@ -292,6 +340,27 @@ The `message` message carries a text that a user sent to a channel. The server s
 | `time` | The time when the server got the message. |
 | `text` | The text. |
 
+### `invitations`
+
+The `invitations` message gives the open invitations of the server. The newest invitation is first.
+
+| Field | Value |
+|---|---|
+| `type` | `"invitations"` |
+| `ref` | The value from the request, if it had one. |
+| `list` | The list of the open invitations. |
+
+Each entry of the list is an object with these fields:
+
+| Field | Value |
+|---|---|
+| `code` | The code of the invitation. |
+| `link` | The invite link. A person pastes it into an application. |
+| `created` | The time when the server made the invitation. |
+| `end` | Optional. The time when the invitation ends. |
+| `uses` | Optional. The number of accounts that the invitation can make. |
+| `used` | The number of accounts that the invitation made. |
+
 ### `error`
 
 The `error` message refuses a message from the client. The connection stays open.
@@ -324,6 +393,7 @@ A client must use the `code` field to make a decision. The `text` field can chan
 | `no-such-channel` | The channel does not exist. |
 | `empty-text` | The text has no visible character. |
 | `text-too-long` | The text has more than 4,000 characters. |
+| `not-permitted` | The account does not have the permission for the request. |
 | `server-error` | The server has a problem and cannot do the task. |
 
 ## Example conversations
@@ -339,6 +409,7 @@ Each file in the [examples](examples) directory shows one connection.
 | [sign-in.txt](examples/sign-in.txt) | A person makes an account with an invitation. The keys and the signatures are real, and a test examines them. |
 | [sign-in-errors.txt](examples/sign-in-errors.txt) | The server refuses messages of the sign-in. |
 | [requirements.txt](examples/requirements.txt) | A server requires a part of the protocol that the client does not support. |
+| [invitations.txt](examples/invitations.txt) | The server owner makes, lists, and cancels invitations. |
 | [storage-problem.txt](examples/storage-problem.txt) | The server has a problem with its storage. |
 | [two-users.txt](examples/two-users.txt) | Two users with temporary names exchange text. |
 | [errors.txt](examples/errors.txt) | The server refuses other messages. |

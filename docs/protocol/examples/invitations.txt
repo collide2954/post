@@ -1,0 +1,29 @@
+# The server owner makes, lists, and cancels invitations.
+# The lines show the connection of the user "ana". She is the server owner.
+# "C:" is a line from the client. "S:" is a line from the server.
+
+C: {"type":"hello","ref":1,"protocol":0,"address":"chat.example.org:443","nonce":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM","supports":[]}
+S: {"type":"challenge","ref":1,"protocol":0,"key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","nonce":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ","proof":"J-_uXcNxGu88y0Qjq2YbJJDK-2vGzwlT0Hdv-Ta0AiX9MfvlimJ9hapnDNb-22WCKniwEfvDAvw_wFz6S9ftCw","requires":[]}
+C: {"type":"identify","ref":2,"key":"yEe4E8-6oqw21MlcwF3Fg96DGOEssf4ZDmP7KGA4IgQ","proof":"w6E3-9F8fyYSMvYgN5irctX2VYSXN5wD6QT_WqEiZEUGsy5ODkcJ1z6Dlpl2xdZaD05A5fRkw2ULcvqPSQpDAg"}
+S: {"type":"welcome","ref":2,"name":"ana","role":"owner"}
+S: {"type":"join","channel":"lobby","name":"ana","time":"2026-11-21T14:05:00.000Z"}
+
+# Ana makes an invitation for one person. It ends after 7 days.
+C: {"type":"invite","ref":3,"lifetime":604800,"uses":1}
+S: {"type":"invitations","ref":3,"list":[{"code":"7Hq2kdX9mPq4","link":"https://chat.example.org/i/7Hq2kdX9mPq4","created":"2026-11-21T14:06:00.000Z","end":"2026-11-28T14:06:00.000Z","uses":1,"used":0}]}
+
+# Ana makes a second invitation with no end and no limit. The newest invitation is first.
+C: {"type":"invite","ref":4}
+S: {"type":"invitations","ref":4,"list":[{"code":"k3Wm8sTz2LpQ","link":"https://chat.example.org/i/k3Wm8sTz2LpQ","created":"2026-11-21T14:07:00.000Z","used":0},{"code":"7Hq2kdX9mPq4","link":"https://chat.example.org/i/7Hq2kdX9mPq4","created":"2026-11-21T14:06:00.000Z","end":"2026-11-28T14:06:00.000Z","uses":1,"used":0}]}
+
+# Later, two persons made accounts with the second invitation. Ana asks for the open invitations.
+C: {"type":"invitations","ref":5}
+S: {"type":"invitations","ref":5,"list":[{"code":"k3Wm8sTz2LpQ","link":"https://chat.example.org/i/k3Wm8sTz2LpQ","created":"2026-11-21T14:07:00.000Z","used":2},{"code":"7Hq2kdX9mPq4","link":"https://chat.example.org/i/7Hq2kdX9mPq4","created":"2026-11-21T14:06:00.000Z","end":"2026-11-28T14:06:00.000Z","uses":1,"used":0}]}
+
+# Ana cancels the second invitation.
+C: {"type":"revoke","ref":6,"code":"k3Wm8sTz2LpQ"}
+S: {"type":"invitations","ref":6,"list":[{"code":"7Hq2kdX9mPq4","link":"https://chat.example.org/i/7Hq2kdX9mPq4","created":"2026-11-21T14:06:00.000Z","end":"2026-11-28T14:06:00.000Z","uses":1,"used":0}]}
+
+# The second invitation is not open now.
+C: {"type":"revoke","ref":7,"code":"k3Wm8sTz2LpQ"}
+S: {"type":"error","ref":7,"code":"invalid-invitation","text":"The invitation is not valid."}

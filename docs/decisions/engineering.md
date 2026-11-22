@@ -363,6 +363,8 @@ Server:
 - The server accepts only TLS 1.3. The own certificate is valid for 10 years. The application identifies a private certificate by its SHA-256 fingerprint.
 - The code of an invitation has 12 random letters and digits. An owner link is an invitation that makes its user the server owner.
 - Only the server owner makes invitations. Operators and the setting for members (D-056) come in version 0.9.
+- A request for a new invitation gives the time to its end in seconds. The server calculates the end time, thus the clock of the client has no effect.
+- The server answers each invitation request with the full list of the open invitations.
 - The limits of the handle change (D-024) are fixed. The operator settings for them come in version 0.9.
 - A line in the timeline for a person who joins or leaves still shows the start or the end of a connection. Channels and members come in version 0.3.
 - The server stores accounts, handles, and invitations. It stores no messages before version 0.4.

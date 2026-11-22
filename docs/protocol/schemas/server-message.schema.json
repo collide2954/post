@@ -191,6 +191,37 @@
       ]
     },
     {
+      "description": "Gives the open invitations of the server. The newest invitation is first.",
+      "type": "object",
+      "properties": {
+        "list": {
+          "description": "The open invitations.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Invitation"
+          }
+        },
+        "ref": {
+          "description": "The number from the request, if it had one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "invitations"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "list"
+      ]
+    },
+    {
       "description": "Refuses a message from the client.",
       "type": "object",
       "properties": {
@@ -225,6 +256,11 @@
     }
   ],
   "$defs": {
+    "Code": {
+      "description": "The code of an invitation: 12 letters and digits.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]{12}$"
+    },
     "ErrorCode": {
       "description": "The cause of an error.",
       "oneOf": [
@@ -314,10 +350,66 @@
           "const": "text-too-long"
         },
         {
+          "description": "The account does not have the permission for the request.",
+          "type": "string",
+          "const": "not-permitted"
+        },
+        {
           "description": "The server has a problem and cannot do the task.",
           "type": "string",
           "const": "server-error"
         }
+      ]
+    },
+    "Invitation": {
+      "description": "An open invitation to a server.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "The code of the invitation.",
+          "$ref": "#/$defs/Code"
+        },
+        "created": {
+          "description": "The time when the server made the invitation.",
+          "$ref": "#/$defs/Timestamp"
+        },
+        "end": {
+          "description": "The time when the invitation ends. Without this field, it has no end.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "link": {
+          "description": "The invite link. A person pastes it into an application.",
+          "type": "string"
+        },
+        "used": {
+          "description": "The number of accounts that the invitation made.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "uses": {
+          "description": "The number of accounts that the invitation can make. Without this field, it has no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "link",
+        "created",
+        "used"
       ]
     },
     "Key": {

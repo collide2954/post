@@ -1,5 +1,8 @@
+use std::num::NonZeroU32;
+
 use post_proto::{
-    ClientMessage, ErrorCode, LOBBY, Name, ServerMessage, TextError, Timestamp, check_text,
+    ClientMessage, Code, ErrorCode, Invitation, LOBBY, Name, ServerMessage, TextError, Timestamp,
+    check_text,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +27,7 @@ pub struct Session {
     name: Name,
     entries: Vec<Entry>,
     problem: Option<ErrorCode>,
+    invitations: Option<Vec<Invitation>>,
     next_reference: u32,
 }
 
@@ -38,6 +42,7 @@ impl Session {
             name,
             entries: Vec::new(),
             problem: None,
+            invitations: None,
             next_reference,
         }
     }
@@ -57,16 +62,50 @@ impl Session {
         self.problem
     }
 
+    #[must_use]
+    pub fn invitations(&self) -> Option<&[Invitation]> {
+        self.invitations.as_deref()
+    }
+
     pub fn compose(&mut self, text: &str) -> Result<ClientMessage, TextError> {
         check_text(text)?;
-        let reference = self.next_reference;
-        self.next_reference = reference.wrapping_add(1);
-        self.problem = None;
         Ok(ClientMessage::Send {
-            reference: Some(reference),
+            reference: Some(self.request()),
             channel: LOBBY.to_owned(),
             text: text.to_owned(),
         })
+    }
+
+    pub fn invite(
+        &mut self,
+        lifetime: Option<NonZeroU32>,
+        uses: Option<NonZeroU32>,
+    ) -> ClientMessage {
+        ClientMessage::Invite {
+            reference: Some(self.request()),
+            lifetime,
+            uses,
+        }
+    }
+
+    pub fn ask_for_invitations(&mut self) -> ClientMessage {
+        ClientMessage::Invitations {
+            reference: Some(self.request()),
+        }
+    }
+
+    pub fn revoke(&mut self, code: Code) -> ClientMessage {
+        ClientMessage::Revoke {
+            reference: Some(self.request()),
+            code,
+        }
+    }
+
+    fn request(&mut self) -> u32 {
+        let reference = self.next_reference;
+        self.next_reference = reference.wrapping_add(1);
+        self.problem = None;
+        reference
     }
 
     pub fn apply(&mut self, message: ServerMessage) {
@@ -88,6 +127,7 @@ impl Session {
                 name,
                 time,
             } if channel == LOBBY => self.entries.push(Entry::Left { time, name }),
+            ServerMessage::Invitations { list, .. } => self.invitations = Some(list),
             ServerMessage::Error { code, .. } => self.problem = Some(code),
             ServerMessage::Message { .. }
             | ServerMessage::Join { .. }
@@ -100,7 +140,11 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use post_proto::{ClientMessage, ErrorCode, Name, Role, ServerMessage, TextError, Timestamp};
+    use std::num::NonZeroU32;
+
+    use post_proto::{
+        ClientMessage, Code, ErrorCode, Invitation, Name, Role, ServerMessage, TextError, Timestamp,
+    };
 
     use super::{Entry, Session};
 
@@ -144,6 +188,80 @@ mod tests {
 
         assert_eq!(session.name(), &name("ana"));
         assert_eq!(session.entries(), []);
+        assert_eq!(session.problem(), None);
+        assert_eq!(session.invitations(), None);
+    }
+
+    #[test]
+    fn keeps_the_newest_list_of_invitations_from_the_server() {
+        let mut session = Session::new(name("ana"));
+        let invitation = |text: &str, used| Invitation {
+            code: Code::parse(text).expect(text),
+            link: format!("https://chat.example.org/i/{text}"),
+            created: time(1),
+            end: None,
+            uses: None,
+            used,
+        };
+
+        session.apply(ServerMessage::Invitations {
+            reference: Some(1),
+            list: vec![invitation("7Hq2kdX9mPq4", 0)],
+        });
+        assert_eq!(
+            session.invitations(),
+            Some([invitation("7Hq2kdX9mPq4", 0)].as_slice())
+        );
+
+        let newer = vec![invitation("k3Wm8sTz2LpQ", 0), invitation("7Hq2kdX9mPq4", 1)];
+        session.apply(ServerMessage::Invitations {
+            reference: None,
+            list: newer.clone(),
+        });
+        assert_eq!(session.invitations(), Some(newer.as_slice()));
+
+        session.apply(ServerMessage::Invitations {
+            reference: None,
+            list: Vec::new(),
+        });
+        assert_eq!(session.invitations(), Some([].as_slice()));
+        assert_eq!(session.entries(), []);
+    }
+
+    #[test]
+    fn makes_each_invitation_request_with_a_new_number() {
+        let mut session = Session::new(name("ana"));
+        let code = Code::parse("7Hq2kdX9mPq4").expect("valid");
+
+        assert_eq!(
+            session.invite(NonZeroU32::new(604_800), NonZeroU32::new(5)),
+            ClientMessage::Invite {
+                reference: Some(1),
+                lifetime: NonZeroU32::new(604_800),
+                uses: NonZeroU32::new(5),
+            }
+        );
+        assert_eq!(
+            session.ask_for_invitations(),
+            ClientMessage::Invitations { reference: Some(2) }
+        );
+        assert_eq!(
+            session.revoke(code.clone()),
+            ClientMessage::Revoke {
+                reference: Some(3),
+                code,
+            }
+        );
+    }
+
+    #[test]
+    fn forgets_the_error_when_the_user_makes_a_new_request() {
+        let mut session = Session::new(name("ana"));
+
+        session.apply(ServerMessage::error(Some(1), ErrorCode::NotPermitted));
+        assert_eq!(session.problem(), Some(ErrorCode::NotPermitted));
+
+        let _request = session.ask_for_invitations();
         assert_eq!(session.problem(), None);
     }
 

@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -74,6 +76,32 @@ pub enum ClientMessage {
         /// The text of the message.
         text: String,
     },
+    /// Makes an invitation. Only the server owner can make one.
+    Invite {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The number of seconds until the invitation ends. Without this field, it has no end.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lifetime: Option<NonZeroU32>,
+        /// The number of accounts that the invitation can make. Without this field, it has no limit.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        uses: Option<NonZeroU32>,
+    },
+    /// Asks for the open invitations of the server.
+    Invitations {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+    },
+    /// Cancels an invitation.
+    Revoke {
+        /// A number that the answer of the server repeats.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The code of the invitation.
+        code: Code,
+    },
 }
 
 /// A message from the server to a client.
@@ -138,6 +166,14 @@ pub enum ServerMessage {
         /// The text of the message.
         text: String,
     },
+    /// Gives the open invitations of the server. The newest invitation is first.
+    Invitations {
+        /// The number from the request, if it had one.
+        #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+        reference: Option<u32>,
+        /// The open invitations.
+        list: Vec<Invitation>,
+    },
     /// Refuses a message from the client.
     Error {
         /// The number from the refused message, if it had one.
@@ -148,6 +184,26 @@ pub enum ServerMessage {
         /// The cause of the error in English, for a person.
         text: String,
     },
+}
+
+/// An open invitation to a server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Invitation {
+    /// The code of the invitation.
+    pub code: Code,
+    /// The invite link. A person pastes it into an application.
+    pub link: String,
+    /// The time when the server made the invitation.
+    pub created: Timestamp,
+    /// The time when the invitation ends. Without this field, it has no end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<Timestamp>,
+    /// The number of accounts that the invitation can make. Without this field, it has no limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uses: Option<u32>,
+    /// The number of accounts that the invitation made.
+    pub used: u32,
 }
 
 /// The cause of an error.
@@ -188,6 +244,8 @@ pub enum ErrorCode {
     EmptyText,
     /// The text has too many characters.
     TextTooLong,
+    /// The account does not have the permission for the request.
+    NotPermitted,
     /// The server has a problem and cannot do the task.
     ServerError,
 }
@@ -258,6 +316,7 @@ impl ErrorCode {
             Self::NoSuchChannel => "The channel does not exist.",
             Self::EmptyText => "A message must contain text.",
             Self::TextTooLong => "A message can have a maximum of 4000 characters.",
+            Self::NotPermitted => "Your account does not have the permission for this request.",
             Self::ServerError => "The server has a problem. Try again later.",
         }
     }
@@ -265,7 +324,9 @@ impl ErrorCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClientMessage, ErrorCode, PROTOCOL_VERSION, Role, ServerMessage};
+    use std::num::NonZeroU32;
+
+    use super::{ClientMessage, ErrorCode, Invitation, PROTOCOL_VERSION, Role, ServerMessage};
     use crate::{Code, DecodeError, Key, MAX_LINE_BYTES, Name, Nonce, Part, Signature, Timestamp};
 
     fn name(text: &str) -> Name {
@@ -318,6 +379,33 @@ mod tests {
                     text: "two\nlines".to_owned(),
                 },
                 r#"{"type":"send","channel":"lobby","text":"two\nlines"}"#,
+            ),
+            (
+                ClientMessage::Invite {
+                    reference: Some(2),
+                    lifetime: NonZeroU32::new(604_800),
+                    uses: NonZeroU32::new(1),
+                },
+                r#"{"type":"invite","ref":2,"lifetime":604800,"uses":1}"#,
+            ),
+            (
+                ClientMessage::Invite {
+                    reference: None,
+                    lifetime: None,
+                    uses: None,
+                },
+                r#"{"type":"invite"}"#,
+            ),
+            (
+                ClientMessage::Invitations { reference: Some(3) },
+                r#"{"type":"invitations","ref":3}"#,
+            ),
+            (
+                ClientMessage::Revoke {
+                    reference: None,
+                    code: Code::parse("7Hq2kdX9mPq4").expect("valid"),
+                },
+                r#"{"type":"revoke","code":"7Hq2kdX9mPq4"}"#,
             ),
         ]
     }
@@ -375,6 +463,37 @@ mod tests {
                     text: "Hi".to_owned(),
                 },
                 r#"{"type":"message","channel":"lobby","from":"ben","time":"2026-11-21T14:02:09.480Z","text":"Hi"}"#,
+            ),
+            (
+                ServerMessage::Invitations {
+                    reference: Some(3),
+                    list: vec![
+                        Invitation {
+                            code: Code::parse("7Hq2kdX9mPq4").expect("valid"),
+                            link: "https://chat.example.org/i/7Hq2kdX9mPq4".to_owned(),
+                            created: time("2026-11-21T14:02:05.000Z"),
+                            end: Some(time("2026-11-28T14:02:05.000Z")),
+                            uses: Some(5),
+                            used: 2,
+                        },
+                        Invitation {
+                            code: Code::parse("AAAAAAAAAAAA").expect("valid"),
+                            link: "https://chat.example.org/i/AAAAAAAAAAAA".to_owned(),
+                            created: time("2026-11-20T09:00:00.000Z"),
+                            end: None,
+                            uses: None,
+                            used: 0,
+                        },
+                    ],
+                },
+                r#"{"type":"invitations","ref":3,"list":[{"code":"7Hq2kdX9mPq4","link":"https://chat.example.org/i/7Hq2kdX9mPq4","created":"2026-11-21T14:02:05.000Z","end":"2026-11-28T14:02:05.000Z","uses":5,"used":2},{"code":"AAAAAAAAAAAA","link":"https://chat.example.org/i/AAAAAAAAAAAA","created":"2026-11-20T09:00:00.000Z","used":0}]}"#,
+            ),
+            (
+                ServerMessage::Invitations {
+                    reference: None,
+                    list: Vec::new(),
+                },
+                r#"{"type":"invitations","list":[]}"#,
             ),
             (
                 ServerMessage::Error {
@@ -686,6 +805,11 @@ mod tests {
                 "text-too-long",
                 "A message can have a maximum of 4000 characters.",
             ),
+            (
+                ErrorCode::NotPermitted,
+                "not-permitted",
+                "Your account does not have the permission for this request.",
+            ),
         ];
         examine_error_codes(&codes);
     }
@@ -723,6 +847,17 @@ mod tests {
             r#"{"type":"welcome","name":"ana","role":"member"}"#,
             r#"{"type":"send","channel":"lobby"}"#,
             r#"{"type":"guest","protocol":0,"name":"ana"} x"#,
+            r#"{"type":"invite","lifetime":0}"#,
+            r#"{"type":"invite","lifetime":-1}"#,
+            r#"{"type":"invite","lifetime":4294967296}"#,
+            r#"{"type":"invite","lifetime":"7 days"}"#,
+            r#"{"type":"invite","uses":0}"#,
+            r#"{"type":"invite","uses":1.5}"#,
+            r#"{"type":"invite","end":"2026-11-28T14:02:05.000Z"}"#,
+            r#"{"type":"invitations","list":[]}"#,
+            r#"{"type":"revoke"}"#,
+            r#"{"type":"revoke","code":"short"}"#,
+            r#"{"type":"revoke","code":"7Hq2kdX9mPq4","link":"x"}"#,
         ] {
             assert!(
                 matches!(ClientMessage::decode(line), Err(DecodeError::Invalid(_))),
@@ -740,6 +875,12 @@ mod tests {
             r#"{"type":"join","channel":"lobby","name":"ben","time":1795269727120}"#,
             r#"{"type":"error","code":"no-such-code","text":"x"}"#,
             r#"{"type":"guest","protocol":0,"name":"ana"}"#,
+            r#"{"type":"invitations"}"#,
+            r#"{"type":"invitations","list":{}}"#,
+            r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z"}]}"#,
+            r#"{"type":"invitations","list":[{"code":"short","link":"x","created":"2026-11-21T14:02:05.000Z","used":0}]}"#,
+            r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":0,"owner":true}]}"#,
+            r#"{"type":"invitations","list":[{"code":"7Hq2kdX9mPq4","link":"x","created":"2026-11-21T14:02:05.000Z","used":-1}]}"#,
         ] {
             assert!(
                 matches!(ServerMessage::decode(line), Err(DecodeError::Invalid(_))),

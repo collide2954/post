@@ -55,6 +55,7 @@ texts! {
     ErrorAccountExists => "error-account-exists",
     ErrorInvalidInvitation => "error-invalid-invitation",
     ErrorServer => "error-server",
+    ErrorNotPermitted => "error-not-permitted",
     ErrorInvalidName => "error-invalid-name",
     ErrorNameTaken => "error-name-taken",
     ErrorNoSuchChannel => "error-no-such-channel",

@@ -372,6 +372,7 @@ pub fn error_text(code: ErrorCode) -> Text {
         ErrorCode::InvalidInvitation => Text::ErrorInvalidInvitation,
         ErrorCode::MissingPart => Text::ProblemMissingParts,
         ErrorCode::ServerError => Text::ErrorServer,
+        ErrorCode::NotPermitted => Text::ErrorNotPermitted,
         ErrorCode::BadMessage
         | ErrorCode::HelloRequired
         | ErrorCode::DuplicateHello
@@ -1114,6 +1115,7 @@ mod tests {
             (ErrorCode::InvalidInvitation, Text::ErrorInvalidInvitation),
             (ErrorCode::MissingPart, Text::ProblemMissingParts),
             (ErrorCode::ServerError, Text::ErrorServer),
+            (ErrorCode::NotPermitted, Text::ErrorNotPermitted),
             (ErrorCode::BadMessage, Text::ErrorOther),
             (ErrorCode::HelloRequired, Text::ErrorOther),
             (ErrorCode::DuplicateHello, Text::ErrorOther),

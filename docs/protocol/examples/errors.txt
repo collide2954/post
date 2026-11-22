@@ -34,8 +34,12 @@ S: {"type":"error","ref":6,"code":"no-such-channel","text":"The channel does not
 C: {"type":"send","ref":7,"channel":"lobby","text":"   "}
 S: {"type":"error","ref":7,"code":"empty-text","text":"A message must contain text."}
 
+# Only the server owner makes an invitation.
+C: {"type":"invite","ref":8}
+S: {"type":"error","ref":8,"code":"not-permitted","text":"Your account does not have the permission for this request."}
+
 # A text with more than 4000 characters gets this answer.
-S: {"type":"error","ref":8,"code":"text-too-long","text":"A message can have a maximum of 4000 characters."}
+S: {"type":"error","ref":9,"code":"text-too-long","text":"A message can have a maximum of 4000 characters."}
 
 # A line that is not a message gets this answer. The server cannot read a number from the line.
 S: {"type":"error","code":"bad-message","text":"The message is not a valid protocol message."}

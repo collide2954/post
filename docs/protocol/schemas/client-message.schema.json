@@ -205,6 +205,98 @@
         "channel",
         "text"
       ]
+    },
+    {
+      "description": "Makes an invitation. Only the server owner can make one.",
+      "type": "object",
+      "properties": {
+        "lifetime": {
+          "description": "The number of seconds until the invitation ends. Without this field, it has no end.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 1
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "invite"
+        },
+        "uses": {
+          "description": "The number of accounts that the invitation can make. Without this field, it has no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks for the open invitations of the server.",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "invitations"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Cancels an invitation.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "The code of the invitation.",
+          "$ref": "#/$defs/Code"
+        },
+        "ref": {
+          "description": "A number that the answer of the server repeats.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "revoke"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "code"
+      ]
     }
   ],
   "$defs": {
