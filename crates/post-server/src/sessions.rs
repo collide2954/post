@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use post_proto::Timestamp;
+use post_proto::{Code, Timestamp};
 use tokio::sync::mpsc::Sender;
 
 use crate::hub::{ConnectionId, Hub, Outgoing};
@@ -18,6 +18,11 @@ impl Sessions {
             queues: HashMap::new(),
             clock,
         }
+    }
+
+    #[must_use]
+    pub fn open_link(&self, code: &Code) -> Option<String> {
+        self.hub.open_link(code, (self.clock)())
     }
 
     pub fn connect(&mut self, queue: Sender<String>) -> ConnectionId {

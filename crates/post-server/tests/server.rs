@@ -611,6 +611,115 @@ async fn stops_and_closes_each_connection_when_the_stop_signal_comes() {
     stopped.await.expect("the server stops");
 }
 
+async fn get(port: u16, path: &str, language: Option<&str>) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+        .await
+        .expect("the server listens");
+    let language = language.map_or_else(String::new, |language| {
+        format!("Accept-Language: {language}\r\n")
+    });
+    let request =
+        format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n{language}Connection: close\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .expect("the stream is open");
+    let mut answer = String::new();
+    timeout(PATIENCE, stream.read_to_string(&mut answer))
+        .await
+        .expect("the server answers in time")
+        .expect("the answer is text");
+    answer
+}
+
+#[tokio::test]
+async fn shows_a_page_for_an_invite_link_in_a_browser() {
+    let server = start().await;
+    let link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let path = link
+        .strip_prefix(&format!("http://localhost:{}", server.port))
+        .expect("a link of this server");
+
+    let english = get(server.port, path, None).await;
+    let spanish = get(server.port, path, Some("es-MX,es;q=0.9,en;q=0.8")).await;
+
+    assert!(english.starts_with("HTTP/1.1 200"), "{english}");
+    let lower = english.to_lowercase();
+    for header in [
+        "content-type: text/html; charset=utf-8",
+        "content-security-policy: default-src 'none'; style-src 'self'; script-src 'self'",
+        "x-content-type-options: nosniff",
+        "referrer-policy: no-referrer",
+        "cache-control: no-store",
+    ] {
+        assert!(lower.contains(header), "{header}\n{english}");
+    }
+    assert!(english.contains(&format!("value=\"{link}\"")), "{english}");
+    assert!(english.contains("This link is an invitation to a Post server."));
+    assert!(spanish.starts_with("HTTP/1.1 200"), "{spanish}");
+    assert!(spanish.contains("Este enlace es una invitación a un servidor de Post."));
+}
+
+#[tokio::test]
+async fn tells_in_a_browser_that_an_invitation_is_not_valid() {
+    let server = start().await;
+    let link = server
+        .owner_link
+        .clone()
+        .expect("a new server has no owner");
+    let used = link
+        .strip_prefix(&format!("http://localhost:{}", server.port))
+        .expect("a link of this server")
+        .to_owned();
+    register(server.port, &Seed::from_bytes([7; 32]), "ana", &link).await;
+
+    for path in [
+        used.as_str(),
+        "/i/AAAAAAAAAAAA",
+        "/i/short",
+        "/i/%3Cscript%3E",
+    ] {
+        let answer = get(server.port, path, None).await;
+        assert!(answer.starts_with("HTTP/1.1 404"), "{path}\n{answer}");
+        assert!(
+            answer.contains("This invitation is not valid. Ask for a new invite link."),
+            "{path}\n{answer}"
+        );
+        assert!(!answer.contains("<input"), "{path}");
+    }
+    let spanish = get(server.port, "/i/AAAAAAAAAAAA", Some("es")).await;
+    assert!(
+        spanish.contains("Esta invitación no es válida."),
+        "{spanish}"
+    );
+    let other = get(server.port, "/i/AAAAAAAAAAAA/more", None).await;
+    assert!(other.starts_with("HTTP/1.1 404"), "{other}");
+}
+
+#[tokio::test]
+async fn gives_the_style_and_the_script_of_the_invite_page() {
+    let server = start().await;
+
+    let style = get(server.port, "/assets/invite.css", None).await;
+    let script = get(server.port, "/assets/invite.js", None).await;
+
+    assert!(style.starts_with("HTTP/1.1 200"), "{style}");
+    assert!(style.to_lowercase().contains("content-type: text/css"));
+    assert!(style.contains("prefers-color-scheme"));
+    assert!(script.starts_with("HTTP/1.1 200"), "{script}");
+    assert!(
+        script
+            .to_lowercase()
+            .contains("content-type: text/javascript")
+    );
+    assert!(script.contains("navigator.clipboard"));
+}
+
 #[tokio::test]
 async fn answers_a_request_that_is_not_a_websocket_request_with_an_http_error() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};

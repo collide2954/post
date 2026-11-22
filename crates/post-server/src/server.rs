@@ -6,11 +6,16 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::response::Response;
-use axum::routing::any;
-use post_proto::{MAX_LINE_BYTES, Timestamp};
+use axum::extract::{Path, State};
+use axum::http::header::{
+    ACCEPT_LANGUAGE, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, REFERRER_POLICY,
+    X_CONTENT_TYPE_OPTIONS,
+};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{any, get};
+use post_proto::{Code, MAX_LINE_BYTES, Timestamp};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
@@ -18,6 +23,7 @@ use tokio::time::timeout;
 
 use crate::config::{Config, Listen, Tls};
 use crate::hub::{Hub, LIMITS, Random, Settings};
+use crate::page;
 use crate::sessions::Sessions;
 use crate::store::{Store, StoreError};
 
@@ -98,7 +104,12 @@ impl Server {
             sessions: Mutex::new(Sessions::new(self.hub, Timestamp::now)),
             stopped: stopped.clone(),
         });
-        let router = Router::new().route("/", any(upgrade)).with_state(shared);
+        let router = Router::new()
+            .route("/", any(upgrade))
+            .route("/i/{code}", get(invitation))
+            .route("/assets/invite.css", get(style))
+            .route("/assets/invite.js", get(script))
+            .with_state(shared);
 
         let mut tasks = JoinSet::new();
         for listener in self.listeners {
@@ -222,6 +233,49 @@ async fn upgrade(State(shared): State<Arc<Shared>>, upgrade: WebSocketUpgrade) -
     upgrade
         .max_message_size(MAX_LINE_BYTES)
         .on_upgrade(|socket| connection(socket, shared))
+}
+
+async fn invitation(
+    State(shared): State<Arc<Shared>>,
+    Path(code): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let wanted = headers
+        .get(ACCEPT_LANGUAGE)
+        .and_then(|value| value.to_str().ok());
+    let language = page::Language::from_header(wanted);
+    let link = Code::parse(&code)
+        .ok()
+        .and_then(|code| shared.sessions().open_link(&code));
+    let (status, body) = match link {
+        Some(link) => (StatusCode::OK, page::invitation(language, &link)),
+        None => (StatusCode::NOT_FOUND, page::not_valid(language)),
+    };
+    let headers = [
+        (CONTENT_TYPE, "text/html; charset=utf-8"),
+        (CONTENT_SECURITY_POLICY, page::POLICY),
+        (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        (REFERRER_POLICY, "no-referrer"),
+        (CACHE_CONTROL, "no-store"),
+    ];
+    (status, headers, body).into_response()
+}
+
+async fn style() -> Response {
+    asset("text/css; charset=utf-8", page::STYLE)
+}
+
+async fn script() -> Response {
+    asset("text/javascript; charset=utf-8", page::SCRIPT)
+}
+
+fn asset(kind: &'static str, body: &'static str) -> Response {
+    let headers = [
+        (CONTENT_TYPE, kind),
+        (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        (CACHE_CONTROL, "max-age=3600"),
+    ];
+    (headers, body).into_response()
 }
 
 async fn connection(mut socket: WebSocket, shared: Arc<Shared>) {

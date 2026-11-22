@@ -81,6 +81,8 @@ An address in a message has the form `host:port`, for example `chat.example.org:
 
 The code of an invitation has 12 letters and digits, for example `7Hq2kdX9mPq4`. An invite link ends with this code.
 
+An invite link has this form: `https://chat.example.org/i/7Hq2kdX9mPq4`. A person pastes the link into an application. In a browser, the server shows a page that tells the person to do this.
+
 ### Parts of the protocol
 
 Some parts of the protocol are optional. The specification gives each optional part one word. The word has 2 to 20 lower-case letters and hyphens.

@@ -112,6 +112,11 @@ impl Hub {
         Ok(code.map(|code| self.link(&code)))
     }
 
+    #[must_use]
+    pub fn open_link(&self, code: &Code, now: Timestamp) -> Option<String> {
+        self.rules.code_is_open(code, now).then(|| self.link(code))
+    }
+
     pub fn connect(&mut self) -> ConnectionId {
         let id = ConnectionId(self.next_id);
         self.next_id += 1;
@@ -1129,6 +1134,25 @@ mod tests {
             Some("https://chat.example.org/i/code00000001")
         );
         assert_eq!(second, first);
+    }
+
+    #[test]
+    fn gives_the_link_of_a_code_only_while_its_invitation_is_open() {
+        let mut hub = new_hub();
+        let owner = owner_code(&mut hub);
+        assert_eq!(
+            hub.open_link(&owner, now()).as_deref(),
+            Some("https://chat.example.org/i/code00000001")
+        );
+        assert_eq!(hub.open_link(&code(99), now()), None);
+
+        let ana = registered(&mut hub, 1, "ana", &owner);
+        assert_eq!(hub.open_link(&owner, now()), None);
+
+        hub.receive(ana, &invite(3, Some(60), None), now());
+        assert!(hub.open_link(&code(2), later()).is_some());
+        let end = Timestamp::parse("2026-11-21T14:03:07.120Z").expect("valid");
+        assert_eq!(hub.open_link(&code(2), end), None);
     }
 
     #[test]

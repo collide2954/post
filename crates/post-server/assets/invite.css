@@ -1,0 +1,93 @@
+:root {
+  color-scheme: light dark;
+  --paper: #fbf8f3;
+  --rule: #dcd5c8;
+  --ink: #1f2328;
+  --muted: #6a6459;
+  --accent: #2456a6;
+  --on-accent: #fbf8f3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1b1d21;
+    --rule: #34373d;
+    --ink: #e8e4dc;
+    --muted: #9c968b;
+    --accent: #7fa8e8;
+    --on-accent: #1b1d21;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.5 Inter, system-ui, sans-serif;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+h1 {
+  margin: 0 0 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+ol {
+  padding-left: 1.25rem;
+}
+
+.link {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 0.875rem/1.5 "JetBrains Mono", ui-monospace, monospace;
+}
+
+input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  padding: 0.5rem 1.125rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--accent);
+}
+
+.note {
+  color: var(--muted);
+}

@@ -75,7 +75,8 @@ Verus proves `transcript`, `hex`, the text form of the seed, and the generator o
 - `store` keeps the server key in SQLite (D-051). It writes the changes of the rules core, and it loads the rows when the server starts. It makes no decisions. A lock file lets only one program use the data. The other modules do not use SQL.
 - `config` reads the configuration file of the server. Without a file, the server operates in development mode on the local computer.
 - `sessions` connects the hub to one queue for each connection. If a queue is full, the server closes that connection.
-- `server` holds the network code. It accepts WebSocket connections on the loopback addresses and moves lines between a socket and its queue.
+- `server` holds the network code. It accepts WebSocket connections on the loopback addresses and moves lines between a socket and its queue. It also gives a browser the page of an invite link.
+- `page` makes the page of an invite link in English and in Latin American Spanish (D-173). The page loads no content from a different server.
 - `cli` reads the arguments of the program. The command `owner-link` makes a new owner link (D-172). The operator stops the server before this command.
 
 The server keeps its storage in a data directory. In development mode, the directory has the name `post-server-data`. At this time, the server cannot use TLS.
